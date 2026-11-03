@@ -3,33 +3,35 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runsApi } from '../../api/runs';
 import type { ProjectContentSnapshot } from '../../api/types';
 import { useProjectStore } from '../../stores/projectStore';
-import { IDLE_SESSION, useRunStore } from '../../stores/runStore';
+import { useSessionStore } from '../../stores/sessionStore';
+import { sessionFixture, interactionFixture, receiptFixture } from '../../test/sessionFixtures';
 import { ScopeExpansionCard } from './ScopeExpansionCard';
-import type { ScopeExpansionItem } from './eventReducer';
+import type { ScopeExpansionItem } from './timelineTypes';
 
 vi.mock('./useActiveSession', () => ({
   useActiveThreadId: () => 'thread-1',
 }));
 
 const item: ScopeExpansionItem = {
+  sceneRevision: '1', requestRevision: '1', interactionState: 'pending',
   id: 'r1:scope-expansion:se1',
   type: 'scope_expansion',
   runId: 'r1',
   interactionId: 'se1',
   callId: 'c1',
-  baseRevision: 1,
+  baseRevision: '1',
   currentScope: {
     slide_ids: ['sli_one'],
     source: { kind: 'current_page' },
     include_run_created_slides: false,
-    revision: 1,
+    revision: '1',
   },
   requestedAddition: { slide_ids: ['sli_two'] },
   proposedScope: {
     slide_ids: ['sli_one', 'sli_two'],
     source: { kind: 'custom_pages' },
     include_run_created_slides: false,
-    revision: 2,
+    revision: '2',
   },
   affectedPageCount: 2,
   reason: '需要同步第三页的设计稿。',
@@ -58,7 +60,7 @@ const snapshot: ProjectContentSnapshot = {
 afterEach(() => {
   vi.restoreAllMocks();
   act(() => {
-    useRunStore.setState({ sessions: {} });
+    useSessionStore.setState({ sessions: {} });
     useProjectStore.setState({ activeProjectId: null, contentByProjectId: {} });
   });
 });
@@ -75,18 +77,11 @@ describe('ScopeExpansionCard', () => {
   });
 
   it('submits an all-page adjustment with the pending interaction identity', async () => {
-    const submit = vi.spyOn(runsApi, 'submitScopeExpansion').mockResolvedValue(undefined);
+    const submit = vi.spyOn(runsApi, 'submitScopeExpansion').mockResolvedValue(receiptFixture());
     useProjectStore.setState({ activeProjectId: 'project-1', contentByProjectId: { 'project-1': snapshot } });
-    useRunStore.setState({
-      sessions: {
-        'thread-1': {
-          ...IDLE_SESSION,
-          activeRunId: 'r1',
-          status: 'waiting',
-          timelineItems: [item],
-        },
-      },
-    });
+    useSessionStore.setState({ sessions: { 'thread-1': sessionFixture({
+      threadId: 'thread-1', interactionsById: { se1: interactionFixture({ id: 'se1', kind: 'scope', thread_id: 'thread-1' }) },
+    }) } });
 
     render(<ScopeExpansionCard item={item} />);
     expect(screen.getByText('第 1 页')).toBeInTheDocument();
@@ -103,9 +98,10 @@ describe('ScopeExpansionCard', () => {
 
     await waitFor(() => {
       expect(submit).toHaveBeenCalledWith('r1', {
+        scene_revision: '1', request_revision: '1',
         interaction_id: 'se1',
         call_id: 'c1',
-        base_revision: 1,
+        base_revision: '1',
         decision: 'revise',
         feedback: undefined,
       });
@@ -114,7 +110,7 @@ describe('ScopeExpansionCard', () => {
 
   it('expands the approved result to show the old and new page sets', () => {
     useProjectStore.setState({ activeProjectId: 'project-1', contentByProjectId: { 'project-1': snapshot } });
-    render(<ScopeExpansionCard item={{ ...item, answer: { decision: 'approve', appliedScope: item.proposedScope } }} />);
+    render(<ScopeExpansionCard item={{ ...item, interactionState: 'applied', answer: { decision: 'approve', appliedScope: item.proposedScope } }} />);
 
     const toggle = screen.getByRole('button', { name: '已批准扩大修改范围' });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
@@ -126,7 +122,7 @@ describe('ScopeExpansionCard', () => {
 
   it('shows all pages as the new scope after an all-page adjustment', () => {
     useProjectStore.setState({ activeProjectId: 'project-1', contentByProjectId: { 'project-1': snapshot } });
-    render(<ScopeExpansionCard item={{ ...item, answer: { decision: 'revise' } }} />);
+    render(<ScopeExpansionCard item={{ ...item, interactionState: 'applied', answer: { decision: 'revise' } }} />);
 
     fireEvent.click(screen.getByRole('button', { name: '已允许修改全部页' }));
     expect(screen.getByText('现在：').parentElement).toHaveTextContent('全部页');

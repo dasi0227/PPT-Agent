@@ -14,7 +14,8 @@ import { AnchoredPopover, AnchoredPopoverContent, AnchoredPopoverTitle, Anchored
 import { floatingPanelTitleClassName } from '../../components/ui/dropdown-styles';
 import { useBriefingStore } from '../../stores/briefingStore';
 import { useComposerStore } from '../../stores/composerStore';
-import { useContextWindowStore } from '../../stores/contextWindowStore';
+import { selectContextWindow, useContextWindowStore } from '../../stores/contextWindowStore';
+import { useSessionStore } from '../../stores/sessionStore';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useThreadStore } from '../../stores/threadStore';
@@ -118,12 +119,15 @@ export function ContextWindowPanel({ anchorRef, open: controlledOpen, onOpenChan
   ));
   const model = useComposerStore((state) => state.modelProfileName);
   const polishing = useComposerStore((state) => state.polishing);
-  const { status: runStatus, plan, planSequence } = useActiveSession();
-  const clearedAt = !plan ? planSequence : undefined;
+  const { status: runStatus, plan, planRevision } = useActiveSession();
+  const clearedAt = !plan ? planRevision : undefined;
   const session = useContextWindowStore((state) => (
     threadId ? state.sessions[threadId] : undefined
   ));
   const load = useContextWindowStore((state) => state.load);
+  const source = useSessionStore(state => threadId ? state.sessions[threadId] : undefined);
+  const currentWindow = source?.contextWindow;
+  const loadStatus = source?.loadStatus;
   const commitSession = useGitCommitStore((state) => (
     activeProjectId ? state.sessions[activeProjectId] : undefined
   ));
@@ -148,8 +152,8 @@ export function ContextWindowPanel({ anchorRef, open: controlledOpen, onOpenChan
   };
 
   useEffect(() => {
-    if (threadId && model) void load(threadId, model);
-  }, [load, model, open, threadId, clearedAt]);
+    if (open && threadId && model && loadStatus === 'ready') void load(threadId, model);
+  }, [load, model, open, threadId, clearedAt, currentWindow, loadStatus, source?.thread?.context_revision]);
 
   useEffect(() => {
     setLocalOpen(false);
@@ -159,15 +163,18 @@ export function ContextWindowPanel({ anchorRef, open: controlledOpen, onOpenChan
     setFocusedBucket(null);
   }, [activeProjectId, threadId, onOpenChange]);
 
-  const snapshot = session?.snapshot ?? EMPTY_SNAPSHOT;
+  const currentSnapshot = selectContextWindow(source, session, model ?? undefined);
+  const snapshot = currentSnapshot ?? EMPTY_SNAPSHOT;
   const runActive = ['creating', 'running', 'waiting', 'paused', 'recovering', 'canceling'].includes(runStatus);
   const commitActive = commitSession?.status === 'creating' || commitSession?.status === 'running';
-  const compacting = session?.compacting || snapshot.status === 'compacting';
-  const compactionCapacityUnavailable = !session?.snapshot || snapshot.compact_threshold_tokens <= 0;
+  const compacting = session?.compacting || snapshot.status === 'compacting'
+    || Object.values(source?.commandsById ?? {}).some(command => command.kind === 'compact'
+      && ['accepted', 'running', 'cancel_requested'].includes(command.status));
+  const compactionCapacityUnavailable = !currentSnapshot || snapshot.compact_threshold_tokens <= 0;
   const belowCompactThreshold = !compactionCapacityUnavailable
     && snapshot.compactable_tokens < snapshot.compact_threshold_tokens;
   const warning = snapshot.ratio >= 0.8;
-  const disabled = !threadId || runActive || commitActive || briefingActive || polishing || compacting
+  const disabled = loadStatus !== 'ready' || !threadId || runActive || commitActive || briefingActive || polishing || compacting
     || compactionCapacityUnavailable || belowCompactThreshold;
   let compactButtonTitle = '手动压缩上下文';
   if (!threadId) compactButtonTitle = '请先选择任务';
@@ -179,7 +186,7 @@ export function ContextWindowPanel({ anchorRef, open: controlledOpen, onOpenChan
     compactButtonTitle = `可压缩历史达到 ${formatParentTokens(snapshot.compact_threshold_tokens)} 后可用，当前 ${snapshot.compactable_tokens} Token`;
   }
   const percent = Math.round(snapshot.ratio * 100);
-  const details = activeBucket ? snapshot.details[activeBucket] : [];
+  const details = activeBucket ? snapshot.details?.[activeBucket] ?? [] : [];
   const activeBucketMeta = BUCKETS.find((bucket) => bucket.key === activeBucket);
   const DetailIcon = activeBucketMeta?.icon ?? FileText;
 
@@ -205,7 +212,7 @@ export function ContextWindowPanel({ anchorRef, open: controlledOpen, onOpenChan
         <AnchoredPopoverTrigger asChild>
           <IconButton
             ref={triggerRef}
-            label={`上下文窗口，当前使用 ${percent}%`}
+            label={currentSnapshot ? `上下文窗口，当前使用 ${percent}%` : '上下文窗口'}
             expandableLabel="上下文"
             data-state={open ? 'open' : 'closed'}
             aria-haspopup="dialog"
@@ -214,7 +221,7 @@ export function ContextWindowPanel({ anchorRef, open: controlledOpen, onOpenChan
           >
             <span className="relative inline-flex h-4 w-4 shrink-0">
               <Gauge className="h-4 w-4" strokeWidth={1.75} />
-              <ToolbarProgressBadge className={compacting ? 'text-success' : warning ? 'text-warning' : 'text-text-600'}>{percent}%</ToolbarProgressBadge>
+              <ToolbarProgressBadge className={compacting ? 'text-success' : warning ? 'text-warning' : 'text-text-600'}>{currentSnapshot ? `${percent}%` : '—'}</ToolbarProgressBadge>
             </span>
           </IconButton>
         </AnchoredPopoverTrigger>
@@ -233,6 +240,7 @@ export function ContextWindowPanel({ anchorRef, open: controlledOpen, onOpenChan
           role="dialog"
           aria-label="上下文窗口"
           onOpenAutoFocus={(event) => event.preventDefault()}
+          onEscapeKeyDown={() => triggerRef.current?.blur()}
           onCloseAutoFocus={(event) => event.preventDefault()}
           onInteractOutside={(event) => {
             if (triggerRef.current?.contains(event.target as Node)) return;
@@ -246,6 +254,7 @@ export function ContextWindowPanel({ anchorRef, open: controlledOpen, onOpenChan
             warning && !compacting ? 'border-warning/50' : 'border-border-strong'
           }`}
         >
+          {session?.error && <p role="alert" className="px-3 py-2 text-xs text-danger">{session.error.message}</p>}
           <header className="flex min-h-9 items-center gap-2 px-3 py-1.5">
             <AnchoredPopoverTitle className={floatingPanelTitleClassName}>上下文窗口</AnchoredPopoverTitle>
             {session?.loading && (
@@ -266,7 +275,7 @@ export function ContextWindowPanel({ anchorRef, open: controlledOpen, onOpenChan
           </header>
 
           <div className="flex items-center gap-2.5 px-3 pb-3 pt-3">
-            <div className="relative h-2 min-w-0 flex-1 rounded-full bg-panel-muted" role="group" aria-label={`上下文占用，${percent}%`}>
+            <div className="relative h-2 min-w-0 flex-1 rounded-full bg-panel-muted" role="group" aria-label={`上下文占用，${currentSnapshot ? `${percent}%` : '—'}`}>
               <div className="absolute inset-0 flex items-center overflow-hidden rounded-[inherit]">
                 {segments.filter((segment) => segment.width > 0).map((segment) => (
                   <button
@@ -312,7 +321,7 @@ export function ContextWindowPanel({ anchorRef, open: controlledOpen, onOpenChan
             <span className={`min-w-10 text-right font-mono text-xs font-semibold tabular-nums ${
               compacting ? 'text-success' : warning ? 'text-warning' : 'text-text-600'
             }`}>
-              {percent}%
+              {currentSnapshot ? `${percent}%` : '—'}
             </span>
           </div>
 

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { runsApi } from '../../api/runs';
-import type { PlanApprovalItem } from './eventReducer';
+import type { PlanApprovalItem } from './timelineTypes';
 import { PlanApproval } from './PlanApproval';
 
 vi.mock('../../api/runs', () => ({
@@ -14,6 +14,7 @@ const item: PlanApprovalItem = {
   runId: 'run-1',
   interactionId: 'interaction-1',
   timestamp: 0,
+  sceneRevision: '1', requestRevision: '1', interactionState: 'pending',
   plan: {
     content: '# 演示文稿制作计划\n\n先完成结构，再生成页面。',
     steps: ['完成结构'],
@@ -82,6 +83,7 @@ describe('PlanApproval', () => {
     const submitting = await screen.findByRole('button', { name: '提交中' });
     expect(submitting).toBeDisabled();
     expect(runsApi.submitPlanApproval).toHaveBeenCalledWith('run-1', {
+      scene_revision: '1', request_revision: '1',
       interaction_id: 'interaction-1',
       decision: 'approve',
       feedback: undefined,
@@ -90,7 +92,7 @@ describe('PlanApproval', () => {
   });
 
   it('renders an answered approval as a timeline row with a content-only expanded card', () => {
-    render(<PlanApproval item={{ ...item, answer: { decision: 'refuse', feedback: '请补充案例' } }} />);
+    render(<PlanApproval item={{ ...item, interactionState: 'applied', answer: { decision: 'refuse', feedback: '请补充案例' } }} />);
 
     const toggle = screen.getByRole('button', { name: '计划已拒绝' });
     expect(toggle).toHaveClass('min-h-8', 'px-1.5', 'py-1', 'text-[13px]');

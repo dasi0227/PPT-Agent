@@ -10,7 +10,7 @@ import { confirmDiscardFuture, useHistoryConfirmationStore } from '../../stores/
 beforeEach(() => {
   useProjectStore.setState({ activeProjectId: 'p' });
   useHistoryConfirmationStore.setState({ pending: null });
-  useProjectHistoryStore.setState({ states: { p: { revision: 1, scene_revision: 0, latest: 'live', checkpoints: [{ run_id: 'r', thread_id: 't', time: 1000 }] } }, dialog: null, busy: false, error: null });
+  useProjectHistoryStore.setState({ states: { p: { revision: '1', scene_revision: '1', latest: 'live', checkpoints: [{ run_id: 'r', thread_id: 't', time: 1000 }] } }, dialog: null, busy: false, error: null });
   vi.spyOn(projectHistoryApi, 'state').mockResolvedValue(useProjectHistoryStore.getState().states.p);
 });
 afterEach(() => vi.restoreAllMocks());
@@ -22,7 +22,7 @@ describe('checkpoint controls', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
   it('previews before writing and cancellation sends no switch', async () => {
-    const preview = vi.spyOn(projectHistoryApi, 'preview').mockResolvedValue({ revision: 1, time: 1000, input: 'hello', runs: 3 });
+    const preview = vi.spyOn(projectHistoryApi, 'preview').mockResolvedValue({ revision: '1', scene_revision: '1', time: 1000, input: 'hello', runs: 3 });
     const execute = vi.spyOn(projectHistoryApi, 'switch');
     render(<><HistoryBanner /><ProjectHistoryDialogs /></>);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: '恢复到最新' })); });
@@ -35,7 +35,7 @@ describe('checkpoint controls', () => {
   });
 
   it('closes the history preview with Escape when no operation is running', async () => {
-    vi.spyOn(projectHistoryApi, 'preview').mockResolvedValue({ revision: 1, time: 1000, input: '  ', runs: 3 });
+    vi.spyOn(projectHistoryApi, 'preview').mockResolvedValue({ revision: '1', scene_revision: '1', time: 1000, input: '  ', runs: 3 });
     render(<><HistoryBanner /><ProjectHistoryDialogs /></>);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: '恢复到最新' })); });
 

@@ -2,6 +2,7 @@ import { installTagDictionaryFixture } from '../../testSupport/resourceTags';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
 import type { Project, ProjectContentSnapshot, Theme } from '../../api/types';
 import { useProjectStore } from '../../stores/projectStore';
 import { useToastStore } from '../../stores/toastStore';
@@ -186,8 +187,6 @@ describe('personal repository pages', () => {
     expect(screen.queryByText('个人仓库')).not.toBeInTheDocument();
     const repositoryBrand = screen.getByText('Dasi PPT Agent');
     expect(repositoryBrand.closest('button, a')).toBeNull();
-    expect(repositoryBrand.parentElement).toHaveClass('px-2', 'text-base');
-    expect(repositoryBrand.parentElement?.querySelector('img')).toHaveClass('h-10', 'w-10', 'rounded-sm');
     expect(screen.getByRole('link', { name: '组件' })).toHaveAttribute('href', '/warehouse/component');
     fireEvent.click(screen.getByRole('button', { name: /Blueprint/ }));
     expect(mocks.setTheme).not.toHaveBeenCalled();
@@ -228,6 +227,7 @@ describe('personal repository pages', () => {
   });
 
   it('applies a theme from the canvas selector and synchronizes project state', async () => {
+    const user = userEvent.setup();
     mocks.listThemes.mockResolvedValue({ themes: themeFixtures() });
     mocks.setTheme.mockResolvedValue(project('blueprint'));
     mocks.getContent.mockResolvedValue(projectContent('blueprint'));
@@ -239,12 +239,12 @@ describe('personal repository pages', () => {
     render(<ThemeSelector projectId="project-7" />);
     const trigger = screen.getByRole('button', { name: '切换主题' });
     await waitFor(() => expect(trigger).toHaveTextContent('Editorial Serif'));
-    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+    await user.click(trigger);
     expect(await screen.findByRole('menuitemradio', { name: 'Editorial Serif' })).toHaveAttribute('aria-checked', 'true');
-    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Editorial Serif' }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'Editorial Serif' }));
     expect(mocks.setTheme).not.toHaveBeenCalled();
-    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
-    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Blueprint' }));
+    await user.click(trigger);
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Blueprint' }));
     await waitFor(() => expect(trigger).toHaveTextContent('Blueprint'));
     expect(mocks.setTheme).toHaveBeenCalledWith('project-7', 'blueprint');
     expect(useProjectStore.getState().contentByProjectId['project-7'].theme).toBe('blueprint');

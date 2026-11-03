@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Lightbulb, X } from 'lucide-react';
 import { Switch } from '../../components/ui/switch';
 import { threadsApi } from '../../api/threads';
 import { useThreadStore } from '../../stores/threadStore';
-import { useRunStore } from '../../stores/runStore';
+import { sessionCanWrite, useSessionStore } from '../../stores/sessionStore';
 import { useProjectStore } from '../../stores/projectStore';
 
 export const SuggestPanel: React.FC = () => {
@@ -14,17 +14,20 @@ export const SuggestPanel: React.FC = () => {
   const activeThreadId = useThreadStore(state => target ? state.activeThreadIdByProjectId[target.projectId] : null);
   const close = useThreadStore(state => state.closeSuggestPanel);
   const setAutomatic = useThreadStore(state => state.setAutoSuggest);
-  const session = useRunStore(state => target ? state.sessions[target.threadId] : undefined);
+  const session = useSessionStore(state => target ? state.sessions[target.threadId] : undefined);
   const [busy, setBusy] = useState<'generate' | 'settings' | null>(null);
   const [error, setError] = useState('');
-  useEffect(() => { setError(''); setBusy(null); }, [target]);
+  const generateCommandId = useRef<string | null>(null);
+  useEffect(() => { setError(''); setBusy(null); generateCommandId.current = null; }, [target]);
   useEffect(() => {
     if (target && (!thread || target.projectId !== activeProjectId || target.threadId !== activeThreadId)) close();
   }, [target, thread, activeProjectId, activeThreadId, close]);
   if (!target || !thread) return null;
-  const canGenerate = Boolean(session?.activeRunId && ['done', 'error', 'canceled'].includes(session.status));
-  const generating = busy === 'generate' || session?.nextInputSuggestions?.status === 'pending';
-  const generateDescription = !session?.activeRunId
+  const hasHistory = Boolean(session && !session.isEmpty);
+  const canGenerate = sessionCanWrite(session) && hasHistory && !session.thread?.active_run_id;
+  const generating = busy === 'generate' || Object.values(session?.commandsById ?? {}).some(command =>
+    command.kind === 'suggest' && ['accepted', 'running', 'cancel_requested'].includes(command.status));
+  const generateDescription = !hasHistory
     ? '当前会话暂无记录'
     : !canGenerate
       ? '任务结束后可生成建议'
@@ -32,8 +35,11 @@ export const SuggestPanel: React.FC = () => {
   const generate = async () => {
     if (busy || generating || !canGenerate) return;
     setBusy('generate'); setError('');
+    const commandId = generateCommandId.current ?? `suggest:${crypto.randomUUID()}`;
+    generateCommandId.current = commandId;
     try {
-      await threadsApi.suggest(thread.id);
+      await threadsApi.suggest(thread.id, commandId);
+      if (generateCommandId.current === commandId) generateCommandId.current = null;
       if (useThreadStore.getState().suggestPanelTarget === target) close();
     } catch (cause) {
       if (useThreadStore.getState().suggestPanelTarget === target)

@@ -4,7 +4,7 @@ import type { GitCommitPhase } from '../../api/types';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useActiveThreadId } from './useActiveSession';
-import type { GitCommitTimelineItem } from './eventReducer';
+import type { GitCommitTimelineItem } from './timelineTypes';
 import { CommandActivity } from './CommandActivity';
 export function GitCommitProgress({ phase }: { phase: GitCommitPhase | null }) {
   const projectId = useProjectStore((state) => state.activeProjectId);
@@ -17,7 +17,7 @@ export function GitCommitProgress({ phase }: { phase: GitCommitPhase | null }) {
       timestamp={session?.startedAt ?? Date.now()}
       phase={session?.displayPhase ?? -1}
       cancellable={
-        !!session?.operationId && !session.canceling && !session.settling && phase !== 'committing'
+        !!session?.operationId && !session.canceling && phase !== 'committing'
       }
       onCancel={() => {
         if (projectId) void useGitCommitStore.getState().cancel(projectId);

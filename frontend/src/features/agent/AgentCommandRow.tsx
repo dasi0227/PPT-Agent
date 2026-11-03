@@ -1,7 +1,7 @@
 import { useId, useState, type ReactNode } from 'react';
 import { Gauge, Loader2, Signature } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import type { CommandTimelineItem, ContextCompactionTimelineItem } from './eventReducer';
+import type { CommandTimelineItem, ContextCompactionTimelineItem } from './timelineTypes';
 import { commandSteps } from './CommandActivity';
 import { LongContent } from './LongContent';
 import { MarkdownMessage } from './MarkdownMessage';

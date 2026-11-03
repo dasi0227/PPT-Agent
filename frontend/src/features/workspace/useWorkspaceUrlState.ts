@@ -38,7 +38,7 @@ export function useWorkspaceUrlState(projectId: string | undefined) {
     const nextContent = params.get('content') === 'source' ? 'source' : 'preview';
     const requestedSlideId = params.get('slide');
     const rememberedSlideId = useDeckStore.getState().currentSlideId;
-    const selectedSlideId = nextDocument || nextMode === 'overview' ? rememberedSlideId : requestedSlideId;
+    const selectedSlideId = requestedSlideId ?? (nextDocument || nextMode === 'overview' ? rememberedSlideId : null);
     const nextSlideId = slides.some(slide => slide.id === selectedSlideId) ? selectedSlideId : slides[0]?.id ?? null;
     useDeckStore.setState({
       currentSlideId: nextSlideId,

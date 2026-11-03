@@ -1,68 +1,23 @@
-import { currentHistoryEpoch } from '../../api/client';
-import { useEffect } from 'react';
+import { useMemo } from 'react';
 import { useProjectStore } from '../../stores/projectStore';
 import { useThreadStore } from '../../stores/threadStore';
-import { useRunStore, RunSession, IDLE_SESSION } from '../../stores/runStore';
-import { threadsApi } from '../../api/threads';
-import { runsApi } from '../../api/runs';
-import { hydrateRunFromHistory, HistoryEntry } from './historyHydrator';
+import { useRunStore, UNLOADED_SESSION, type RunSession } from '../../stores/runStore';
 
-// 当前聚焦 project 的活跃 threadId（可能为 null）。
+const EMPTY_SESSION: RunSession = Object.freeze({ ...UNLOADED_SESSION, loadStatus: 'ready', isEmpty: true });
+
 export function useActiveThreadId(): string | null {
-  const activeProjectId = useProjectStore((s) => s.activeProjectId);
-  const activeThreadIdByProjectId = useThreadStore((s) => s.activeThreadIdByProjectId);
-  if (!activeProjectId) return null;
-  return activeThreadIdByProjectId[activeProjectId] ?? null;
+  const projectId = useProjectStore(state => state.activeProjectId);
+  return useThreadStore(state => projectId ? state.activeThreadIdByProjectId[projectId] ?? null : null);
 }
 
-// 当前聚焦 thread 的 RunSession（缺省返回稳定 IDLE 空会话）。
-// 副作用：在 threadId 变化时按需 replay 后端 history（仅当前端 timelineItems 为空且非草稿）。
+// Loading belongs to the workspace/session owner. All consumers are selectors.
 export function useActiveSession(): RunSession {
   const threadId = useActiveThreadId();
-  const activeProjectId = useProjectStore((s) => s.activeProjectId);
-  const sessions = useRunStore((s) => s.sessions);
-
-  useEffect(() => {
-    if (!threadId) return;
-    // 空态才 replay：运行时 in-memory 优先，防止刷新覆盖已有 SSE 增量。
-    const current = useRunStore.getState().sessions[threadId];
-    if (current && (current.activeRunId || current.status !== 'idle' || current.timelineItems.length > 0)) return;
-    const epoch = currentHistoryEpoch();
-    let canceled = false;
-    Promise.all([
-      threadsApi.history(threadId).catch(() => []),
-      runsApi.activeForThread(threadId).catch(() => null),
-    ])
-      .then(([entries, activeRun]) => {
-        if (canceled || epoch !== currentHistoryEpoch()) return;
-        const hydrated = hydrateRunFromHistory(entries as unknown as HistoryEntry[]);
-        const runStore = useRunStore.getState();
-        if (entries.length > 0) {
-          runStore.hydrateTimeline(
-            threadId,
-            hydrated.items,
-            hydrated.plan,
-            hydrated.session,
-            hydrated.lastEventId,
-            activeRun,
-          );
-        }
-        const recoverRunId = activeRun?.id ?? hydrated.session.activeRunId;
-        if (recoverRunId) {
-          void runStore.reconcileRun(
-            threadId,
-            recoverRunId,
-            hydrated.lastEventId,
-            activeRun?.project_id ?? activeProjectId ?? undefined,
-          );
-        }
-      })
-      .catch(() => {
-        // 历史记录失败不覆盖当前内存会话；用户仍可继续发送新指令。
-      });
-    return () => { canceled = true; };
-  }, [activeProjectId, threadId]);
-
-  if (!threadId) return IDLE_SESSION;
-  return sessions[threadId] ?? IDLE_SESSION;
+  const projectId = useProjectStore(state => state.activeProjectId);
+  const noThreads = useThreadStore(state => Boolean(projectId && state.threadsByProjectId[projectId]?.length === 0 && !state.errorByProjectId[projectId]));
+  const threadError = useThreadStore(state => projectId ? state.errorByProjectId[projectId] : null);
+  const session = useRunStore(state => threadId ? state.sessions[threadId] ?? UNLOADED_SESSION : noThreads ? EMPTY_SESSION : UNLOADED_SESSION);
+  return useMemo(() => !threadId && threadError
+    ? { ...UNLOADED_SESSION, loadStatus: 'error' as const, error: new Error(threadError) }
+    : session, [session, threadError, threadId]);
 }

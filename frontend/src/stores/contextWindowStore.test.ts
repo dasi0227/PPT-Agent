@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { threadsApi } from '../api/threads';
 import type { CompactContextResponse } from '../api/types';
-import { useContextWindowStore } from './contextWindowStore';
-import { useRunStore } from './runStore';
+import { selectContextWindow, useContextWindowStore } from './contextWindowStore';
+import { useSessionStore } from './sessionStore';
+import { sessionFixture } from '../test/sessionFixtures';
 
 const response: CompactContextResponse = {
   snapshot: {
@@ -31,40 +32,26 @@ const response: CompactContextResponse = {
 
 describe('context window store', () => {
   beforeEach(() => {
-    useContextWindowStore.setState({ sessions: {} });
-    useRunStore.setState({ sessions: {} });
+    useContextWindowStore.getState().drop('t1');
+    useSessionStore.setState({ sessions: { t1: sessionFixture({ contextWindow: response.snapshot }) } });
     vi.restoreAllMocks();
   });
 
-  it('keeps a live snapshot when an earlier read resolves later', async () => {
+  it('discards an estimate from before a scene switch', async () => {
     let resolveRead!: (value: typeof response.snapshot) => void;
-    vi.spyOn(threadsApi, 'contextWindow').mockReturnValue(new Promise((resolve) => { resolveRead = resolve; }));
+    vi.spyOn(threadsApi, 'contextWindow').mockReturnValue(new Promise(resolve => { resolveRead = resolve; }));
     const loading = useContextWindowStore.getState().load('t1', 'model');
-    const live = { ...response.snapshot };
-    useContextWindowStore.getState().update('t1', live);
-    resolveRead({ ...response.snapshot });
+    useSessionStore.setState({ sessions: { t1: sessionFixture({ sceneRevision: '2', generation: 1 }) } });
+    resolveRead(response.snapshot);
     await loading;
-    expect(useContextWindowStore.getState().sessions.t1.snapshot).toBe(live);
-    expect(useContextWindowStore.getState().sessions.t1.loading).toBe(false);
+    const detail = useContextWindowStore.getState().sessions.t1;
+    expect(selectContextWindow(useSessionStore.getState().sessions.t1, detail, 'model')).toBeNull();
+    expect(detail.loading).toBe(false);
   });
 
-  it('inserts a manual compaction immediately and deduplicates by id', async () => {
+  it('uses shared capacity and leaves timeline insertion to committed batches', async () => {
     vi.spyOn(threadsApi, 'compact').mockResolvedValue(response);
-    useContextWindowStore.setState({
-      sessions: {
-        t1: { snapshot: response.snapshot, loading: false, compacting: false },
-      },
-    });
     await expect(useContextWindowStore.getState().compact('t1', 'compact:request1')).resolves.toBe(true);
-    await expect(useContextWindowStore.getState().compact('t1', 'compact:request1')).resolves.toBe(true);
-
-    const session = useRunStore.getState().sessions.t1;
-    expect(session).toBeDefined();
-    expect(session.timelineItems).toHaveLength(1);
-    expect(session.timelineItems[0]).toMatchObject({
-      id: 'compact:request1',
-      type: 'context_compaction',
-      title: '收敛上下文协议与前端实现',
-    });
+    expect(useSessionStore.getState().sessions.t1.itemsById).toEqual({});
   });
 });

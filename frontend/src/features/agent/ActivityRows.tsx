@@ -9,7 +9,6 @@ import {
   Flag,
   Loader2,
   Microscope,
-  RotateCcw,
   SquareTerminal,
   Pencil,
   Component as ComponentIcon,
@@ -18,9 +17,8 @@ import {
 import type {
   MilestoneItem,
   ThinkingItem,
-  RunLifecycleItem,
   ToolActivityItem,
-} from './eventReducer';
+} from './timelineTypes';
 import type { PublicTarget, Slide } from '../../api/types';
 import { cn } from '../../lib/utils';
 import { MarkdownMessage } from './MarkdownMessage';
@@ -179,13 +177,6 @@ export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => {
     </div>
   );
 };
-
-export const RunLifecycleRow: React.FC<{ item: RunLifecycleItem }> = ({ item }) => (
-  <div className="flex min-h-8 items-center gap-2 px-1.5 py-1 text-[13px] text-text-900">
-    <RotateCcw className="h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />
-    <span className="min-w-0 flex-1 truncate">{item.text}</span>
-  </div>
-);
 
 // 图标字形按工具区分（读取=eye，编辑=pencil，渲染=image），颜色由状态决定：
 // 成功=success 绿、失败=danger 红；未知工具才使用通用状态图标兜底。

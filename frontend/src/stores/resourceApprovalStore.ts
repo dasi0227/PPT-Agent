@@ -3,6 +3,7 @@ import type { ApprovalResource } from '../api/types';
 
 export interface ActiveResourceApproval {
   projectId: string;
+  sceneRevision: string;
   runId: string;
   interactionId: string;
   resource: ApprovalResource;
@@ -10,11 +11,11 @@ export interface ActiveResourceApproval {
 
 export const useResourceApprovalStore = create<{
   active: ActiveResourceApproval | null;
-  editStates: Record<string, { phase: 'editing' | 'review'; revision?: number; dirty: boolean; busy: boolean }>;
+  editStates: Record<string, { phase: 'editing' | 'review'; revision?: string; dirty: boolean; busy: boolean }>;
   open: (active: ActiveResourceApproval) => void;
   close: () => void;
   editorState: (key: string, dirty: boolean, busy: boolean) => void;
-  saved: (key: string, revision: number) => void;
+  saved: (key: string, revision: string) => void;
   finish: (key: string) => void;
 }>((set) => ({
   active: null,

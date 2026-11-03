@@ -5,7 +5,7 @@ import { useRunStore } from '../../stores/runStore';
 import { cn } from '../../lib/utils';
 import { useActiveSession, useActiveThreadId } from './useActiveSession';
 import type { QuestionField, QuestionFieldAnswer } from '../../api/types';
-import type { QuestionItem } from './eventReducer';
+import type { QuestionItem } from './timelineTypes';
 import { HumanIntervention } from './HumanIntervention';
 
 const CUSTOM_OPTION_ID = '__custom__';
@@ -304,7 +304,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
   };
 
   const submit = async () => {
-    if (!threadId || !activeRunId || !pending || submitting || !complete) return;
+    if (!threadId || !activeRunId || !pending || submitting || !complete || !item.sceneRevision || !item.requestRevision) return;
     const answers: QuestionFieldAnswer[] = questions.map((question) => {
       const draft = drafts[question.id] ?? { customText: '' };
       if (draft.skipped) return { question_id: question.id, skipped: true };
@@ -314,7 +314,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
       return { question_id: question.id, selected_option_id: draft.selectedOptionId };
     });
     setSubmitting(true);
-    await answerQuestion(threadId, activeRunId, item.questionId, JSON.stringify({ answers }));
+    await answerQuestion(threadId, activeRunId, item.questionId, JSON.stringify({ answers }), { scene_revision: item.sceneRevision, request_revision: item.requestRevision });
     setSubmitting(false);
   };
 
@@ -338,7 +338,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
   };
 
   return (
-    <HumanIntervention id={`question-details-${item.questionId}`} pending={!item.answer} icon={MessageCircleQuestion}
+    <HumanIntervention id={`question-details-${item.questionId}`} pending={item.interactionState === 'pending'} icon={MessageCircleQuestion}
       label={`回答 ${questions.length} 个问题`}>
     <fieldset
       ref={panelRef}

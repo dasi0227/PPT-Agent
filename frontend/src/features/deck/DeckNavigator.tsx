@@ -66,11 +66,11 @@ import { flattenOutline, orderedSlides } from './selectors';
 const clientRef = (kind: string) => `${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 type EditTarget =
-  | { kind: 'section'; id: string; value: string; hash?: string; scene?: number }
-  | { kind: 'subsection'; id: string; value: string; hash?: string; scene?: number }
-  | { kind: 'page'; id: string; value: string; hash?: string; scene?: number };
+  | { kind: 'section'; id: string; value: string; hash?: string; scene?: string }
+  | { kind: 'subsection'; id: string; value: string; hash?: string; scene?: string }
+  | { kind: 'page'; id: string; value: string; hash?: string; scene?: string };
 
-type OutlineRevision = { hash?: string; scene?: number };
+type OutlineRevision = { hash?: string; scene?: string };
 
 type DeleteTarget = OutlineRevision & (
   | { kind: 'section'; id: string; title: string }

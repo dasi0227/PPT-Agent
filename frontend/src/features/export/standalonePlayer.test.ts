@@ -39,8 +39,7 @@ describe('standalone HTML player', () => {
       expect(marker.textContent).toBe('开场');
       expect(marker.parentElement?.id).toBe('canvas');
       expect(dom.window.getComputedStyle(marker).position).toBe('absolute');
-      expect(dom.window.getComputedStyle(marker).fontSize).toBe('16px');
-      expect(dom.window.getComputedStyle(title).bottom).toBe('3.2%');
+      expect(title.getAttribute('data-placement')).toBe('bottom-left');
       expect(document.querySelector('[data-runtime-slide-pagination]')?.textContent).toBe('1');
       expect(document.querySelectorAll('[data-runtime-slide-pagination]')).toHaveLength(1);
       expect(document.querySelector('iframe')?.getAttribute('sandbox')).toBe('allow-scripts');

@@ -1,3 +1,4 @@
+import { compareRevision } from '../api/session';
 import { threadsApi } from '../api/threads';
 import type { CommandActivityRecord, PolishRequest, Thread } from '../api/types';
 import { useBriefingStore } from './briefingStore';
@@ -33,32 +34,18 @@ export async function retryRecordedCommand(
     await useContextWindowStore.getState().load(threadId, '');
     return useContextWindowStore.getState().compact(threadId, id);
   }
-  const store = useThreadStore.getState();
-  const previous = store.threadsByProjectId[projectId]?.find((thread) => thread.id === threadId)?.title ?? record.previous_title;
   const apply = (updated: Thread) => useThreadStore.setState((state) => ({
     threadsByProjectId: {
       ...state.threadsByProjectId,
       [projectId]: (state.threadsByProjectId[projectId] ?? []).map((thread) =>
-        thread.id === updated.id && updated.naming_revision >= thread.naming_revision ? updated : thread),
+        thread.id === updated.id && compareRevision(updated.naming_revision, thread.naming_revision) >= 0 ? updated : thread),
     },
   }));
   if (record.method === 'auto') return generateNameCommand(threadId, apply, id);
-  const initial = {
-    id, type: 'command' as const, kind: 'rename' as const, title: previous || '新会话',
-    status: 'loading' as const, method: 'manual' as const, timestamp: record.created_at,
-  };
   return performCommand(
-    threadId, initial,
+    threadId, id,
     (signal) => threadsApi.patch(threadId, { title: String(request.title ?? '') }, id, signal),
-    (thread) => {
-      apply(thread);
-      const title = thread.title.trim() || '新会话';
-      return {
-        ...initial, status: 'completed', title,
-        content: previous.trim() === thread.title.trim()
-          ? `保留当前名称：${title}` : `${previous || '新会话'} → ${title}`,
-      };
-    },
+    apply,
     () => { void retryRecordedCommand(record); },
   );
 }

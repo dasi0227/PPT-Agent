@@ -5,7 +5,7 @@ import { useComposerStore } from '../../stores/composerStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useThreadStore } from '../../stores/threadStore';
 import { cancelCommand, retryCommand } from '../../stores/commandRuntime';
-import type { BriefingTimelineItem } from './eventReducer';
+import type { BriefingTimelineItem } from './timelineTypes';
 import { CommandActivity } from './CommandActivity';
 import { retryRecordedCommand } from '../../stores/commandRecovery';
 export function BriefingActivity({ item }: { item: BriefingTimelineItem }) {

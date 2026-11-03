@@ -1,4 +1,4 @@
-import type { TerminalNoticeItem } from './eventReducer';
+import type { TerminalNoticeItem } from './timelineTypes';
 import { FinalChangeSummary, FinalMessage } from './FinalMessage';
 import { MarkdownMessage } from './MarkdownMessage';
 

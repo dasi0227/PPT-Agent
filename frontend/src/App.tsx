@@ -10,8 +10,6 @@ import { GlobalToasts } from './components/ui/GlobalToasts';
 import { DeletionFeedback } from './features/workspace/DeletionFeedback';
 import { GlobalModals } from './features/workspace/GlobalModals';
 import { UnknownRouteRedirect, WorkspaceRoute } from './features/workspace/WorkspaceRoute';
-import { useRunStore } from './stores/runStore';
-import { useGitCommitStore } from './stores/gitCommitStore';
 import { ThemeRepositoryPage } from './features/repository/ThemeRepositoryPage';
 import { ComponentRepositoryPage } from './features/repository/ComponentRepositoryPage';
 import { SkillRepositoryPage } from './features/repository/SkillRepositoryPage';
@@ -52,15 +50,7 @@ export function App() {
     document.addEventListener('visibilitychange', visible);
     return () => { window.removeEventListener('focus', refresh); window.removeEventListener('storage', storage); document.removeEventListener('visibilitychange', visible); };
   }, []);
-  useEffect(() => {
-    void useRunStore.getState().recoverPersistedRuns();
-    void useGitCommitStore.getState().recover();
-    return () => {
-      const sessions = useRunStore.getState().sessions;
-      Object.values(sessions).forEach((session) => session.eventSourceClose?.());
-      useGitCommitStore.getState().closeAll();
-    };
-  }, []);
+
 
   return <RouterProvider router={router} />;
 }

@@ -5,61 +5,54 @@ import { AppShell } from './AppShell';
 import { homeRoute, projectRoute } from './routes';
 import { useWorkspaceUrlState } from './useWorkspaceUrlState';
 import { useThreadStore } from '../../stores/threadStore';
-import { useRunStore } from '../../stores/runStore';
-import { threadsApi } from '../../api/threads';
-import { currentHistoryEpoch } from '../../api/client';
-import type { HistoryEntry } from '../agent/historyHydrator';
+import { useSessionStore } from '../../stores/sessionStore';
+import { compareRevision } from '../../api/session';
 
-const PROJECT_CHECK_INTERVAL_MS = 4_000;
+const PROJECT_CONTENT_CHECK_INTERVAL_MS = 4_000;
 
-function useVisibleProjectChecks(projectId: string | undefined) {
+function useSessionSync(projectId: string | undefined) {
+  const threadId = useThreadStore(state => projectId ? state.activeThreadIdByProjectId[projectId] : null);
   React.useEffect(() => {
     if (!projectId) return;
-    let canceled = false;
-    let checking = false;
-    const historySignatures = new Map<string, string>();
-    const check = async () => {
-      if (canceled || checking || document.visibilityState !== 'visible') return;
-      checking = true;
-      const epoch = currentHistoryEpoch();
-      try {
-        const threadIds = useThreadStore.getState().threadsByProjectId[projectId]?.map((thread) => thread.id) ?? [];
-        await Promise.allSettled([
-          useProjectStore.getState().checkProjectContent(projectId),
-          ...threadIds.map(async (threadId) => {
-            const startedWithSession = useRunStore.getState().sessions[threadId];
-            const history = await threadsApi.history(threadId);
-            if (canceled || epoch !== currentHistoryEpoch()
-              || useRunStore.getState().sessions[threadId] !== startedWithSession) return;
-            if (startedWithSession?.status === 'creating') return;
-            const signature = JSON.stringify(history);
-            if (historySignatures.get(threadId) === signature) {
-              const session = useRunStore.getState().sessions[threadId];
-              if (session?.activeRunId && !session.eventSourceClose && session.streamStatus === 'closed'
-                && ['running', 'waiting', 'recovering', 'canceling'].includes(session.status)) {
-                void useRunStore.getState().reconcileRun(threadId, session.activeRunId, session.lastEventId, projectId);
-              }
-              return;
-            }
-            if (useRunStore.getState().syncThreadHistory(threadId, history as unknown as HistoryEntry[], projectId)) {
-              historySignatures.set(threadId, signature);
-            }
-          }),
-        ]);
-      } finally {
-        checking = false;
-      }
+    const check = () => {
+      if (document.visibilityState === 'visible') void useProjectStore.getState().checkProjectContent(projectId);
     };
-    const timer = window.setInterval(() => void check(), PROJECT_CHECK_INTERVAL_MS);
-    document.addEventListener('visibilitychange', check);
+    const timer = window.setInterval(check, PROJECT_CONTENT_CHECK_INTERVAL_MS);
     window.addEventListener('focus', check);
+    document.addEventListener('visibilitychange', check);
     return () => {
-      canceled = true;
       window.clearInterval(timer);
-      document.removeEventListener('visibilitychange', check);
       window.removeEventListener('focus', check);
+      document.removeEventListener('visibilitychange', check);
     };
   }, [projectId]);
+
+  React.useEffect(() => {
+    if (!projectId || !threadId) return;
+    const release = useSessionStore.getState().retain(threadId, projectId);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const unsubscribe = useSessionStore.subscribe((next, previous) => {
+      const state = next.sessions[threadId], before = previous.sessions[threadId];
+      if (!state || !before?.appliedSeq || state.sceneRevision !== before.sceneRevision || state.appliedSeq === before.appliedSeq) return;
+      const fileChange = Object.values(state.itemsById).some(item => item.kind === 'tool'
+        && item.summary.status === 'completed' && compareRevision(item.updated_seq, before.appliedSeq!) > 0);
+      const ended = before.thread?.active_run_id && state.thread?.active_run_id !== before.thread.active_run_id;
+      if (!fileChange && !ended) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => void useProjectStore.getState().checkProjectContent(projectId), 100);
+    });
+    const focus = () => {
+      if (document.visibilityState !== 'visible') return;
+      void useSessionStore.getState().reconnect(threadId);
+    };
+    window.addEventListener('focus', focus);
+    document.addEventListener('visibilitychange', focus);
+    return () => {
+      clearTimeout(timer); unsubscribe(); release();
+      window.removeEventListener('focus', focus);
+      document.removeEventListener('visibilitychange', focus);
+    };
+  }, [projectId, threadId]);
 }
 
 function syncProjectRoute(projectId: string | undefined) {
@@ -84,7 +77,7 @@ export function WorkspaceRoute() {
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const openProjectIds = useProjectStore((state) => state.openProjectIds);
   useWorkspaceUrlState(projectId);
-  useVisibleProjectChecks(projectId);
+  useSessionSync(projectId);
 
   React.useLayoutEffect(() => {
     syncProjectRoute(projectId);

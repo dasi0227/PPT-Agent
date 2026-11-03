@@ -7,36 +7,22 @@ import { useDeckStore } from '../../stores/deckStore';
 import { loadProjectComposer, useComposerStore } from '../../stores/composerStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useProjectHistoryStore } from '../../stores/projectHistoryStore';
-import { IDLE_SESSION, useRunStore } from '../../stores/runStore';
+import { useRunStore } from '../../stores/runStore';
 import { useThreadStore } from '../../stores/threadStore';
 import { useShortcutStore } from '../../stores/shortcutStore';
 import { defaultBindings } from '../../lib/shortcuts';
 import { CommandComposer } from './CommandComposer';
-import { hydrateRunFromHistory, type HistoryEntry } from './historyHydrator';
+import { useSessionStore } from '../../stores/sessionStore';
+import { sessionFixture, threadFixture } from '../../test/sessionFixtures';
 
 const originalExecCommand = document.execCommand;
 
-const finalHistory = (runId: string, suggestion: string): HistoryEntry[] => {
-  const base = { schema_version: 6, run_id: runId, occurred_at: '2026-09-23T00:00:00Z' };
-  return [
-    { seq: 1, ts: 1, run_id: runId, turn: 'agent', type: 'message.final', data: {
-      ...base, message_id: `final-${runId}`, text: '完成', affected_targets: [],
-    } },
-    { seq: 2, ts: 2, run_id: runId, turn: 'agent', type: 'run.completed', data: {
-      ...base, duration_ms: 1, affected_targets: [], error: null, trace_id: runId,
-    } },
-    ...(['accepted', 'completed'] as const).map((status, index): HistoryEntry => ({
-      seq: 3 + index, ts: 3 + index, run_id: runId, turn: 'agent', type: `command.${status}`, command_id: `suggest-${runId}`, attempt_id: `attempt-${runId}`,
-      data: { kind: 'suggest', command_id: `suggest-${runId}`, attempt_id: `attempt-${runId}`, run_id: runId, status, result: { requests: [suggestion] } },
-    })),
-  ];
-};
-
 function restoreThread(threadId: string, runId: string, suggestion: string) {
-  const hydrated = hydrateRunFromHistory(finalHistory(runId, suggestion));
-  useRunStore.setState((state) => ({ sessions: { ...state.sessions, [threadId]: {
-    ...IDLE_SESSION, ...hydrated.session, projectId: 'p1', timelineItems: hydrated.items,
-  } } }));
+  useSessionStore.setState(state => ({ sessions: { ...state.sessions, [threadId]: sessionFixture({
+    threadId, thread: threadFixture({ id: threadId, suggestions: {
+      run_id: runId, attempt_id: `attempt-${runId}`, requests: [suggestion],
+    } }),
+  }) } }));
 }
 
 describe('CommandComposer suggestions', () => {
@@ -55,7 +41,7 @@ describe('CommandComposer suggestions', () => {
     });
     localStorage.clear();
     loadProjectComposer(null);
-    useRunStore.setState({ sessions: {} });
+    useSessionStore.setState({ sessions: {} });
     useProjectStore.setState({ activeProjectId: 'p1', contentByProjectId: {}, contentLoadingByProjectId: { p1: true }, contentErrorByProjectId: {} });
     useProjectHistoryStore.setState({ states: {}, stateErrorByProjectId: { p1: true } });
     useThreadStore.setState({ activeThreadIdByProjectId: { p1: 't1' } });
@@ -65,10 +51,10 @@ describe('CommandComposer suggestions', () => {
   afterEach(() => { document.execCommand = originalExecCommand; vi.restoreAllMocks(); });
 
   it('highlights a held shortcut, consumes Option characters and repeats, and inserts once on release', async () => {
-    const session = useRunStore.getState().sessions.t1;
-    useRunStore.setState({ sessions: { t1: { ...session,
-      nextInputSuggestions: { ...session.nextInputSuggestions!, items: ['优化第一页', '补充总结'] },
-    } } });
+    const session = useSessionStore.getState().sessions.t1;
+    useSessionStore.setState({ sessions: { t1: { ...session, thread: {
+      ...session.thread!, suggestions: { ...session.thread!.suggestions, requests: ['优化第一页', '补充总结'] },
+    } } } });
     render(<CommandComposer />);
     const second = await screen.findByRole('button', { name: /2\. 补充总结/ });
     const editor = screen.getByRole('textbox');
@@ -188,7 +174,7 @@ describe('CommandComposer suggestions', () => {
     const suggestion = () => screen.getByRole('button', { name: /1\. 优化第一页/ });
     await waitFor(() => expect(suggestion()).toBeVisible());
     act(() => {
-      useProjectHistoryStore.setState({ states: { p1: { revision: 999, scene_revision: 50, checkpoints: [] } } });
+      useProjectHistoryStore.setState({ states: { p1: { revision: '999', scene_revision: '50', checkpoints: [] } } });
       useProjectStore.setState({ contentLoadingByProjectId: { p1: false }, contentErrorByProjectId: { p1: '内容刷新失败' } });
       restoreThread('t2', 'r2', '检查结论');
     });
@@ -213,8 +199,8 @@ describe('CommandComposer suggestions', () => {
     expect(screen.getByRole('button', { name: /1\. 检查结论/ })).toBeVisible();
     act(() => {
       useThreadStore.setState({ activeThreadIdByProjectId: { p1: 't1' } });
-      useRunStore.setState({ sessions: {} });
-      useProjectHistoryStore.setState({ states: { p1: { revision: 1000, scene_revision: 1000, checkpoints: [] } } });
+      useSessionStore.setState({ sessions: {} });
+      useProjectHistoryStore.setState({ states: { p1: { revision: '1000', scene_revision: '1000', checkpoints: [] } } });
       restoreThread('t1', 'checkpoint-run', '补充历史页面的说明');
     });
     expect(screen.getByRole('button', { name: /1\. 补充历史页面的说明/ })).toBeVisible();

@@ -1,3 +1,4 @@
+import { compareRevision, isRevision } from '../api/session';
 import { generateNameCommand } from './textCommandStore';
 import { create } from 'zustand';
 import { Thread, ThreadNamingAction } from '../api/types';
@@ -11,7 +12,7 @@ import { rememberDeletion, recoverDeletionNotices } from './deletionStore';
 
 interface RenamePanelTarget { projectId: string; threadId: string }
 
-interface ThreadStreamState { epoch: string; sequence: number }
+interface ThreadStreamState { epoch: string; sequence: string }
 const streamStateByProject = new Map<string, ThreadStreamState>();
 const eventSourceByProject = new Map<string, EventSource>();
 
@@ -33,8 +34,8 @@ interface ThreadState {
 	closeSuggestPanel: () => void;
 	setAutoSuggest: (projectId: string, threadId: string, enabled: boolean) => Promise<void>;
 	performNamingAction: (projectId: string, threadId: string, action: ThreadNamingAction, title?: string) => Promise<void>;
-	applyThreadSnapshot: (projectId: string, epoch: string, sequence: number, threads: Thread[]) => void;
-	applyThreadNamingUpdate: (projectId: string, epoch: string, sequence: number, thread: Thread) => void;
+	applyThreadSnapshot: (projectId: string, epoch: string, sequence: string, threads: Thread[]) => void;
+	applyThreadNamingUpdate: (projectId: string, epoch: string, sequence: string, thread: Thread) => void;
   setActiveThread: (projectId: string, threadId: string) => void;
   ensureActiveThread: (projectId: string) => Promise<string>;
   getActiveThreadId: (projectId: string) => string | null;
@@ -52,7 +53,7 @@ function isThread(value: unknown): value is Thread {
 	const thread = value as Partial<Thread>;
 	return typeof thread.id === 'string' && typeof thread.project_id === 'string'
 		&& typeof thread.title === 'string' && typeof thread.auto_rename_enabled === 'boolean'
-		&& typeof thread.naming_revision === 'number' && typeof thread.auto_suggest_enabled === 'boolean';
+		&& isRevision(thread.naming_revision) && typeof thread.auto_suggest_enabled === 'boolean';
 }
 
 function parseThreadEvent(projectId: string, name: string, raw: string) {
@@ -63,7 +64,7 @@ function parseThreadEvent(projectId: string, name: string, raw: string) {
 		return;
 	}
 	if (data.schema_version !== 1 || data.project_id !== projectId
-		|| typeof data.stream_epoch !== 'string' || typeof data.sequence !== 'number') return;
+		|| typeof data.stream_epoch !== 'string' || !isRevision(data.sequence)) return;
 	const epoch = data.stream_epoch;
 	const sequence = data.sequence;
 	if (name === 'threads.snapshot') {
@@ -169,7 +170,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
 		const updated = await threadsApi.setAutoSuggest(threadId, enabled);
 		set(state => ({ threadsByProjectId: { ...state.threadsByProjectId,
 			[projectId]: (state.threadsByProjectId[projectId] ?? []).map(thread =>
-				thread.id === threadId && updated.naming_revision >= thread.naming_revision ? updated : thread),
+				thread.id === threadId && compareRevision(updated.naming_revision, thread.naming_revision) >= 0 ? updated : thread),
 		} }));
 	},
 
@@ -178,7 +179,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
       threadsByProjectId: {
         ...state.threadsByProjectId,
         [projectId]: (state.threadsByProjectId[projectId] ?? []).map(thread =>
-          thread.id === threadId && updated.naming_revision >= thread.naming_revision ? updated : thread),
+          thread.id === threadId && compareRevision(updated.naming_revision, thread.naming_revision) >= 0 ? updated : thread),
       },
     }));
     if (action === 'generate') {
@@ -205,7 +206,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
 		if (isProjectDeleted(projectId)) return;
 		threads = threads.filter(thread => !isThreadDeleted(thread.id));
 		const current = streamStateByProject.get(projectId);
-		if (current?.epoch === epoch && sequence < current.sequence) return;
+		if (current?.epoch === epoch && compareRevision(sequence, current.sequence) < 0) return;
 		const epochChanged = Boolean(current && current.epoch !== epoch);
 		streamStateByProject.set(projectId, { epoch, sequence });
 		set((state) => {
@@ -229,13 +230,13 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
 	applyThreadNamingUpdate: (projectId, epoch, sequence, updated) => {
 		if (isProjectDeleted(projectId) || isThreadDeleted(updated.id)) return;
 		const current = streamStateByProject.get(projectId);
-		if (!current || current.epoch !== epoch || sequence <= current.sequence) return;
+		if (!current || current.epoch !== epoch || compareRevision(sequence, current.sequence) <= 0) return;
 		streamStateByProject.set(projectId, { epoch, sequence });
 		set((state) => ({
 			threadsByProjectId: {
 				...state.threadsByProjectId,
 				[projectId]: (state.threadsByProjectId[projectId] || []).map((thread) =>
-					thread.id === updated.id && updated.naming_revision >= thread.naming_revision ? updated : thread),
+					thread.id === updated.id && compareRevision(updated.naming_revision, thread.naming_revision) >= 0 ? updated : thread),
 			},
 		}));
 	},
@@ -309,13 +310,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
 
   getActiveThreadId: (projectId) => get().activeThreadIdByProjectId[projectId] ?? null,
 
-  closeProjectThreads: (projectId) => {
-    const ids = new Set<string>([
-      ...(get().openThreadIdsByProjectId[projectId] || []),
-      ...(get().threadsByProjectId[projectId] || []).map((t) => t.id),
-    ]);
-    useRunStore.getState().closeSessions([...ids]);
-  },
+  closeProjectThreads: (projectId) => { closeThreadEvents(projectId); },
 
   dropProject: (projectId) => {
 		closeThreadEvents(projectId);

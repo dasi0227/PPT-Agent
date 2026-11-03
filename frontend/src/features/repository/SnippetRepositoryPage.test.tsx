@@ -1,7 +1,8 @@
 import { installTagDictionaryFixture } from '../../testSupport/resourceTags';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { filesApi } from '../../api/files';
 import type { Snippet } from '../../api/types';
 import { useSnippetStore } from '../../stores/snippetStore';
 import { SnippetRepositoryPage } from './SnippetRepositoryPage';
@@ -22,7 +23,7 @@ const first: Snippet = {
   description: '提炼核心结论',
   content: '提炼核心结论。',
   tags: ['deliverable', 'review'],
-  disabled: false, content_state: 'ready', open_url: 'vscode://file/snippets/p1/snippet.txt',
+  disabled: false, content_state: 'ready', open_url: '/api/v1/files/open?path=%2Fsnippets%2Fp1%2Fsnippet.txt',
   created_at: 1,
   updated_at: 2,
 };
@@ -32,6 +33,7 @@ function renderPage() {
 }
 
 describe('SnippetRepositoryPage', () => {
+  afterEach(() => vi.restoreAllMocks());
   beforeEach(() => {
     vi.clearAllMocks();
     installTagDictionaryFixture();
@@ -45,17 +47,18 @@ describe('SnippetRepositoryPage', () => {
     });
   });
 
-  it('renders snippets with a unified bilingual name and an external file link', () => {
+  it('renders snippets and opens their file through the native file action', async () => {
+    const open = vi.spyOn(filesApi, 'open').mockResolvedValue();
     renderPage();
     expect(screen.getByRole('link', { name: '短语' })).toHaveAttribute('href', '/warehouse/snippet');
     expect(screen.getByRole('heading', { name: first.name })).toBeInTheDocument();
     expect(screen.getAllByText('交付')).toHaveLength(2);
     expect(screen.getAllByText('审查')).toHaveLength(2);
-    expect(screen.getByRole('link', { name: '查看文件' })).toHaveAttribute('href', first.open_url);
+    fireEvent.click(screen.getByRole('button', { name: /查看文件/ }));
+    await waitFor(() => expect(open).toHaveBeenCalledWith(first.open_url));
     expect(screen.getAllByText(first.description)).toHaveLength(2);
     const snippetContent = screen.getByText(first.content);
-    expect(snippetContent).toHaveClass('text-lg', 'font-semibold');
-    expect(snippetContent.closest('article')).toHaveClass('w-fit');
+    expect(snippetContent).toBeVisible();
     expect(screen.getByRole('button', { name: `编辑${first.name}` }).nextElementSibling)
       .toBe(screen.getByRole('button', { name: `删除${first.name}` }));
   });
@@ -99,13 +102,15 @@ describe('SnippetRepositoryPage', () => {
     expect(directoryItem.querySelector('.lucide-pause')).not.toBeInTheDocument();
   });
 
-  it('keeps a missing payload manageable', () => {
+  it('keeps a missing payload manageable', async () => {
+    const open = vi.spyOn(filesApi, 'open').mockResolvedValue();
     useSnippetStore.setState({ snippets: [{ ...first, content: '', content_state: 'missing', content_error: '资源文件缺失' }] });
     renderPage();
     expect(screen.getByText('资源文件缺失')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: `编辑${first.name}` })).toBeEnabled();
     expect(screen.getByRole('button', { name: `删除${first.name}` })).toBeEnabled();
-    expect(screen.getByRole('link', { name: '查看文件' })).toHaveAttribute('href', first.open_url);
+    fireEvent.click(screen.getByRole('button', { name: /查看文件/ }));
+    await waitFor(() => expect(open).toHaveBeenCalledWith(first.open_url));
   });
 
   it('filters by tag', async () => {

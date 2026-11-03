@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { runsApi } from '../../api/runs';
+import { useSessionStore } from '../../stores/sessionStore';
+import { useActiveThreadId } from './useActiveSession';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { resourceApprovalKey, useResourceApprovalStore } from '../../stores/resourceApprovalStore';
-import type { ToolActivityItem } from './eventReducer';
+import type { ToolActivityItem } from './timelineTypes';
 import { DecisionControls, decisionFeedback } from './HumanIntervention';
 
 export function ResourceApprovalControls({ item }: { item: ToolActivityItem }) {
+  const threadId = useActiveThreadId();
   const projectId = useProjectStore(state => state.activeProjectId);
   const key = resourceApprovalKey(item.runId ?? '', item.approval?.interactionId ?? '');
   const flow = useResourceApprovalStore(state => state.editStates[key]);
@@ -20,24 +23,25 @@ export function ResourceApprovalControls({ item }: { item: ToolActivityItem }) {
     && activeDocument === item.approval?.resource && flow?.phase === 'editing';
   const blocked = Boolean(flow?.busy || (decision !== 'reject' && (flow?.dirty || (decision === 'manual' && editing))));
   const submit = async () => {
-    if (!item.runId || !item.approval || item.approval.answer || !decision || busy || blocked) return;
+    if (!item.runId || !item.approval || item.approval.answer || !decision || busy || blocked || item.interactionState !== 'pending' || !item.sceneRevision) return;
     if (decision === 'manual' && flow?.phase !== 'review') {
       if (!projectId) return;
-      useResourceApprovalStore.getState().open({ projectId, runId: item.runId, interactionId: item.approval.interactionId,
+      useResourceApprovalStore.getState().open({ projectId, sceneRevision: item.sceneRevision, runId: item.runId, interactionId: item.approval.interactionId,
         resource: item.approval.resource });
       useDeckStore.getState().setActiveDocument(item.approval.resource);
       return;
     }
     setBusy(true); setError('');
     try {
-      const current = await runsApi.getResourceEditApproval(item.runId, item.approval.interactionId);
+      const current = await runsApi.getResourceEditApproval(item.runId, item.approval.interactionId, item.sceneRevision);
       if (current.state !== 'pending') throw new Error('审批已处理，请刷新');
       if (current.revision !== item.approval.revision || (decision === 'manual' && current.revision !== flow?.revision)) {
         throw new Error('草稿已更新，请核对最新内容后重试');
       }
       await runsApi.decideResourceEditApproval(item.runId, current.interaction_id, item.callId, current.revision,
-        decision === 'reject' ? 'reject' : 'approve', decisionFeedback(decision, 'reject', feedback));
+        decision === 'reject' ? 'reject' : 'approve', decisionFeedback(decision, 'reject', feedback), item.sceneRevision);
       useResourceApprovalStore.getState().finish(key);
+      if (threadId) await useSessionStore.getState().reconnect(threadId);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '审批失败'); setBusy(false);
     }
@@ -45,6 +49,6 @@ export function ResourceApprovalControls({ item }: { item: ToolActivityItem }) {
   return <DecisionControls options={[
     { value: 'approve', label: '批准' }, { value: 'manual', label: '手动编辑' },
     { value: 'reject', label: '拒绝' },
-  ]} selected={decision} onSelect={setDecision} onSubmit={() => void submit()} busy={busy} disabled={blocked}
+  ]} selected={decision} onSelect={setDecision} onSubmit={() => void submit()} busy={busy} disabled={blocked || item.interactionState !== 'pending'}
     feedback={feedback} onFeedback={decision === 'reject' ? setFeedback : undefined} error={error} label="资源编辑审批" inset />;
 }

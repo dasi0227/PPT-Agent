@@ -9,7 +9,7 @@ import { SourceCanvas } from './SourceCanvas';
 
 export function HTMLSourceView({ projectId, slideId, title, ordinal, hash, sceneRevision, available }: {
   projectId: string; slideId?: string; title?: string; ordinal: number;
-  hash?: string; sceneRevision?: number; available: boolean;
+  hash?: string; sceneRevision?: string; available: boolean;
 }) {
   const identity = `${projectId}:${slideId}:${hash}:${sceneRevision}`;
   const [result, setResult] = useState<{ identity: string; document?: HTMLSourceDocument; display?: string; error?: string }>();

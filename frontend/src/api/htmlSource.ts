@@ -6,7 +6,7 @@ export interface HTMLSourceDocument {
   path: string;
   content: string;
   source_hash: string;
-  scene_revision: number;
+  scene_revision: string;
 }
 
 export const readHTMLSource = (projectId: string, slideId: string) =>

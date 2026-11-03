@@ -125,7 +125,7 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
   const resetForProject = composer.resetForProject;
   const previousProjectId = useRef<string | null | undefined>(undefined);
   const steering = (runStatus === 'running' || runStatus === 'waiting') && Boolean(activeRunId);
-  const disabled = !activeProjectId || runStatus === 'creating' || runStatus === 'recovering' || runStatus === 'canceling';
+  const disabled = !activeProjectId || activeSession.loadStatus !== 'ready' || runStatus === 'creating' || runStatus === 'recovering' || runStatus === 'canceling';
   const runActive = runStatus === 'creating' || runStatus === 'running' || runStatus === 'waiting' || runStatus === 'paused' || runStatus === 'recovering' || runStatus === 'canceling';
   const activeThreadId = activeProjectId ? activeThreadIdByProjectId[activeProjectId] : undefined;
   const contextSession = useContextWindowStore((state) => (
@@ -578,7 +578,7 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
         editorRef.current?.setPlainText('');
 		composer.clearThreadDraft(threadId);
       }
-      else if (result === 'failed') showGlobalError('运行创建失败，请检查时间线中的错误后重试');
+      else if (result === 'failed') editorRef.current?.focusEnd();
     } catch (error) {
       showGlobalError(error instanceof Error ? error.message : '创建会话失败，请重试');
     }

@@ -10,7 +10,7 @@ import { ProjectDocumentView } from './ProjectDocumentView';
 const mutate = vi.fn();
 const load = vi.fn().mockResolvedValue(undefined);
 const initial: ProjectContentSnapshot = {
-  project_title: 'Test', project_id: 'p', scene_revision: 1, theme: '', appearance: null, hashes: { meta: 'original', constraints: 'original' },
+  project_title: 'Test', project_id: 'p', scene_revision: '1', theme: '', appearance: null, hashes: { meta: 'original', constraints: 'original' },
   meta: { title: '演示标题', language: 'zh-CN', count: '待明确', goal: '帮助团队理解 Skill', audience: '开发者' },
   constraints: { content: { requirements: ['解释结构', '展示案例'], prohibitions: [] }, visual: { requirements: ['保持视觉'], prohibitions: [] } },
   decorations: { slide_pagination: 'bottom-right', section_title: 'none', deck_title: 'none', logo: 'none' }, logo: null,
@@ -50,7 +50,7 @@ it('edits only from the pencil and submits only the changed field with the captu
   fireEvent.change(screen.getByLabelText('幻灯片数量'), { target: { value: '11-12' } });
   fireEvent.click(screen.getByRole('button', { name: '保存' }));
   await waitFor(() => expect(screen.queryByRole('textbox')).not.toBeInTheDocument());
-  expect(mutate).toHaveBeenCalledWith('p', { op: 'meta.patch', patch: [{ op: 'replace', path: '/count', value: '11-12' }], expected_hash: 'original', expected_scene_revision: 1 });
+  expect(mutate).toHaveBeenCalledWith('p', { op: 'meta.patch', patch: [{ op: 'replace', path: '/count', value: '11-12' }], expected_hash: 'original', expected_scene_revision: '1' });
   act(() => useDeckStore.getState().setContentMode('source'));
   expect(screen.getByRole('region', { name: 'JSON 只读预览' })).toHaveTextContent('11-12');
   expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
@@ -60,7 +60,7 @@ it('retains the draft and rejects a changed history scene even when the hash is 
   render(<Editor />);
   fireEvent.click(screen.getByRole('button', { name: '编辑演示目标' }));
   fireEvent.change(screen.getByLabelText('演示目标'), { target: { value: '未提交的修改' } });
-  act(() => useProjectStore.setState({ contentByProjectId: { p: { ...initial, scene_revision: 2 } } }));
+  act(() => useProjectStore.setState({ contentByProjectId: { p: { ...initial, scene_revision: '2' } } }));
   expect(screen.getByLabelText('演示目标')).toHaveValue('未提交的修改');
   expect(screen.getByRole('button', { name: '保存' })).toBeDisabled();
   expect(screen.getByText('内容已更新，请取消后重新编辑。')).toBeInTheDocument();
@@ -94,7 +94,7 @@ it('restores a deleted row with the deletion response version, then expires undo
   fireEvent.click(screen.getByRole('button', { name: '撤销' }));
   await screen.findByText('解释结构');
   await waitFor(() => expect(screen.queryByRole('button', { name: '撤销' })).not.toBeInTheDocument());
-  expect(mutate).toHaveBeenLastCalledWith('p', { op: 'constraints.patch', patch: [{ op: 'replace', path: '/content', value: { requirements: ['解释结构', '展示案例'], prohibitions: [] } }], expected_hash: 'saved-1', expected_scene_revision: 1 });
+  expect(mutate).toHaveBeenLastCalledWith('p', { op: 'constraints.patch', patch: [{ op: 'replace', path: '/content', value: { requirements: ['解释结构', '展示案例'], prohibitions: [] } }], expected_hash: 'saved-1', expected_scene_revision: '1' });
   fireEvent.click(screen.getByRole('button', { name: '删除内容需求 1' }));
   await screen.findByRole('button', { name: '撤销' });
   act(() => {

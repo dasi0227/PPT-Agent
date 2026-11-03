@@ -9,22 +9,22 @@ vi.mock('../api/threads', () => ({
     create: async (projectId: string, title?: string) => {
       calls.push({ fn: 'create', args: [projectId, title] });
       const n = calls.filter((c) => c.fn === 'create').length;
-      return { id: `realT_${n}`, project_id: projectId, title: title || '', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: !title, naming_revision: 1 };
+      return { id: `realT_${n}`, project_id: projectId, title: title || '', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: !title, naming_revision: '1' };
     },
     naming: async (id: string, operationId: string, action: string, title?: string) => {
       calls.push({ fn: 'naming', args: [id, operationId, action, title] });
-      return { id, project_id: 'p1', title: title ?? '', created_at: 0, updated_at: 1, auto_suggest_enabled: true, auto_rename_enabled: false, naming_revision: 2 };
+      return { id, project_id: 'p1', title: title ?? '', created_at: 0, updated_at: 1, auto_suggest_enabled: true, auto_rename_enabled: false, naming_revision: '2' };
     },
     delete: async (id: string) => {
       calls.push({ fn: 'delete', args: [id] });
       return { server_now: Date.now(), deletion: { kind: 'thread', id, project_id: 'p1', token: `delete-${id}`, title: '', undo_until: Date.now() + 5_000 } };
     },
-    history: async () => [],
   },
 }));
 
 import { useThreadStore } from './threadStore';
-import { useRunStore } from './runStore';
+import { useSessionStore } from './sessionStore';
+import { sessionFixture, threadFixture, runFixture, itemFixture, groupFixture } from '../test/sessionFixtures';
 import { restoreThread } from './deletedTargets';
 
 function reset() {
@@ -33,7 +33,7 @@ function reset() {
   listThreads.mockReset();
   listThreads.mockResolvedValue([]);
   useThreadStore.setState({ threadsByProjectId: {}, openThreadIdsByProjectId: {}, activeThreadIdByProjectId: {} });
-  useRunStore.setState({ sessions: {} });
+  useSessionStore.setState({ sessions: {} });
 }
 
 describe('threadStore v6', () => {
@@ -51,7 +51,7 @@ describe('threadStore v6', () => {
   it('ensureActiveThread uses existing active if present', async () => {
     useThreadStore.setState({
       activeThreadIdByProjectId: { p1: 't1' },
-      threadsByProjectId: { p1: [{ id: 't1', project_id: 'p1', title: 'T1', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: 1 }] }
+      threadsByProjectId: { p1: [{ id: 't1', project_id: 'p1', title: 'T1', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: '1' }] }
     });
     const id = await useThreadStore.getState().ensureActiveThread('p1');
     expect(id).toBe('t1');
@@ -60,7 +60,7 @@ describe('threadStore v6', () => {
 
   it('ensureActiveThread uses first existing thread if no active', async () => {
     useThreadStore.setState({
-      threadsByProjectId: { p1: [{ id: 't2', project_id: 'p1', title: 'T2', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: 1 }] }
+      threadsByProjectId: { p1: [{ id: 't2', project_id: 'p1', title: 'T2', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: '1' }] }
     });
     const id = await useThreadStore.getState().ensureActiveThread('p1');
     expect(id).toBe('t2');
@@ -69,8 +69,8 @@ describe('threadStore v6', () => {
 
   it('loadThreads opens every existing historical thread for a project', async () => {
     listThreads.mockResolvedValue([
-      { id: 't1', project_id: 'p1', title: 'T1', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: 1 },
-      { id: 't2', project_id: 'p1', title: 'T2', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: 1 },
+      { id: 't1', project_id: 'p1', title: 'T1', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: '1' },
+      { id: 't2', project_id: 'p1', title: 'T2', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: '1' },
     ]);
 
     await useThreadStore.getState().loadThreads('p1');
@@ -88,7 +88,7 @@ describe('threadStore v6', () => {
 
   it('manual naming updates the thread in-place', async () => {
     useThreadStore.setState({
-      threadsByProjectId: { p1: [{ id: 't1', project_id: 'p1', title: 'Old', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: 1 }] }
+      threadsByProjectId: { p1: [{ id: 't1', project_id: 'p1', title: 'Old', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: '1' }] }
     });
     await useThreadStore.getState().performNamingAction('p1', 't1', 'manual', 'New');
     expect(calls.find(c => c.fn === 'naming')?.args).toEqual(['t1', expect.any(String), 'manual', 'New']);
@@ -99,16 +99,14 @@ describe('threadStore v6', () => {
     useThreadStore.setState({
       threadsByProjectId: {
         p1: [
-          { id: 't1', project_id: 'p1', title: '', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: 1 },
-          { id: 't2', project_id: 'p1', title: '', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: 1 },
+          { id: 't1', project_id: 'p1', title: '', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: '1' },
+          { id: 't2', project_id: 'p1', title: '', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: '1' },
         ],
       },
       openThreadIdsByProjectId: { p1: ['t1', 't2'] },
       activeThreadIdByProjectId: { p1: 't2' },
     });
-    useRunStore.setState({
-      sessions: { t2: { activeRunId: null, status: 'idle', scope: { selection: { kind: 'current_page' } }, mode: 'create', timelineItems: [], pendingQuestion: null, progress: null, eventSourceClose: null, plan: null, nextInputSuggestions: null, tokenUsageByRun: {} } },
-    });
+    useSessionStore.setState({ sessions: { t2: sessionFixture({ threadId: 't2' }) } });
 
     await useThreadStore.getState().deleteThread('p1', 't2');
     expect(calls.filter((c) => c.fn === 'delete')).toHaveLength(1);
@@ -117,49 +115,33 @@ describe('threadStore v6', () => {
     expect(st.openThreadIdsByProjectId['p1']).toEqual(['t1']);
     expect(st.activeThreadIdByProjectId['p1']).toBe('t1');
     expect(st.threadsByProjectId['p1']).toHaveLength(1);
-    expect(useRunStore.getState().sessions['t2']).toBeUndefined();
+    expect(useSessionStore.getState().sessions['t2']).toBeUndefined();
   });
 
   it('closing project threads keeps project thread records and run session history', () => {
-    const close = vi.fn();
     useThreadStore.setState({
       threadsByProjectId: {
         p1: [
-          { id: 't1', project_id: 'p1', title: '', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: 1 },
-          { id: 't2', project_id: 'p1', title: '', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: 1 },
+          { id: 't1', project_id: 'p1', title: '', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: '1' },
+          { id: 't2', project_id: 'p1', title: '', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: '1' },
         ],
       },
       openThreadIdsByProjectId: { p1: ['t1', 't2'] },
       activeThreadIdByProjectId: { p1: 't2' },
     });
-    useRunStore.setState({
-      sessions: {
-        t2: {
-          activeRunId: 'run_1',
-          status: 'running',
-          scope: { selection: { kind: 'current_page' } },
-          mode: 'create',
-          timelineItems: [{ id: 'u1', type: 'user_turn', runId: 'run_1', text: '继续', timestamp: 1 }],
-          pendingQuestion: null,
-          progress: null,
-          eventSourceClose: close,
-          plan: null,
-          nextInputSuggestions: null,
-          tokenUsageByRun: {},
-        },
-      },
+    const item = itemFixture({ id: 'u1', thread_id: 't2', summary: { text: '继续' } });
+    const group = groupFixture({ thread_id: 't2' });
+    const session = sessionFixture({ threadId: 't2', thread: threadFixture({ id: 't2', active_run_id: 'r1' }),
+      runsById: { r1: runFixture({ thread_id: 't2' }) }, itemsById: { u1: item },
+      groupsById: { [group.id]: group }, orderedGroupIds: [group.id],
     });
+    useSessionStore.setState({ sessions: { t2: session } });
 
     useThreadStore.getState().closeProjectThreads('p1');
 
-    expect(close).toHaveBeenCalledTimes(1);
     expect(useThreadStore.getState().threadsByProjectId['p1']).toHaveLength(2);
     expect(useThreadStore.getState().openThreadIdsByProjectId['p1']).toEqual(['t1', 't2']);
     expect(useThreadStore.getState().activeThreadIdByProjectId['p1']).toBe('t2');
-    expect(useRunStore.getState().sessions['t2']).toMatchObject({
-      activeRunId: 'run_1',
-      streamStatus: 'closed',
-      timelineItems: [{ id: 'u1', type: 'user_turn', text: '继续' }],
-    });
+    expect(useSessionStore.getState().sessions['t2']).toBe(session);
   });
 });

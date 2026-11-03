@@ -2,28 +2,30 @@ import { AgentCommandRow } from './AgentCommandRow';
 import { TextCommandActivity } from './TextCommandActivity';
 import { RollbackButton } from './ProjectHistoryControls';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowDown, ChevronRight, Code2, FileImage, PauseCircle, StopCircle, XCircle } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ChevronRight, Code2, FileImage, PauseCircle, StopCircle, XCircle, Loader2, RotateCcw, ArrowUp } from 'lucide-react';
 import { targetLabel } from './runtimeLabels';
 import { useActiveSession, useActiveThreadId } from './useActiveSession';
 import { FinalMessage } from './FinalMessage';
 import { LiveProgressRow } from './LiveProgressRow';
 import { MarkdownMessage } from './MarkdownMessage';
 import { QuestionPanel } from './QuestionPanel';
-import { ThinkingRow, MilestoneRow, RunLifecycleRow, ToolActivityRow, ToolGroupRow } from './ActivityRows';
+import { ThinkingRow, MilestoneRow, ToolActivityRow, ToolGroupRow } from './ActivityRows';
 import { TerminalNotice } from './TerminalNotice';
 import { PlanApproval } from './PlanApproval';
 import { MessageMetaActions } from './MessageMetaActions';
-import type { TimelineItem } from './eventReducer';
+import type { TimelineItem } from './timelineTypes';
 import { DisplayEntry, groupTimelineItems, visibleTimelineItems } from './timelineGrouping';
 import { useAgentSettingsStore } from '../../stores/agentSettingsStore';
 import { TimelineDisclosure } from './TimelineDisclosure';
 import { GitCommitEvent, GitCommitProgress } from './GitCommitActivity';
 import { useProjectStore } from '../../stores/projectStore';
+import { useThreadStore } from '../../stores/threadStore';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
 import { BriefingActivity } from './BriefingActivity';
 import { ContextCompactionActivity } from './ContextCompactionActivity';
 import { ScopeExpansionCard } from './ScopeExpansionCard';
-import { useCommandHistoryRecovery } from './useCommandHistoryRecovery';
+import { useSessionStore } from '../../stores/sessionStore';
+import { compareRevision } from '../../api/session';
 import { attachmentsApi } from '../../api/attachments';
 import { ImagePreview } from '../../components/ui/ImagePreview';
 import { runElapsed, type RunClock } from './runClock';
@@ -48,6 +50,7 @@ function formatDuration(durationMs?: number): string {
 const runSummaryLabel = {
   completed: 'Dasi 执行完成',
   canceled: 'Dasi 执行中断',
+  paused: 'Dasi 执行中断',
   failed: 'Dasi 执行失败',
   error: 'Dasi 执行失败',
 } as const;
@@ -100,7 +103,7 @@ export const Timeline: React.FC<{
   const threadId = useActiveThreadId();
   const { activeRunId, timelineItems, status, plan, progress } = session;
   const showToolFailures = useAgentSettingsStore(state => state.value?.show_tool_failures ?? false);
-  useCommandHistoryRecovery(threadId, timelineItems);
+  const sync = useSessionStore(state => threadId ? state.sessions[threadId] : undefined);
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const commitSession = useGitCommitStore((state) => (
     activeProjectId ? state.sessions[activeProjectId] : undefined
@@ -111,6 +114,8 @@ export const Timeline: React.FC<{
   const anchorTopRef = useRef<number | null>(null);
   const viewportSizeRef = useRef<{ width: number; height: number } | null>(null);
   const alignedTurnRef = useRef<string | null>(null);
+  const pageAnchor = useRef<{ key: string; top: number; groupId?: string } | null>(null);
+  const displayedSnapshot = useRef<string | null>(null);
   const previousTurnRef = useRef<{ threadId: string | null; id: string | null } | null>(null);
   const [showReturn, setShowReturn] = useState(false);
   const [anchoredTurnId, setAnchoredTurnId] = useState<string | null>(null);
@@ -119,8 +124,8 @@ export const Timeline: React.FC<{
     && typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const displayEntries = useMemo(
-    () => groupTimelineItems(visibleTimelineItems(timelineItems, showToolFailures), timelineItems),
-    [timelineItems, showToolFailures],
+    () => groupTimelineItems(visibleTimelineItems(timelineItems, showToolFailures), session.groups),
+    [timelineItems, session.groups, showToolFailures],
   );
   const latestTurnIndex = displayEntries.reduce((index, entry, entryIndex) => (
     entry.kind === 'item' && entry.item.type === 'user_turn' ? entryIndex : index
@@ -148,7 +153,8 @@ export const Timeline: React.FC<{
   const earlierEntries = latestTurnIndex < 0 ? [] : displayEntries.slice(0, latestTurnIndex);
   const latestEntries = latestTurnIndex < 0 ? displayEntries : displayEntries.slice(latestTurnIndex);
   const commitActive = commitSession?.sourceThreadId===threadId && (commitSession?.status === 'creating' || commitSession?.status === 'running');
-  const showEmptyWordmark = timelineItems.length === 0 && !plan && status === 'idle' && !commitActive;
+  const showEmptyWordmark = session.loadStatus === 'ready' && session.isEmpty && !commitActive;
+  const initialLoading = ['uninitialized', 'loading', 'refreshing'].includes(session.loadStatus) && timelineItems.length === 0;
   const visibleProgress = progress ?? (activeRunId
     ? status === 'recovering' ? { activity: 'run.recovering' as const }
       : status === 'running' ? { activity: 'run.analyzing' as const } : null
@@ -189,27 +195,41 @@ export const Timeline: React.FC<{
       alignedTurnRef.current = null;
       anchorTopRef.current = null;
       followingRef.current = true;
-      setAnchoredTurnId(status === 'creating' && latestTurnId?.startsWith('user_') ? latestTurnId : null);
+      setAnchoredTurnId(status === 'creating' && latestTurnId?.startsWith('pending:') ? latestTurnId : null);
       return;
     }
-    if (latestTurnId && latestTurnId !== previous.id) {
+    const latest = timelineItems.find(item => item.id === latestTurnId);
+    const newInput = latest?.id.startsWith('pending:') || Boolean(latest?.createdSeq && sync?.snapshotSeq
+      && compareRevision(latest.createdSeq, sync.snapshotSeq) > 0);
+    if (newInput && latestTurnId && latestTurnId !== previous.id) {
       alignedTurnRef.current = null;
       followingRef.current = false;
       setAnchoredTurnId(latestTurnId);
     }
-  }, [latestTurnId, status, threadId]);
+  }, [latestTurnId, status, threadId, timelineItems, sync?.snapshotSeq]);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
+    if (pageAnchor.current) {
+      const anchor = pageAnchor.current;
+      if ((anchor.groupId ? sync?.groupPages[anchor.groupId]?.status : sync?.historyPage.status) === 'loading') return;
+      const node = Array.from(container?.querySelectorAll<HTMLElement>('[data-timeline-key]') ?? []).find(value => value.dataset.timelineKey === anchor.key);
+      if (container && node) container.scrollTop += node.getBoundingClientRect().top - anchor.top;
+      pageAnchor.current = null;
+      return;
+    }
     if (anchoredTurnId && anchoredTurnId === latestTurnId && latestTurnRef.current
       && alignedTurnRef.current !== `${threadId}:${anchoredTurnId}` && container) {
       alignLatestTurn();
       alignedTurnRef.current = `${threadId}:${anchoredTurnId}`;
       return;
     }
-    if (followingRef.current) scrollToLatest(true);
+    const snapshotKey = sync?.snapshotSeq ? `${threadId}:${sync.generation}:${sync.snapshotSeq}` : null;
+    const firstSnapshot = snapshotKey !== displayedSnapshot.current;
+    displayedSnapshot.current = snapshotKey;
+    if (followingRef.current) scrollToLatest(!firstSnapshot);
     else if (container) setShowReturn(container.scrollHeight - container.scrollTop - container.clientHeight > 80);
-  }, [alignLatestTurn, anchoredTurnId, latestTurnId, plan, scrollToLatest, threadId, timelineItems]);
+  }, [alignLatestTurn, anchoredTurnId, latestTurnId, plan, scrollToLatest, threadId, timelineItems, sync?.historyPage.status, sync?.groupPages, sync?.generation, sync?.snapshotSeq]);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -248,9 +268,30 @@ export const Timeline: React.FC<{
     setShowReturn(!nearBottom);
   };
 
+  const keepPageAnchor = (groupId?: string) => {
+    const container = containerRef.current;
+    if (!container) return;
+    const top = container.getBoundingClientRect().top;
+    const node = Array.from(container.querySelectorAll<HTMLElement>('[data-timeline-key]')).find(value => value.getBoundingClientRect().bottom >= top);
+    if (node?.dataset.timelineKey) pageAnchor.current = { key: node.dataset.timelineKey, top: node.getBoundingClientRect().top, groupId };
+    followingRef.current = false;
+    anchorTopRef.current = null;
+  };
+  const loadOlder = () => {
+    if (!threadId || sync?.historyPage.status === 'loading') return;
+    keepPageAnchor();
+    void useSessionStore.getState().loadOlder(threadId);
+  };
+
+  const loadGroup = (groupId: string, preserveAnchor = true) => {
+    if (!threadId || sync?.groupPages[groupId]?.status === 'loading') return;
+    if (preserveAnchor) keepPageAnchor(groupId);
+    void useSessionStore.getState().loadGroup(threadId, groupId);
+  };
+
   const renderItem = (item: TimelineItem, animateEntry = true) => {
     return (
-      <div key={item.id} className={animateEntry ? 'motion-safe:animate-[timeline-enter_120ms_ease-out]' : undefined}>
+      <div key={item.id} data-timeline-key={item.id} className={animateEntry ? 'motion-safe:animate-[timeline-enter_120ms_ease-out]' : undefined}>
         {item.type === 'user_turn' && (
           <>
             <div className="flex justify-end">
@@ -297,13 +338,12 @@ export const Timeline: React.FC<{
                   timestamp={item.timestamp}
                   label="复制用户消息"
                   scopeLabel={item.scope ? targetLabel(item.scope) : undefined}
-                ><RollbackButton runId={item.runId} steering={Boolean(item.deliveryStatus)} /></MessageMetaActions>
+                ><RollbackButton runId={item.runId} steering={item.steering} /></MessageMetaActions>
               </div>
             </div>
 
           </>
         )}
-        {item.type === 'run_lifecycle' && <RunLifecycleRow item={item} />}
         {item.type === 'thinking' && <ThinkingRow item={item} />}
         {item.type === 'milestone' && <MilestoneRow item={item} />}
         {item.type === 'tool' && <ToolActivityRow item={item} />}
@@ -317,14 +357,18 @@ export const Timeline: React.FC<{
         {item.type === 'command' && (item.commandSource === 'automatic' && (item.kind === 'rename' || item.kind === 'compact') ? <AgentCommandRow item={item} /> : <TextCommandActivity item={item} />)}
         {item.type === 'briefing' && <BriefingActivity item={item} />}
         {item.type === 'context_compaction' && (item.trigger === 'auto' ? <AgentCommandRow item={item} /> : <ContextCompactionActivity item={item} />)}
+        {item.detailRef && threadId && <TimelineDetail threadId={threadId} item={item} />}
       </div>
     );
   };
 
   const renderEntry = (entry: DisplayEntry, animateEntry = true): React.ReactNode => {
+    if (entry.kind === 'group_page') return <GroupPageButton key={entry.id} threadId={threadId} groupId={entry.groupId} onLoad={() => loadGroup(entry.groupId)} />;
+    const created = entry.kind === 'item' ? entry.item.createdSeq : entry.kind === 'tool_group' ? entry.items[0]?.createdSeq : session.groups.find(group => group.id === entry.groupId)?.order_seq;
+    animateEntry = animateEntry && (entry.kind === 'item' && entry.item.id.startsWith('pending:') || Boolean(created && sync?.snapshotSeq && compareRevision(created, sync.snapshotSeq) > 0));
     if (entry.kind === 'tool_group') {
       return (
-        <div key={entry.id} className={animateEntry ? 'motion-safe:animate-[timeline-enter_120ms_ease-out]' : undefined}>
+        <div key={entry.id} data-timeline-key={entry.id} className={animateEntry ? 'motion-safe:animate-[timeline-enter_120ms_ease-out]' : undefined}>
           <ToolGroupRow items={entry.items} />
         </div>
       );
@@ -337,6 +381,7 @@ export const Timeline: React.FC<{
           usage={session.tokenUsageByRun[entry.runId]}
           animateEntry={animateEntry}
           renderEntry={(child) => renderEntry(child, false)}
+          onLoad={(preserve) => loadGroup(entry.groupId, preserve)}
         />
       );
     }
@@ -360,10 +405,22 @@ export const Timeline: React.FC<{
         style={{ overflowAnchor: 'none' }}
         className="scrollbar-none h-full space-y-2 overflow-y-auto p-3"
       >
-        {showEmptyWordmark ? (
+        {session.loadStatus === 'error' && <div role="alert" className="flex items-center gap-2 py-2 text-sm text-danger">
+          <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span className="min-w-0 flex-1 break-words">{session.error?.message}</span>
+          <button type="button" className="ui-interactive rounded-control p-2" aria-label="重试" onClick={() => {
+            if (threadId) void useSessionStore.getState().retry(threadId);
+            else if (activeProjectId) void useThreadStore.getState().loadThreads(activeProjectId);
+          }}><RotateCcw className="h-4 w-4" /></button>
+        </div>}
+        {initialLoading ? <TimelineSkeleton /> : showEmptyWordmark ? (
           <EmptyTimeline actionsVisible={starterAvailable} onSelect={onStarterSelect} />
         ) : (
-          <>
+          <div className="space-y-2" aria-busy={session.loadStatus === 'refreshing'} {...(session.loadStatus !== 'ready' ? { inert: '' } : {})}>
+            {sync?.hasMore && <button type="button" className="ui-interactive flex w-full items-center justify-center gap-1 rounded-control py-2 text-xs text-text-600" disabled={sync.historyPage.status === 'loading'} onClick={loadOlder}>
+              {sync.historyPage.status === 'loading' ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : <ArrowUp className="h-3.5 w-3.5" />}加载更多
+            </button>}
+            {sync?.historyPage.error && <p role="alert" className="text-xs text-danger">{sync.historyPage.error.message}</p>}
             {earlierEntries.map((entry) => renderEntry(entry))}
             <div
               ref={latestTurnRef}
@@ -376,7 +433,7 @@ export const Timeline: React.FC<{
               )}
               {commitActive && <GitCommitProgress phase={commitSession?.phase ?? null} />}
             </div>
-          </>
+          </div>
         )}
       </div>
       {showReturn && (
@@ -398,24 +455,30 @@ function RunSummaryBlock({
   usage,
   animateEntry,
   renderEntry,
+  onLoad,
 }: {
   entry: Extract<DisplayEntry, { kind: 'run_summary' }>;
   usage?: RunTokenUsage;
   animateEntry: boolean;
   renderEntry: (entry: DisplayEntry) => React.ReactNode;
+  onLoad: (preserveAnchor: boolean) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const threadId = useActiveThreadId();
+  const page = useSessionStore(state => threadId ? state.sessions[threadId]?.groupPages[entry.groupId] : undefined);
+  const more = !page || page.hasMore;
+  const load = () => onLoad(true);
   const terminal = entry.terminalItem;
-  const duration = formatDuration(terminal.durationMs);
+  const duration = formatDuration(entry.durationMs);
   const tokens = formatRunTokenUsage(usage);
   const label = `${runSummaryLabel[entry.status]}，耗时 ${duration}${tokens !== null ? `，耗费 ${tokens} Tokens` : ''}`;
 
   return (
-    <div className={animateEntry ? 'motion-safe:animate-[timeline-enter_120ms_ease-out]' : undefined}>
+    <div data-timeline-key={entry.id} className={animateEntry ? 'motion-safe:animate-[timeline-enter_120ms_ease-out]' : undefined}>
       <button
         type="button"
         aria-expanded={expanded}
-        onClick={() => setExpanded((value) => !value)}
+        onClick={() => { if (!expanded && more && page?.mode !== 'page') onLoad(false); setExpanded(value => !value); }}
         className={runHeaderClassName}
       >
         <RunStatusIcon status={entry.status} />
@@ -425,18 +488,50 @@ function RunSummaryBlock({
           strokeWidth={1.75}
         />
       </button>
-      <TimelineDisclosure open={expanded && entry.processEntries.length > 0}>
-        {expanded && entry.processEntries.length > 0 && <div className="timeline-disclosure-rows mt-2 border-t border-border pt-2">
+      <TimelineDisclosure open={expanded}>
+        {expanded && <div className="timeline-disclosure-rows mt-2 border-t border-border pt-2">
+          {more && <button type="button" className="ui-interactive flex w-full items-center justify-center gap-1 rounded-control py-2 text-xs text-text-600" disabled={page?.status === 'loading'} onClick={load}>
+            {page?.status === 'loading' ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : <ArrowUp className="h-3.5 w-3.5" />}加载更多
+          </button>}
+          {page?.error && <p role="alert" className="text-xs text-danger">{page.error.message}</p>}
           {entry.processEntries.map(renderEntry)}
         </div>}
       </TimelineDisclosure>
-      <div className={`mt-1.5 pt-1.5${expanded && entry.processEntries.length > 0 ? '' : ' border-t border-border'}`}>
-        {terminal.type === 'final'
-          ? <FinalMessage item={terminal} />
-          : (
-            <TerminalNotice item={terminal} />
-          )}
-      </div>
+      {terminal && <div className={`mt-1.5 pt-1.5${expanded ? '' : ' border-t border-border'}`}>
+        {renderEntry({ kind: 'item', item: terminal })}
+      </div>}
     </div>
   );
+}
+
+
+function TimelineSkeleton() {
+  return <div aria-busy="true" aria-label="加载中" className="space-y-6 py-4 motion-safe:animate-pulse">
+    <div className="ml-auto h-12 w-3/4 rounded-card bg-panel-muted" />
+    <div className="space-y-2"><div className="h-3 w-4/5 rounded-control bg-panel-muted" /><div className="h-3 w-2/3 rounded-control bg-panel-muted" /></div>
+    <div className="h-3 w-1/2 rounded-control bg-panel-muted" />
+  </div>;
+}
+
+function TimelineDetail({ threadId, item }: { threadId: string; item: TimelineItem }) {
+  const state = useSessionStore(value => value.sessions[threadId]?.detailStates[item.id]);
+  return <div className="py-1">
+    {state?.error && <p role="alert" className="text-xs text-danger">{state.error.message}</p>}
+    <button type="button" className="ui-interactive inline-flex items-center gap-1 rounded-control px-2 py-1 text-xs text-text-600"
+      disabled={state?.status === 'loading'} onClick={() => void useSessionStore.getState().loadDetail(threadId, item.id)}>
+      {state?.status === 'loading' ? <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" /> : <ChevronRight className="h-3.5 w-3.5" />}展开全部
+    </button>
+  </div>;
+}
+
+function GroupPageButton({ threadId, groupId, onLoad }: { threadId: string | null; groupId: string; onLoad: () => void }) {
+  const page = useSessionStore(state => threadId ? state.sessions[threadId]?.groupPages[groupId] : undefined);
+  if (page && !page.hasMore) return null;
+  return <div>
+    <button type="button" className="ui-interactive flex w-full items-center justify-center gap-1 rounded-control py-2 text-xs text-text-600"
+      disabled={page?.status === 'loading'} onClick={onLoad}>
+      {page?.status === 'loading' ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : <ArrowUp className="h-3.5 w-3.5" />}加载更多
+    </button>
+    {page?.error && <p role="alert" className="text-xs text-danger">{page.error.message}</p>}
+  </div>;
 }

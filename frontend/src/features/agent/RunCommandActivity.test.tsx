@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ProjectContentSnapshot, PublicTarget, Slide } from '../../api/types';
-import type { ToolActivityItem } from './eventReducer';
+import type { ToolActivityItem } from './timelineTypes';
 import { presentActivityText, ToolActivityRow, ToolGroupRow } from './ActivityRows';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
@@ -93,7 +93,7 @@ describe('run command activity', () => {
     } } }));
     render(<ToolActivityRow item={commandItem({
       tool: 'edit_meta',
-      label: '已更新演示内容',
+      label: '已更新基本信息',
       detail: '/Users/test/project/meta.json',
       status: 'completed',
       command: undefined,

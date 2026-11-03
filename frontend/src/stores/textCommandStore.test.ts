@@ -2,13 +2,14 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { polishApi } from '../api/polish';
 import type { CommandActivityRecord, PolishRequest } from '../api/types';
 import { useComposerStore } from './composerStore';
-import { useRunStore } from './runStore';
+import { useSessionStore } from './sessionStore';
+import { sessionFixture } from '../test/sessionFixtures';
 import { polishCommand, retryPolish } from './textCommandStore';
 import { retryRecordedCommand } from './commandRecovery';
 
 beforeEach(() => {
   vi.useFakeTimers();
-  useRunStore.setState({ sessions: {} });
+  useSessionStore.setState({ sessions: { t1: sessionFixture() } });
   useComposerStore.setState({ polishing: false, threadDrafts: { t1: '原始草稿' } });
 });
 afterEach(() => {
@@ -27,16 +28,12 @@ it('preserves the original draft and uses only the latest result for revisions',
   const first = polishCommand('t1', request, 'polish:result-contract');
   await vi.runAllTimersAsync();
   await expect(first).resolves.toBe(true);
-  expect(useRunStore.getState().sessions.t1.timelineItems).toEqual([
-    expect.objectContaining({ title: '明确受众与交付要求', content: '第一版完整指令', status: 'completed' }),
-  ]);
+  expect(useSessionStore.getState().sessions.t1.itemsById).toEqual({});
   const revision = retryPolish('polish:result-contract', '补充验收要求');
   await vi.runAllTimersAsync();
   await expect(revision).resolves.toBe(true);
   expect(polish.mock.calls[1][0]).toEqual({ instruction: '原始草稿', thread_id: 't1', polish_content: '第一版完整指令', feedback: '补充验收要求' });
-  expect(useRunStore.getState().sessions.t1.timelineItems).toEqual([
-    expect.objectContaining({ title: '补充验收要求', content: '第二版完整指令', status: 'completed' }),
-  ]);
+  expect(useSessionStore.getState().sessions.t1.itemsById).toEqual({});
   const nextRevision = retryPolish('polish:result-contract', '精简表达');
   await vi.runAllTimersAsync();
   await expect(nextRevision).resolves.toBe(true);

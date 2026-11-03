@@ -13,7 +13,7 @@ import { ManagementSection } from './ManagementFields';
 import { partLabel, slidePurposeOptions } from './semanticLabels';
 
 export function SlideSpecCard({ spec, projectId, slideId, hash, sceneRevision, blocked, error, onRetry }: {
-  projectId?: string; slideId?: string; hash?: string; sceneRevision?: number; blocked?: string;
+  projectId?: string; slideId?: string; hash?: string; sceneRevision?: string; blocked?: string;
   error?: string; onRetry?: () => void; spec?: SlideSpec;
 }) {
   const notice = error ? <InlineNotice tone="danger" className="mb-6 flex flex-wrap items-center justify-between gap-3">
@@ -33,7 +33,7 @@ export function SlideSpecCard({ spec, projectId, slideId, hash, sceneRevision, b
 }
 
 function SpecCreationForm({ projectId, slideId, hash, sceneRevision, blocked, notice }: {
-  projectId?: string; slideId?: string; hash?: string; sceneRevision?: number; blocked?: string; notice?: ReactNode;
+  projectId?: string; slideId?: string; hash?: string; sceneRevision?: string; blocked?: string; notice?: ReactNode;
 }) {
   const [core, setCore] = useState('');
   const [purpose, setPurpose] = useState<SlidePurpose | ''>('');

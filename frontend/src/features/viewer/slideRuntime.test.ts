@@ -75,6 +75,8 @@ describe('slide runtime', () => {
 
     send(window, { type: 'updateDeck', slides, index: 0 });
 
+    await applyCurrentTheme(window);
+
     const initialFrames = Array.from(
       window.document.querySelectorAll('[data-slide-frame]'),
     ) as HTMLElement[];

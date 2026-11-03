@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { HistoryState } from '../api/projectHistory';
-import { applyHistoryScene, historyWorkspaceRoute } from './projectHistoryStore';
+import { applyHistoryScene } from './projectHistoryStore';
 import { composerScene, loadProjectComposer, useComposerStore } from './composerStore';
 
 beforeEach(() => { loadProjectComposer(null); localStorage.clear(); useComposerStore.getState().resetForProject(); });
@@ -12,7 +12,7 @@ describe('project checkpoint composer scene', () => {
       rect: { x: 10, y: 10, width: 100, height: 100 }, status: 'active' as const,
       dom_targets: [], decoration_targets: [],
     };
-    const state: HistoryState = { revision: 9, scene_revision: 9, checkpoints: [], latest: 'latest', scene: { thread_id: 't', input: {
+    const state: HistoryState = { revision: '9', scene_revision: '9', checkpoints: [], latest: 'latest', scene: { thread_id: 't', input: {
       command: { instruction: '用中文制作 9 至 15 页演示文稿', mode: 'ask', attachments: [{ id: 'img', original_name: 'reference.png', media_type: 'image/png', size_bytes: 42 }] },
       scope_input: { selection: { kind: 'custom_pages', slide_ids: ['s1', 's2'] } },
       model: 'model', skill_ids: ['skill'], component_names: ['chart'], mentioned_slide_ids: ['s2'], dom_selections: [selection], reference_order: [{ kind: 'dom', ref_id: 'sel_one' }, { kind: 'image', ref_id: 'img' }],
@@ -38,14 +38,10 @@ describe('project checkpoint composer scene', () => {
     const original = JSON.parse(JSON.stringify(composerScene())) as Record<string, unknown>;
     useComposerStore.getState().resetForProject();
     localStorage.clear(); // Simulates returning without a local in-memory recovery backup.
-    applyHistoryScene('p', { revision: 12, scene_revision: 12, checkpoints: [], scene: { composer: original, active_thread_id: 't2' } });
+    applyHistoryScene('p', { revision: '12', scene_revision: '12', checkpoints: [], scene: { composer: original, active_thread_id: 't2' } });
     expect(useComposerStore.getState().threadDrafts).toEqual({ t1: 'one', t2: 'two' });
     expect(useComposerStore.getState().mode).toBe('plan');
     expect(useComposerStore.getState().customSectionIds).toEqual(['section']);
     expect(useComposerStore.getState().restoredInputs.t2).toMatchObject({ component_names: ['chart'], mentioned_slide_ids: ['s2'] });
-  });
-  it('restores the original selected page and preview mode through the workspace route', () => {
-    expect(historyWorkspaceRoute('p', { revision: 12, scene_revision: 12, checkpoints: [], scene: { slide_id: 's2', view: 'outline', preview_mode: 'overview' } }))
-      .toBe('/projects/p?slide=s2&view=outline&mode=overview');
   });
 });

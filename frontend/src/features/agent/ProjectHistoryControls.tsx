@@ -36,7 +36,7 @@ export function ProjectHistoryDialogs() {
   const threads = useThreadStore((s) => projectId ? s.threadsByProjectId[projectId] : undefined);
   const { dialog, busy, error } = useProjectHistoryStore();
   const pending = useHistoryConfirmationStore((s) => s.pending);
-  const seen = useRef<{ id: string; scene: number } | null>(null);
+  const seen = useRef<{ id: string; scene: string } | null>(null);
   useEffect(() => {
     if (!projectId) return;
     let stopped = false;

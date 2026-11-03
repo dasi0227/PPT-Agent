@@ -62,11 +62,11 @@ describe('timeline source cards', () => {
     setup();
     let finishOld!: (value: Awaited<ReturnType<typeof readHTMLSource>>) => void;
     vi.mocked(readHTMLSource).mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; }));
-    vi.mocked(readHTMLSource).mockResolvedValueOnce({ project_id: 'p1', slide_id: 'sli_2', content: '<section><h1>第二页</h1><p>正文</p></section>', path: '', source_hash: 'new', scene_revision: 1 });
+    vi.mocked(readHTMLSource).mockResolvedValueOnce({ project_id: 'p1', slide_id: 'sli_2', content: '<section><h1>第二页</h1><p>正文</p></section>', path: '', source_hash: 'new', scene_revision: '1' });
     const { container, rerender } = render(<TargetSourceCard target={{ type: 'slide', part: 'html', slide_id: 'sli_1' }} />);
     rerender(<TargetSourceCard target={{ type: 'slide', part: 'html', slide_id: 'sli_2' }} />);
     await waitFor(() => expect(container.querySelector('code')?.textContent).toBe('<section><h1>第二页</h1><p>正文</p></section>\n'));
-    await act(async () => finishOld({ project_id: 'p1', slide_id: 'sli_1', content: '旧页面', path: '', source_hash: 'old', scene_revision: 1 }));
+    await act(async () => finishOld({ project_id: 'p1', slide_id: 'sli_1', content: '旧页面', path: '', source_hash: 'old', scene_revision: '1' }));
     expect(container.textContent).not.toContain('旧页面');
     act(() => useDeckStore.setState({ previewMode: 'overview', activeDocument: 'constraints', contentMode: 'source' }));
     fireEvent.click(screen.getByRole('button', { name: '预览' }));
@@ -75,7 +75,7 @@ describe('timeline source cards', () => {
 
   it('offers retry after a source request fails', async () => {
     setup();
-    vi.mocked(readHTMLSource).mockRejectedValueOnce(new Error('加载失败')).mockResolvedValueOnce({ project_id: 'p1', slide_id: 'sli_1', content: '<p>恢复</p>', path: '', source_hash: 'ok', scene_revision: 1 });
+    vi.mocked(readHTMLSource).mockRejectedValueOnce(new Error('加载失败')).mockResolvedValueOnce({ project_id: 'p1', slide_id: 'sli_1', content: '<p>恢复</p>', path: '', source_hash: 'ok', scene_revision: '1' });
     render(<TargetSourceCard target={{ type: 'slide', part: 'html', slide_id: 'sli_1' }} />);
     fireEvent.click(await screen.findByRole('button', { name: '重试' }));
     expect(await screen.findByText('<p>恢复</p>')).toBeInTheDocument();
@@ -86,7 +86,7 @@ describe('timeline source cards', () => {
     const { container } = render(<ResourceActivityCard resource={{ kind: 'skill', id: 'skill a', name: '技能' }} />);
     expect(await screen.findByText('技能描述')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '标题' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '技能 技能描述' }));
+    fireEvent.click(screen.getByRole('button', { name: /技能.*技能描述/ }));
     expect(screen.getByRole('heading', { name: '标题' })).toBeInTheDocument();
     expect(screen.getByText('原文')).toBeInTheDocument();
     expect(container.querySelector('pre')).toBeNull();

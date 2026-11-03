@@ -5,7 +5,7 @@ import type { Constraints, Meta, Outline, ResourceEditApproval } from '../../api
 import { runsApi } from '../../api/runs';
 import { Button } from '../../components/ui/primitives';
 import { resourceApprovalKey, useResourceApprovalStore, type ActiveResourceApproval } from '../../stores/resourceApprovalStore';
-import { useRunStore } from '../../stores/runStore';
+import { useSessionStore } from '../../stores/sessionStore';
 import { useDeckStore } from '../../stores/deckStore';
 import { DocumentCanvas } from './DocumentCanvas';
 import { MetaFields, ConstraintsFields } from './AuthoringFields';
@@ -37,7 +37,7 @@ function ApprovalActions({ busy, canRestore, onRestore, onSave }: {
 
 function FieldApprovalEditor<T extends Meta | Constraints>({ record, persist, saved }: {
   record: ResourceEditApproval; persist: (draft: EditableResource) => Promise<ResourceEditApproval>;
-  saved: (revision: number) => void;
+  saved: (revision: string) => void;
 }) {
   const value = record.draft as T;
   const savedChanges = JSON.stringify(record.draft) !== JSON.stringify(record.proposal);
@@ -111,7 +111,7 @@ function FieldApprovalEditor<T extends Meta | Constraints>({ record, persist, sa
 
 function OutlineApprovalEditor({ record, persist, saved }: {
   record: ResourceEditApproval; persist: (draft: EditableResource) => Promise<ResourceEditApproval>;
-  saved: (revision: number) => void;
+  saved: (revision: string) => void;
 }) {
   const outline = record.draft as Outline;
   const key = resourceApprovalKey(record.run_id, record.interaction_id);
@@ -155,21 +155,21 @@ export function ApprovalDraftEditor({ active }: { active: ActiveResourceApproval
   useEffect(() => {
     let live = true;
     setRecord(null); setError('');
-    void runsApi.getResourceEditApproval(active.runId, active.interactionId)
-      .then(next => { if (live) { setRecord(next); useRunStore.getState().syncResourceApprovalDraft(next); } })
+    void runsApi.getResourceEditApproval(active.runId, active.interactionId, active.sceneRevision)
+      .then(next => { if (live) { setRecord(next); for (const session of Object.values(useSessionStore.getState().sessions)) { if (session.interactionsById[next.interaction_id]?.run_id === next.run_id) void useSessionStore.getState().reconnect(session.threadId); } } })
       .catch(cause => { if (live) setError(errorMessage(cause)); });
     return () => { live = false; };
-  }, [active.runId, active.interactionId]);
+  }, [active.runId, active.interactionId, active.sceneRevision]);
   const persist = async (draft: EditableResource) => {
     if (!record) throw new Error('草稿尚未加载');
-    const next = await runsApi.updateResourceEditDraft(active.runId, active.interactionId, record.revision, draft);
+    const next = await runsApi.updateResourceEditDraft(active.runId, active.interactionId, record.revision, draft, active.sceneRevision);
     setRecord(next);
-    useRunStore.getState().syncResourceApprovalDraft(next);
+    for (const session of Object.values(useSessionStore.getState().sessions)) { if (session.interactionsById[next.interaction_id]?.run_id === next.run_id) void useSessionStore.getState().reconnect(session.threadId); }
     return next;
   };
-  const saved = useCallback((revision: number) => {
+  const saved = useCallback((revision: string) => {
     useResourceApprovalStore.getState().saved(resourceApprovalKey(active.runId, active.interactionId), revision);
-  }, [active.runId, active.interactionId]);
+  }, [active.runId, active.interactionId, active.sceneRevision]);
   if (!record) return <DocumentCanvas title={partLabel(active.resource)}>{error ? <p role="alert" className="text-danger">{error}</p> : <p className="text-text-600">加载中…</p>}</DocumentCanvas>;
   if (record.state !== 'pending') return <DocumentCanvas title={partLabel(active.resource)}><Button onClick={close}>返回</Button></DocumentCanvas>;
   if (active.resource === 'outline') return <OutlineApprovalEditor key={record.interaction_id} record={record} persist={persist} saved={saved} />;

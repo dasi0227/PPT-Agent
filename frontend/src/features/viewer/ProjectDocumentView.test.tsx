@@ -10,10 +10,10 @@ import { GlobalToasts } from '../../components/ui/GlobalToasts';
 import { ProjectDocumentView } from './ProjectDocumentView';
 
 const missing: ProjectContentSnapshot = {
-  project_id: 'p1', project_title: '新项目', scene_revision: 1, theme: '', appearance: null,
+  project_id: 'p1', project_title: '新项目', scene_revision: '1', theme: '', appearance: null,
   hashes: {}, meta: null, constraints: null, decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'top-left', logo: 'none' }, logo: null, outline: { sections: [] }, slides_by_id: {},
 };
-const created: ProjectContentSnapshot = { ...missing, scene_revision: 2, hashes: { outline: 'empty' } };
+const created: ProjectContentSnapshot = { ...missing, scene_revision: '2', hashes: { outline: 'empty' } };
 function response(content: ProjectContentSnapshot): MutationResponse {
   return { content, mutation: { operation: 'outline.create', hashes: content.hashes, created: {}, affected_slide_ids: [] } };
 }
@@ -42,19 +42,19 @@ it('creates a real empty outline on demand, then persists confirmed rows without
   const create = screen.getByRole('button', { name: '新建' });
   fireEvent.click(create); fireEvent.click(create);
   expect(mutation).toHaveBeenCalledTimes(1);
-  expect(mutation).toHaveBeenCalledWith('p1', { op: 'outline.create', expected_scene_revision: 1 });
+  expect(mutation).toHaveBeenCalledWith('p1', { op: 'outline.create', expected_scene_revision: '1' });
   await act(async () => finish(response(created)));
   expect(screen.queryByText('暂无文件')).not.toBeInTheDocument();
   expect(container.querySelector('.management-footer')).toBeNull();
   expect(useDeckStore.getState().sourceBlocked).toBe(false);
   fireEvent.click(screen.getByRole('button', { name: '新增章节' }));
   fireEvent.change(screen.getByRole('textbox', { name: '章节名称' }), { target: { value: '第一章' } });
-  const next = { ...created, scene_revision: 3, hashes: { outline: 'updated' }, outline: { sections: [{ id: 'sec_real', title: '第一章', slides: [], subsections: [] }] } };
+  const next = { ...created, scene_revision: '3', hashes: { outline: 'updated' }, outline: { sections: [{ id: 'sec_real', title: '第一章', slides: [], subsections: [] }] } };
   mutation.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
   fireEvent.click(screen.getByRole('button', { name: '确认编辑' }));
   expect(screen.getByRole('button', { name: '确认编辑' })).toBeDisabled();
   expect(container.querySelector('.management-footer')).toBeNull();
-  expect(mutation).toHaveBeenLastCalledWith('p1', expect.objectContaining({ op: 'outline.insert', expected_hash: 'empty', expected_scene_revision: 2 }));
+  expect(mutation).toHaveBeenLastCalledWith('p1', expect.objectContaining({ op: 'outline.insert', expected_hash: 'empty', expected_scene_revision: '2' }));
   await act(async () => finish(response(next)));
   expect(screen.getByRole('status')).toHaveTextContent('已保存');
   expect(screen.queryByRole('textbox')).not.toBeInTheDocument();

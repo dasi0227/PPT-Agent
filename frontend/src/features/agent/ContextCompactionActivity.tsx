@@ -1,4 +1,4 @@
-import type { ContextCompactionTimelineItem } from './eventReducer';
+import type { ContextCompactionTimelineItem } from './timelineTypes';
 import { CommandActivity } from './CommandActivity';
 export function ContextCompactionActivity({ item }: { item: ContextCompactionTimelineItem }) {
   const before = item.maxTokens > 0 ? Math.round((item.beforeTokens / item.maxTokens) * 100) : 0;

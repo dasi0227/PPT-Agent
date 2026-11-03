@@ -1,8 +1,10 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import userEvent from '@testing-library/user-event';
 import { useComposerStore } from '../../stores/composerStore';
 import { useContextWindowStore } from '../../stores/contextWindowStore';
+import { useSessionStore } from '../../stores/sessionStore';
+import { sessionFixture } from '../../test/sessionFixtures';
 import { useProjectStore } from '../../stores/projectStore';
 import { useThreadStore } from '../../stores/threadStore';
 import { ContextWindowPanel } from './ContextWindowPanel';
@@ -33,19 +35,21 @@ describe('ContextWindowPanel', () => {
     useProjectStore.setState({ activeProjectId: null });
     useThreadStore.setState({ activeThreadIdByProjectId: {} });
     useContextWindowStore.setState({ sessions: {} });
+    useSessionStore.setState({ sessions: { t1: sessionFixture() } });
     useComposerStore.setState({ modelProfileName: null });
   });
 
-  it('closes with Escape without retaining focus on its trigger', () => {
+  it('closes with Escape without retaining focus on its trigger', async () => {
+    const user = userEvent.setup();
     render(<ContextWindowPanel />);
     const trigger = screen.getByRole('button', { name: /上下文窗口/ });
     trigger.focus();
-    fireEvent.click(trigger);
+    await user.click(trigger);
 
     expect(screen.getByRole('dialog', { name: '上下文窗口' })).toBeInTheDocument();
     fireEvent.keyDown(document, { key: 'Escape' });
 
-    expect(screen.queryByRole('dialog', { name: '上下文窗口' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '上下文窗口' })).not.toBeInTheDocument());
     expect(trigger).not.toHaveFocus();
   });
 
@@ -70,6 +74,7 @@ describe('ContextWindowPanel', () => {
     useContextWindowStore.setState({
       sessions: {
         t1: {
+          model: '', sceneRevision: '1', generation: 0, contextRevision: '0', planRevision: '0', error: null,
           loading: false,
           compacting: false,
           snapshot: {
@@ -117,7 +122,7 @@ describe('ContextWindowPanel', () => {
       compact_threshold_tokens: 12_000,
     };
     useContextWindowStore.setState({
-      sessions: { t1: { loading: false, compacting: false, snapshot } },
+      sessions: { t1: { model: '', sceneRevision: '1', generation: 0, contextRevision: '0', planRevision: '0', error: null, loading: false, compacting: false, snapshot } },
     });
 
     render(<ContextWindowPanel />);

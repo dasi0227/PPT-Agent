@@ -1,4 +1,4 @@
-import type { CommandTimelineItem } from './eventReducer';
+import type { CommandTimelineItem } from './timelineTypes';
 import { CommandActivity } from './CommandActivity';
 import { cancelCommand, retryCommand } from '../../stores/commandRuntime';
 import { retryPolish } from '../../stores/textCommandStore';

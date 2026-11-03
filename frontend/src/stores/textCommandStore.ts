@@ -1,7 +1,6 @@
 import { polishApi } from '../api/polish';
 import { threadsApi } from '../api/threads';
 import type { PolishRequest, Thread } from '../api/types';
-import type { CommandTimelineItem } from '../features/agent/eventReducer';
 import { performCommand, commandActive } from './commandRuntime';
 import { useComposerStore } from './composerStore';
 import { showGlobalError } from './toastStore';
@@ -19,26 +18,17 @@ export async function polishCommand(
   const requestToken = Symbol(id);
   activePolishRequest = requestToken;
   useComposerStore.getState().setPolishing(true);
-  const initial: CommandTimelineItem = {
-    id,
-    type: 'command',
-    kind: 'polish',
-    title: '润色输入内容',
-    status: 'loading',
-    timestamp: Date.now(),
-  };
   polishRequests.set(id, { threadId, request });
   try {
     return await performCommand(
       threadId,
-      initial,
-      (signal, onProgress) => polishApi.polish(request, signal, onProgress, id),
+      id,
+      (signal) => polishApi.polish(request, signal, undefined, id),
       (result) => {
         polishRequests.set(id, {
           threadId,
           request: { ...request, polish_content: result.content, feedback: undefined },
         });
-        return { ...initial, status: 'completed', title: result.title, content: result.content };
       },
       () => {
         void polishCommand(threadId, request, id);

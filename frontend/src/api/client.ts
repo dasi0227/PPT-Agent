@@ -124,9 +124,9 @@ export async function fetchClient<T>(path: string, options: FetchClientOptions =
         window.clearTimeout(timeout);
         const confirmed = await confirmDiscardFuture(parsed.message ?? '继续创作将丢弃原来的后续历史。');
         if (!confirmed || epoch !== historyEpoch) throw new RequestCanceledError();
-        const revision = (parsed.details as { revision?: number } | undefined)?.revision;
-        if (!revision) throw new RequestCanceledError();
-        headers.set('X-Discard-Future-Revision', String(revision));
+        const revision = (parsed.details as { revision?: unknown } | undefined)?.revision;
+        if (typeof revision !== 'string' || !/^[1-9][0-9]*$/.test(revision)) throw new RequestCanceledError();
+        headers.set('X-Discard-Future-Revision', revision);
         return await fetchClient<T>(path, { ...options, headers });
       }
       throw new APIError(

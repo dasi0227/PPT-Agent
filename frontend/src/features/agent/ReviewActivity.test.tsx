@@ -1,12 +1,12 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { parsePublicEvent } from '../../api/sse';
 import type { ReviewResult } from '../../api/types';
 import { ToolActivityRow } from './ActivityRows';
-import { hydrateRunFromHistory } from './historyHydrator';
-import type { ToolActivityItem } from './eventReducer';
+import { presentSession } from './sessionPresentation';
+import { groupFixture, itemFixture, sessionFixture } from '../../test/sessionFixtures';
+import type { ToolActivityItem } from './timelineTypes';
 
-const base = { schema_version: 6, run_id: 'run_review', occurred_at: '2026-09-29T10:00:00Z' };
+const base = { run_id: 'run_review' };
 const completed = (review: ReviewResult) => ({
   ...base, call_id: 'review_1', tool: 'review_ppt', status: 'completed',
   display: { label: '已审查演示文稿' }, review,
@@ -15,11 +15,10 @@ const completed = (review: ReviewResult) => ({
 describe('artifact review timeline', () => {
   it('restores and expands the complete Markdown assessment', () => {
     const review: ReviewResult = { result: '## 审查结论\n\n- 第 3 页的数据已核对。\n- 第 4 页需要保留风险说明。' };
-    const { items } = hydrateRunFromHistory([
-      { seq: 1, ts: 1, run_id: base.run_id, turn: 'agent', type: 'tool.started', data: { ...base, call_id: 'review_1', tool: 'review_ppt', display: { label: '正在审查 PPT 成果' } } },
-      { seq: 2, ts: 2, run_id: base.run_id, turn: 'agent', type: 'tool.completed', data: completed(review) },
-    ]);
-    const item = items.find((value): value is ToolActivityItem => value.type === 'tool');
+    const group = groupFixture({ run_id: base.run_id });
+    const record = itemFixture({ id: 'review', kind: 'tool', tool_call_id: 'review_1', summary: completed(review) });
+    const view = presentSession(sessionFixture({ groupsById: { [group.id]: group }, orderedGroupIds: [group.id], itemsById: { [record.id]: record } }));
+    const item = view.timelineItems.find((value): value is ToolActivityItem => value.type === 'tool');
     expect(item?.review).toEqual(review);
     expect(item?.status).toBe('completed');
     render(<ToolActivityRow item={item!} />);
@@ -43,11 +42,12 @@ describe('artifact review timeline', () => {
     expect(screen.queryByText('正在渲染')).not.toBeInTheDocument();
   });
 
-  it('distinguishes review execution failures from assessment results', () => {
-    expect(parsePublicEvent('tool.completed', completed({ result: ' \n ' }))).toBeNull();
-    expect(parsePublicEvent('tool.completed', { ...completed({ result: '需核实来源。' }), tool: 'read_resource' })).toBeNull();
-    const failure = { ...base, call_id: 'review_1', tool: 'review_ppt', status: 'failed', display: { label: '未完成成果审查' }, error: { code: 'REVIEW_FAILED', message: '未完成成果审查。', retryable: false } };
-    expect(parsePublicEvent('tool.completed', failure)).not.toBeNull();
-    expect(parsePublicEvent('tool.completed', { ...failure, review: { result: '服务异常。' } })).toBeNull();
+  it('keeps execution failures separate from assessment content', () => {
+    render(<ToolActivityRow item={{ id: 'failed', runId: base.run_id, callId: 'failed', type: 'tool',
+      tool: 'review_ppt', label: '未完成成果审查', status: 'failed', timestamp: 1000,
+      error: { code: 'REVIEW_FAILED', message: '未完成成果审查。', retryable: false },
+    }} />);
+    expect(screen.queryByRole('heading', { name: '审查结论' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '未完成成果审查' })).toBeInTheDocument();
   });
 });

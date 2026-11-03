@@ -1,7 +1,7 @@
 import React from 'react';
 import { FileDiff } from 'lucide-react';
 import type { PublicTarget } from '../../api/types';
-import type { FinalMessageItem } from './eventReducer';
+import type { FinalMessageItem } from './timelineTypes';
 import { MarkdownMessage } from './MarkdownMessage';
 import { MessageMetaActions } from './MessageMetaActions';
 import { ChangeDiffCard, useChangePreviewEnabled } from './ChangeDiffCard';

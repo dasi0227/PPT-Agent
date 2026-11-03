@@ -18,16 +18,16 @@ const labels = { section: '章节', subsection: '小节', slide: '页面' };
 export function OutlineEditor({ value, version, blocked, notice, commit, saveDraft, restoreDraft, canRestore = false, draftMode = false, onEditingChange, onDraftSaved, openSlide }: {
   value: Outline; version: string; blocked?: string; notice?: ReactNode;
   commit: (command: OutlineCommand, version: string) => Promise<void>;
-  saveDraft?: (next: Outline, version: string) => Promise<number>;
+  saveDraft?: (next: Outline, version: string) => Promise<string>;
   restoreDraft?: () => Promise<void>; canRestore?: boolean; draftMode?: boolean;
   onEditingChange?: (editing: boolean, busy: boolean) => void;
-  onDraftSaved?: (revision: number) => void;
+  onDraftSaved?: (revision: string) => void;
   openSlide?: (id: string) => void;
 }) {
   const [edit, setEdit] = useState<Edit>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [reviewRevision, setReviewRevision] = useState<number>();
+  const [reviewRevision, setReviewRevision] = useState<string>();
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [deleting, setDeleting] = useState<{ id: string; version: string }>();
   const [dropTarget, setDropTarget] = useState<string>();
@@ -120,7 +120,7 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
     const command = edit ? editCommand() : undefined;
     if (edit && !command) return;
     const next = command && edit ? applyOutlineCommand(edit.base, command) : value;
-    let revision: number | undefined;
+    let revision: string | undefined;
     if (await perform(async () => { revision = await saveDraft(next, edit?.version ?? version); })) {
       setEdit(undefined); setReviewRevision(revision);
     }

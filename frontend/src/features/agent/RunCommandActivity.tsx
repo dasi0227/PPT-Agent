@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { File, Loader2, SquareTerminal } from 'lucide-react';
-import type { ToolActivityItem } from './eventReducer';
+import type { ToolActivityItem } from './timelineTypes';
 import { cn } from '../../lib/utils';
 import { useRunStore } from '../../stores/runStore';
 import { useActiveThreadId } from './useActiveSession';
@@ -40,7 +40,7 @@ function CommandFile({ target }: { target: NonNullable<ToolActivityItem['changes
 
 export function RunCommandActivity({ item }: { item: ToolActivityItem }) {
   const approval = item.commandApproval;
-  const pending = Boolean(approval && !approval.answer && item.status === 'running');
+  const pending = Boolean(approval && !approval.answer && item.interactionState === 'pending' && item.status === 'running');
   const refused = item.status === 'refuse' || approval?.answer?.decision === 'deny';
   const interrupted = item.status === 'interrupted' || item.status === 'canceled';
   const failed = item.status === 'failed' || item.status === 'blocked' || interrupted;
@@ -72,10 +72,10 @@ export function RunCommandActivity({ item }: { item: ToolActivityItem }) {
   const error = failed ? item.error?.message ?? item.detail : undefined;
   const submittedFeedback = refused ? approval?.answer?.feedback : undefined;
   const submit = async () => {
-    if (!threadId || !item.runId || !approval || !pending || !decision || submitting) return;
+    if (!threadId || !item.runId || !approval || !pending || !decision || submitting || !item.sceneRevision || !item.requestRevision) return;
     setSubmitting(true);
     const accepted = await answerCommandPermission(threadId, item.runId, approval.interactionId, item.callId, approval.commandHash,
-      decision, decisionFeedback(decision, 'deny', feedback));
+      decision, decisionFeedback(decision, 'deny', feedback), { scene_revision: item.sceneRevision, request_revision: item.requestRevision });
     if (!accepted) setSubmitting(false);
   };
   const Icon = item.status === 'running' && !pending && !refused ? Loader2 : SquareTerminal;

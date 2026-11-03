@@ -15,7 +15,7 @@ export interface TextEdit<T> {
   id: string; label: string; value: string; minLength?: number; allowEmpty?: boolean; maxLength: number; multiline?: boolean;
   update: (current: T, text: string) => T;
 }
-interface Draft<T> extends TextEdit<T> { base: T; hash?: string; scene?: number }
+interface Draft<T> extends TextEdit<T> { base: T; hash?: string; scene?: string }
 export interface ManagementController<T> {
   value: T; draft?: Draft<T>; saving: boolean; disabled: boolean; unavailable?: string;
   start: (edit: TextEdit<T>) => void;
@@ -40,7 +40,7 @@ export function changedFields<T extends object>(previous: T, next: T): Restricte
 
 export function ManagementEditor<T>({ projectId, resourceKey, title, icon, value, hash, sceneRevision, blocked, mutation, children, notice, jsonAvailable = true }: {
   projectId?: string; resourceKey: string; title: string; icon: LucideIcon; value: T;
-  hash?: string; sceneRevision?: number; blocked?: string;
+  hash?: string; sceneRevision?: string; blocked?: string;
   mutation: (next: T, previous: T) => PPTMutation;
   children: (editor: ManagementController<T>) => ReactNode;
   notice?: ReactNode; jsonAvailable?: boolean;
@@ -53,7 +53,7 @@ export function ManagementEditor<T>({ projectId, resourceKey, title, icon, value
     useDeckStore.getState().setSourceBlocked(Boolean(draft) || saving || !jsonAvailable);
     return () => useDeckStore.getState().setSourceBlocked(false);
   }, [draft, saving, jsonAvailable]);
-  const undo = useRef<{ toastId: string; value: T; hash?: string; scene?: number; projectId?: string; resourceKey: string }>();
+  const undo = useRef<{ toastId: string; value: T; hash?: string; scene?: string; projectId?: string; resourceKey: string }>();
   const pending = useRef(false);
   const mounted = useRef(true);
   const returnTarget = useRef<HTMLElement | null>(null);
@@ -89,7 +89,7 @@ export function ManagementEditor<T>({ projectId, resourceKey, title, icon, value
     });
   }
 
-  async function save(next: T, base: T, capturedHash: string | undefined, capturedScene: number | undefined, undoable = false): Promise<boolean> {
+  async function save(next: T, base: T, capturedHash: string | undefined, capturedScene: string | undefined, undoable = false): Promise<boolean> {
     if (!projectId || pending.current) return false;
     const current = latest.current;
     const snapshot = useProjectStore.getState().contentByProjectId[projectId];

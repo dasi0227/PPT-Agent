@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fetchClient, invalidateHistoryRequests, RequestCanceledError } from './client';
 import { useHistoryConfirmationStore } from '../stores/historyConfirmationStore';
 
-const requireConfirmation = () => new Response(JSON.stringify({ error: { code: 'HISTORY_CONFIRM_REQUIRED', message: '丢弃后续历史？', details: { revision: 8 } } }), { status: 409 });
+const requireConfirmation = () => new Response(JSON.stringify({ error: { code: 'HISTORY_CONFIRM_REQUIRED', message: '丢弃后续历史？', details: { revision: '8' } } }), { status: 409 });
 afterEach(() => { vi.restoreAllMocks(); useHistoryConfirmationStore.setState({ pending: null }); });
 describe('project history request boundary', () => {
   it('waits for confirmation and binds retry to the preview revision', async () => {
@@ -27,7 +27,7 @@ describe('project history request boundary', () => {
   it.each(['json', 'text'] as const)('rejects delayed %s bodies from the discarded history', async (responseType) => {
     let resolve!: (value: string) => void;
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, text: () => new Promise<string>((done) => { resolve = done; }) })));
-    const request = fetchClient('/threads/t/history', { responseType }).catch((error: unknown) => error);
+    const request = fetchClient('/threads/t/session-view', { responseType }).catch((error: unknown) => error);
     await vi.waitFor(() => expect(resolve).toBeDefined());
     invalidateHistoryRequests(); resolve('[]');
     expect(await request).toBeInstanceOf(RequestCanceledError);

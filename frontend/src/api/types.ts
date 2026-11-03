@@ -93,7 +93,7 @@ export interface Thread {
   updated_at: number;
 	auto_rename_enabled: boolean;
 	auto_suggest_enabled: boolean;
-	naming_revision: number;
+	naming_revision: string;
 }
 
 export type ThreadNamingAction = 'generate' | 'manual' | 'enable' | 'disable';
@@ -116,7 +116,6 @@ export interface Run {
   cancel_requested_at?: number;
   updated_at?: number;
   active_duration_ms?: number;
-  recorded_tool_results?: Extract<SSEEvent, { event: 'tool.completed' }>['data'][];
 }
 
 export type ScopeSelectionKind = 'current_page' | 'all_pages' | 'custom_pages' | 'custom_sections';
@@ -135,7 +134,7 @@ export interface RunScope {
   slide_ids: string[];
   source: ScopeSource;
   include_run_created_slides: boolean;
-  revision: number;
+  revision: string;
 }
 
 export interface CanvasRect { x: number; y: number; width: number; height: number }
@@ -360,15 +359,10 @@ export interface SteerRunResponse {
   client_message_id: string;
 }
 
-export interface CancelRunResponse {
-  status: 'cancel_requested' | 'pending' | 'running' | 'waiting' | 'paused' | 'recovering' | 'done' | 'failed' | 'canceled';
-  run_id: string;
-}
-
 export type RunCancelReason = 'user_requested' | 'superseded' | 'input_rejected' | 'input_detection_failed';
 
 export interface ProjectContentSnapshot {
-  scene_revision?: number;
+  scene_revision?: string;
   project_id: string;
   project_title: string;
   theme: string;
@@ -398,7 +392,7 @@ export type DraftOutlineNode =
   | { kind: 'subsection'; client_ref: string; title: string }
   | ({ kind: 'slide' } & DraftSlide);
 export type OutlineNodeChanges = { title?: string };
-export type PPTMutation = { expected_scene_revision?: number } & (
+export type PPTMutation = { expected_scene_revision?: string } & (
   | { op: 'meta.create'; expected_hash?: string }
   | { op: 'meta.patch'; expected_hash?: string; patch: RestrictedPatch[] }
   | { op: 'outline.create'; expected_hash?: string }
@@ -439,7 +433,7 @@ export interface CommandPermissionRequest {
 export interface ScopeExpansionRequest {
   interaction_id: string;
   call_id: string;
-  base_revision: number;
+  base_revision: string;
   decision: 'approve' | 'refuse' | 'revise';
   feedback?: string;
 }
@@ -450,49 +444,16 @@ export interface ResourceEditApproval<T = Meta | Constraints | Outline> {
   call_id: string;
   interaction_id: string;
   resource: ApprovalResource;
-  revision: number;
+  revision: string;
   base_exists: boolean;
   base_hash?: string;
   base: T | null;
   proposal: T | null;
   draft: T | null;
   target: PublicTarget;
-  state: 'pending' | 'answered';
-  answer?: { decision: 'approve' | 'reject'; revision: number; feedback?: string };
+  state: 'pending' | 'answered' | 'applied' | 'canceled';
+  answer?: { decision: 'approve' | 'reject'; revision: string; feedback?: string };
 }
-
-export type SSEEventName =
-  | 'run.started'
-  | 'run.progress'
-  | 'run.usage.updated'
-  | 'run.resumed'
-  | 'run.completed'
-  | 'run.failed'
-  | 'run.error'
-  | 'run.canceled'
-  | 'plan.updated'
-  | 'plan.approval_requested'
-  | 'plan.approval_answered'
-  | 'command.permission_requested'
-  | 'command.permission_answered'
-  | 'scope.expansion_requested'
-  | 'scope.expansion_answered'
-  | 'scope.updated'
-  | 'run.mode_changed'
-  | 'message.thinking'
-  | 'message.milestone'
-  | 'message.final'
-  | 'message.reply'
-  | 'tool.started'
-  | 'tool.completed'
-  | 'tool.preview_updated'
-  | 'resource.edit_approval_requested'
-  | 'resource.edit_approval_updated'
-  | 'resource.edit_approval_answered'
-  | 'question.asked'
-  | 'question.answered'
-  | 'context.window.updated'
-  | 'context.compacted';
 
 export type ContextBucketKey =
   | 'system_prompt'
@@ -557,12 +518,6 @@ export interface PlanProposal {
   steps: string[];
 }
 
-export interface PublicEventBase {
-  schema_version: 6;
-  run_id: string;
-  occurred_at: string;
-}
-
 export interface FieldDiffRow {
   kind: 'added' | 'removed';
   value: string;
@@ -618,25 +573,10 @@ export interface PublicTarget {
   diff?: ArtifactDiff;
 }
 
-export interface PublicDisplay {
-  label: string;
-  detail?: string;
-}
-
 export interface PublicError {
   code: string;
   message: string;
   retryable: boolean;
-}
-
-export interface RunTerminalPayload extends PublicEventBase {
-  duration_ms: number;
-  affected_targets: PublicTarget[];
-  error: PublicError | null;
-  trace_id: string;
-  reason?: RunCancelReason;
-  reply?: { input_id: string; text: string };
-  suppress_suggestions?: boolean;
 }
 
 export interface ToolPreview {
@@ -711,138 +651,11 @@ export interface RunProgress {
   commentary?: string;
 }
 
-interface SSEEventBase<Name extends SSEEventName, Data> {
-  id?: string;
-  event: Name;
-  data: Data;
-}
-
 export interface TokenUsage {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
 }
-
-export interface ModelCallUsage {
-  call_id: string;
-  provider: string;
-  model: string;
-  duration_ms: number;
-  usage: TokenUsage | null;
-}
-
-export type SSEEvent =
-  | SSEEventBase<'run.started', PublicEventBase & {
-      scope: RunScope;
-      mode: RunMode;
-      user_input: string;
-      skills?: PublicSkill[];
-      resources?: PublicLoadedResource[];
-      attachments?: unknown[];
-      dom_selections?: PublicDOMSelection[];
-      reference_order?: ReferenceOrderItem[];
-    }>
-  | SSEEventBase<'run.progress', PublicEventBase & RunProgress & {
-      model_switch?: { from: string; to: string; purpose: string };
-    }>
-  | SSEEventBase<'run.usage.updated', PublicEventBase & { call: ModelCallUsage }>
-  | SSEEventBase<'run.resumed', PublicEventBase>
-  | SSEEventBase<'run.completed', RunTerminalPayload>
-  | SSEEventBase<'run.failed', RunTerminalPayload>
-  | SSEEventBase<'run.error', RunTerminalPayload>
-  | SSEEventBase<'run.canceled', RunTerminalPayload>
-  | SSEEventBase<'plan.updated', PublicEventBase & { plan: { steps: PlanStep[] } | null }>
-  | SSEEventBase<'plan.approval_requested', PublicEventBase & { interaction_id: string; plan: PlanProposal }>
-  | SSEEventBase<'plan.approval_answered', PublicEventBase & { interaction_id: string; decision: 'approve' | 'refuse'; feedback?: string }>
-  | SSEEventBase<'command.permission_requested', PublicEventBase & {
-      interaction_id: string;
-      call_id: string;
-      command: string;
-      command_hash: string;
-      changes: PublicTarget[];
-      stdout: string;
-      stderr: string;
-    }>
-  | SSEEventBase<'command.permission_answered', PublicEventBase & CommandPermissionRequest>
-  | SSEEventBase<'scope.expansion_requested', PublicEventBase & {
-      interaction_id: string;
-      call_id: string;
-      base_revision: number;
-      current_scope: RunScope;
-      requested_addition: { slide_ids?: string[] };
-      proposed_scope: RunScope;
-      affected_page_count: number;
-      reason: string;
-    }>
-  | SSEEventBase<'scope.expansion_answered', PublicEventBase & {
-      interaction_id: string;
-      call_id: string;
-      base_revision: number;
-      decision: 'approve' | 'refuse' | 'revise';
-      feedback?: string;
-      applied_scope?: RunScope;
-    }>
-  | SSEEventBase<'scope.updated', PublicEventBase & {
-      previous_scope: RunScope;
-      scope: RunScope;
-      cause: string;
-      interaction_id?: string;
-    }>
-  | SSEEventBase<'run.mode_changed', PublicEventBase & { previous_mode: RunMode; mode: RunMode }>
-  | SSEEventBase<'message.thinking', PublicEventBase & { message_id: string; text: string }>
-  | SSEEventBase<'message.milestone', PublicEventBase & {
-      message_id: string;
-      text: string;
-    }>
-  | SSEEventBase<'message.final', PublicEventBase & {
-      message_id: string;
-      text: string;
-      affected_targets: PublicTarget[];
-    }>
-  | SSEEventBase<'message.reply', PublicEventBase & {
-      message_id: string;
-      input_id: string;
-      text: string;
-    }>
-  | SSEEventBase<'tool.started', PublicEventBase & {
-      call_id: string;
-      tool: string;
-      target?: PublicTarget;
-      display: PublicDisplay;
-      command?: CommandProjection;
-    }>
-  | SSEEventBase<'tool.completed', PublicEventBase & {
-      call_id: string;
-      tool: string;
-      status: 'completed' | 'refuse' | 'blocked' | 'failed';
-      target?: PublicTarget;
-      changes?: PublicTarget[];
-      display: PublicDisplay;
-      preview?: ToolPreview;
-      image?: ToolReadImage;
-      review?: ReviewResult;
-      error?: PublicError;
-      command?: CommandProjection;
-      resources?: PublicLoadedResource[];
-      preview_assessment?: PreviewAssessment;
-    }>
-  | SSEEventBase<'tool.preview_updated', PublicEventBase & { call_id: string; source_run_id: string; preview: PreviewAssessment }>
-  | SSEEventBase<'resource.edit_approval_requested' | 'resource.edit_approval_updated', PublicEventBase & {
-      interaction_id: string; call_id: string; resource: ApprovalResource; revision: number; target: PublicTarget;
-    }>
-  | SSEEventBase<'resource.edit_approval_answered', PublicEventBase & {
-      interaction_id: string; call_id: string; resource: ApprovalResource; revision: number; decision: 'approve' | 'reject'; feedback?: string;
-    }>
-  | SSEEventBase<'question.asked', PublicEventBase & {
-      question_id: string;
-      questions: QuestionField[];
-    }>
-  | SSEEventBase<'question.answered', PublicEventBase & {
-      question_id: string;
-      answer: QuestionAnswer;
-    }>
-  | SSEEventBase<'context.window.updated', PublicEventBase & ContextWindowSnapshot>
-  | SSEEventBase<'context.compacted', PublicEventBase & { compaction: ContextCompaction }>;
 
 export interface ModelExecution { profile: string; provider: string; model: string; fallback_used: boolean }
 

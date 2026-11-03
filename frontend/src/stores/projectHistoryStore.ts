@@ -5,14 +5,13 @@ import { composerScene, loadProjectComposer, restoreDraftMentions, saveProjectCo
 import { projectWorkspaceRoute } from '../features/workspace/routes';
 import { useThreadStore } from './threadStore';
 import { useDeckStore } from './deckStore';
-import { useRunStore } from './runStore';
-import { useGitCommitStore } from './gitCommitStore';
+import { useSessionStore } from './sessionStore';
 import { showGlobalSuccess } from './toastStore';
 
 interface HistoryUI {
   states: Record<string, HistoryState>;
   stateErrorByProjectId: Record<string, boolean>;
-  dialog: { projectId: string; runId?: string; preview: HistoryPreview; operation: string } | null;
+  dialog: { projectId: string; runId?: string; preview: HistoryPreview; operation: string; scene?: HistoryState['scene'] } | null;
   busy: boolean;
   error: string | null;
   preview: (projectId: string, runId?: string) => Promise<void>;
@@ -32,13 +31,19 @@ export const useProjectHistoryStore = create<HistoryUI>((set, get) => ({
     if (!dialog || get().busy) return;
     set({ busy: true, error: null });
     const { projectId, preview, runId, operation } = dialog;
+    // Freeze the exact request on first dispatch; retries reuse its hash even
+    // if the user changes the composer or selected slide after a timeout.
+    const scene = dialog.scene ?? structuredClone({
+      composer: composerScene(), slide_id: useDeckStore.getState().currentSlideId ?? undefined,
+      view: useDeckStore.getState().globalView, preview_mode: useDeckStore.getState().previewMode,
+      content_mode: useDeckStore.getState().contentMode,
+      active_thread_id: useThreadStore.getState().getActiveThreadId(projectId) ?? undefined,
+    });
+    set({ dialog: { ...dialog, scene } });
+    invalidateHistoryRequests();
+    useSessionStore.getState().freezeProject(projectId);
     try {
-      const state = await projectHistoryApi.switch(projectId, preview, operation, {
-        composer: composerScene(), slide_id: useDeckStore.getState().currentSlideId,
-        view: useDeckStore.getState().globalView, preview_mode: useDeckStore.getState().previewMode,
-        content_mode: useDeckStore.getState().contentMode,
-        active_thread_id: useThreadStore.getState().getActiveThreadId(projectId),
-      }, runId);
+      const state = await projectHistoryApi.switch(projectId, preview, operation, scene, runId);
       // Reflect the confirmed history state before navigation replaces this document.
       // Keep busy until then so polling and new actions cannot race the scene reload.
       set((current) => ({
@@ -51,7 +56,12 @@ export const useProjectHistoryStore = create<HistoryUI>((set, get) => ({
       // Carry this action's feedback across the full document reload, in this tab only.
       sessionStorage.setItem(historyNoticeKey(projectId), String(state.scene_revision));
       reloadHistory(projectId, state);
-    } catch (error) { set({ busy: false, error: error instanceof Error ? error.message : '项目历史切换失败，请重试' }); }
+    } catch (error) {
+      // An HTTP failure can follow a committed switch. Re-read the scene instead
+      // of making the old snapshot writable again.
+      useSessionStore.getState().resetProject(projectId);
+      set({ busy: false, error: error instanceof Error ? error.message : '项目历史切换失败，请重试' });
+    }
   },
 }));
 const appliedKey = (id: string) => `ppt-agent-history-scene-${id}`;
@@ -114,17 +124,22 @@ export function selectHistoryThread(projectId: string) {
 }
 export function reloadHistory(projectId: string, state: HistoryState) {
   invalidateHistoryRequests();
-  useRunStore.getState().dropSessions(Object.keys(useRunStore.getState().sessions));
-  useGitCommitStore.getState().closeAll();
+  const store = useSessionStore.getState();
+  store.drop(Object.values(store.sessions).filter(session => session.projectId === projectId).map(session => session.threadId));
   // A fresh document destroys every iframe, timer, stream and in-flight callback.
   // The server-persisted scene is applied before the new document loads history.
   window.location.replace(historyWorkspaceRoute(projectId, state));
 }
 export function historyWorkspaceRoute(projectId: string, state: HistoryState) {
-  return projectWorkspaceRoute(projectId, {
-    slideId: state.scene?.input?.scope_input.selection.current_slide_id ?? state.scene?.slide_id,
+  const slideId = state.scene?.input?.scope_input.selection.current_slide_id ?? state.scene?.slide_id;
+  const route = projectWorkspaceRoute(projectId, {
+    slideId,
     view: state.scene?.view,
     mode: state.scene?.preview_mode,
     content: state.scene?.content_mode,
   });
+  // A reload cannot retain the in-memory selection behind overview. Carry its
+  // initial page explicitly; workspace hydration then restores the normal URL.
+  return state.scene?.preview_mode === 'overview' && slideId
+    ? `${route}&slide=${encodeURIComponent(slideId)}` : route;
 }

@@ -182,7 +182,7 @@ describe('PromptComposerEditor slash command menu', () => {
             emptyProject: true,
             operationBusy: false,
             hasPolishText: false,
-          })}
+          }).filter(command => ['polish', 'rename', 'home'].includes(command.id))}
           onSlashCommand={vi.fn()}
         />
       </div>,

@@ -5,6 +5,7 @@ import type { ProjectContentSnapshot } from '../../api/types';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useWorkspaceUrlState } from './useWorkspaceUrlState';
+import { historyWorkspaceRoute } from '../../stores/projectHistoryStore';
 
 function content(ids: string[]): ProjectContentSnapshot {
   return {
@@ -40,6 +41,14 @@ describe('workspace URL state during background content updates', () => {
 
     act(() => useProjectStore.setState({ contentByProjectId: { p: content(['s0', 's1', 's3']) } }));
     expect(screen.getByTestId('selection')).toHaveTextContent('s3|?slide=s3');
+  });
+
+  it('restores the saved page behind overview after a history reload', () => {
+    const route = historyWorkspaceRoute('p', { revision: '12', scene_revision: '12', checkpoints: [],
+      scene: { slide_id: 's2', view: 'outline', preview_mode: 'overview' } });
+    render(<MemoryRouter initialEntries={[route]}><Routes><Route path="/projects/:projectId" element={<Probe />} /></Routes></MemoryRouter>);
+    expect(useDeckStore.getState()).toMatchObject({ currentSlideId: 's2', globalView: 'outline', previewMode: 'overview' });
+    expect(screen.getByTestId('selection')).toHaveTextContent('s2|?mode=overview&view=spec');
   });
 
   it('keeps the selected page view while opening a document and returning after page deletion', () => {

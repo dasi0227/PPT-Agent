@@ -5,7 +5,7 @@ import type { RunScope } from '../../api/types';
 import { useProjectStore } from '../../stores/projectStore';
 import { useRunStore } from '../../stores/runStore';
 import { ordinalBySlideId } from '../deck/selectors';
-import type { ScopeExpansionItem } from './eventReducer';
+import type { ScopeExpansionItem } from './timelineTypes';
 import { useActiveThreadId } from './useActiveSession';
 import { HumanIntervention, DecisionControls, SubmittedFeedback, decisionFeedback, type DecisionOption } from './HumanIntervention';
 
@@ -34,10 +34,10 @@ export function ScopeExpansionCard({ item }: { item: ScopeExpansionItem }) {
   if (item.proposedScope.source.kind !== 'all_pages') options.push({ value: 'revise', label: '允许全部页' });
   options.push({ value: 'refuse', label: '拒绝' });
   const submit = async () => {
-    if (!threadId || !item.runId || !decision || submitting || item.answer) return;
+    if (!threadId || !item.runId || !decision || submitting || item.answer || item.interactionState !== 'pending' || !item.sceneRevision || !item.requestRevision) return;
     setSubmitting(true);
     const accepted = await answerScopeExpansion(threadId, item.runId, {
-      interaction_id: item.interactionId, call_id: item.callId, base_revision: item.baseRevision, decision,
+      scene_revision: item.sceneRevision, request_revision: item.requestRevision, interaction_id: item.interactionId, call_id: item.callId, base_revision: item.baseRevision, decision,
       feedback: decisionFeedback(decision, 'refuse', feedback),
     });
     if (!accepted) setSubmitting(false);
@@ -48,7 +48,7 @@ export function ScopeExpansionCard({ item }: { item: ScopeExpansionItem }) {
   const nextLabel = item.answer?.decision === 'refuse' ? currentLabel
     : item.answer?.appliedScope ? scopePageLabel(item.answer.appliedScope, pageOrdinals, !!snapshot)
       : item.answer?.decision === 'revise' ? '全部页（含本任务新增页）' : scopePageLabel(item.proposedScope, pageOrdinals, !!snapshot);
-  return <HumanIntervention id={`scope-expansion-details-${item.interactionId}`} pending={!item.answer} icon={ShieldPlus}
+  return <HumanIntervention id={`scope-expansion-details-${item.interactionId}`} pending={item.interactionState === 'pending'} icon={ShieldPlus}
     label={summary} tone={item.answer?.decision === 'refuse' ? 'danger' : 'success'}>
     <article className={`${interactionCardClassName} timeline-detail-card overflow-hidden`}>
       <div className="px-4 pb-4 pt-[15px]">
@@ -60,7 +60,7 @@ export function ScopeExpansionCard({ item }: { item: ScopeExpansionItem }) {
         </div>
       </div>
       {item.answer ? <SubmittedFeedback feedback={item.answer.feedback} /> : <DecisionControls options={options}
-        selected={decision} onSelect={setDecision} onSubmit={() => void submit()} busy={submitting}
+        selected={decision} onSelect={setDecision} onSubmit={() => void submit()} busy={submitting} disabled={item.interactionState !== 'pending'}
         feedback={feedback} onFeedback={decision === 'refuse' ? setFeedback : undefined} label="范围扩权操作" />}
     </article>
   </HumanIntervention>;
