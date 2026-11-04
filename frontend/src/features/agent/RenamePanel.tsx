@@ -2,8 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import { Switch } from '../../components/ui/switch';
 import { useThreadStore } from '../../stores/threadStore';
+import { useAgentSettingsStore } from '../../stores/agentSettingsStore';
 
 export const RenamePanel: React.FC = () => {
+	const automaticEnabled = useAgentSettingsStore(state => state.value?.auto_rename_enabled === true);
 	const target = useThreadStore((state) => state.renamePanelTarget);
 	const threads = useThreadStore((state) => target ? state.threadsByProjectId[target.projectId] : undefined);
 	const pendingByThread = useThreadStore((state) => state.pendingNamingOperationByThreadId);
@@ -57,9 +59,9 @@ export const RenamePanel: React.FC = () => {
 				<div className="min-w-0 text-sm font-semibold text-text-900">会话命名</div>
 				<div className="agent-inline-panel-settings">
 					<span className="text-xs text-text-600">自动命名</span>
-					<Switch aria-label="自动命名" checked={thread.auto_rename_enabled}
-						disabled={Boolean(busy)} onCheckedChange={() => void run(thread.auto_rename_enabled ? 'disable' : 'enable')}
-						title={thread.auto_rename_enabled ? '自动命名已开启' : '自动命名已关闭'} />
+					<Switch aria-label="自动命名" checked={automaticEnabled && thread.auto_rename_enabled}
+						disabled={Boolean(busy) || !automaticEnabled} onCheckedChange={() => void run(thread.auto_rename_enabled ? 'disable' : 'enable')}
+						title={automaticEnabled && thread.auto_rename_enabled ? '自动命名已开启' : '自动命名已关闭'} />
 				</div>
 				<button type="button" onClick={close} className="agent-inline-panel-close inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-text-600 ui-interactive" aria-label="关闭命名面板">
 					<X className="h-4 w-4" strokeWidth={1.75} />

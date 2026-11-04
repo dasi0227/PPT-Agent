@@ -4,11 +4,13 @@ import { Skeleton } from '../../components/ui/primitives';
 import { Switch } from '../../components/ui/switch';
 import { useAgentSettingsStore } from '../../stores/agentSettingsStore';
 
-const fields = [
+const fields: ReadonlyArray<readonly [Exclude<keyof AgentSettings, 'revision'>, string, string?]> = [
+  ['auto_rename_enabled', '开启自动命名'],
+  ['auto_suggest_enabled', '开启下一步推荐'],
   ['show_tool_failures', '工具调用失败显示', '开启后，立即显示每次工具调用失败的原因。'],
   ['require_resource_approval', '全局参考编辑审批', '开启后，修改基本信息、全局约束和目录结构需手动审批。'],
   ['require_high_risk_approval', '高风险操作审批', '开启后，扩大修改范围需手动审批。'],
-] as const;
+];
 
 export function AgentSettingsPanel({ refreshKey, onSavingChange }: {
   refreshKey: number; onSavingChange: (saving: boolean) => void;
@@ -43,11 +45,11 @@ export function AgentSettingsPanel({ refreshKey, onSavingChange }: {
       {fields.map(([key, label, desc]) => <div className="settings-row" key={key}>
         <div>
           <h3 id={`agent-${key}`}>{label}</h3>
-          <p id={`agent-${key}-desc`}>{desc}</p>
+          {desc && <p id={`agent-${key}-desc`}>{desc}</p>}
         </div>
         <div className="settings-value flex justify-end">
           {loading && !value ? <Skeleton className="h-5 w-9 rounded-full" /> : <Switch
-            aria-labelledby={`agent-${key}`} aria-describedby={`agent-${key}-desc`}
+            aria-labelledby={`agent-${key}`} aria-describedby={desc ? `agent-${key}-desc` : undefined}
             checked={value?.[key] ?? (key !== 'show_tool_failures')}
             disabled={loading || busy || !value} onCheckedChange={checked => void change(key, checked)} />}
         </div>

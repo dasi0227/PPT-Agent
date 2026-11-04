@@ -64,7 +64,7 @@ func setupProjectThreadServerWithFactory(t *testing.T, factory service.Execution
 	components := service.NewComponentService(service.WorkRoot(root), st)
 	skills := service.NewSkillService(service.WorkRoot(root), st)
 	threadSvc := service.NewThreadService(st)
-	naming := service.NewNamingService(st, nil, service.NewThreadEventHub(st), zap.NewNop())
+	naming := service.NewNamingService(st, nil, nil, service.NewThreadEventHub(st), zap.NewNop())
 	t.Cleanup(naming.Close)
 	router := httpapi.NewRouter(
 		cfg,

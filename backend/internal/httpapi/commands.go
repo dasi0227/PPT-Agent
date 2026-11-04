@@ -153,6 +153,9 @@ func (r *Router) WithSuggestions(svc *service.SuggestService) *Router {
 	r.suggest = svc
 	r.thread.suggest = svc
 	r.run.svc.WithCompletedRunObserver(func(current model.Run) {
+		if !svc.AutomaticEnabled() {
+			return
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		thread, err := r.thread.svc.GetThread(ctx, current.ThreadID)

@@ -70,13 +70,15 @@ type AppConfig struct {
 }
 
 type AgentConfig struct {
+	AutoRenameEnabled       bool `yaml:"auto_rename_enabled" json:"auto_rename_enabled"`
+	AutoSuggestEnabled      bool `yaml:"auto_suggest_enabled" json:"auto_suggest_enabled"`
 	ShowToolFailures        bool `yaml:"show_tool_failures" json:"show_tool_failures"`
 	RequireResourceApproval bool `yaml:"require_resource_approval" json:"require_resource_approval"`
 	RequireHighRiskApproval bool `yaml:"require_high_risk_approval" json:"require_high_risk_approval"`
 }
 
 func DefaultAgentConfig() AgentConfig {
-	return AgentConfig{RequireResourceApproval: true, RequireHighRiskApproval: true}
+	return AgentConfig{AutoRenameEnabled: true, AutoSuggestEnabled: true, RequireResourceApproval: true, RequireHighRiskApproval: true}
 }
 
 // Config combines runtime paths and the loaded server configuration.

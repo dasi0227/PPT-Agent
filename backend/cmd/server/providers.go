@@ -62,7 +62,7 @@ func provideThreadEventHub(s store.Store) *service.ThreadEventHub {
 }
 
 func provideNamingService(s store.Store, provider llm.Provider, registry *llm.Registry, hub *service.ThreadEventHub, log *zap.Logger) (*service.NamingService, func()) {
-	svc := service.NewNamingService(s, provider, hub, log).WithDecisions(registry)
+	svc := service.NewNamingService(s, provider, registry, hub, log).WithDecisions(registry)
 	return svc, svc.Close
 }
 

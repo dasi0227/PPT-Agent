@@ -867,9 +867,10 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
             />
             {showCancelButton ? (
               <button
+                type="button"
                 onClick={() => void cancelActiveRun()}
                 disabled={!activeThreadId || runStatus === 'canceling'}
-                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-danger transition-colors ui-danger disabled:bg-panel-muted disabled:text-text-400 disabled:opacity-60"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border-0 bg-transparent text-danger transition-colors ui-danger disabled:text-text-400 disabled:opacity-40"
                 aria-label={runStatus === 'canceling' ? '正在取消' : '终止运行'}
                 title={runStatus === 'canceling' ? '正在取消' : '终止运行'}
               >
@@ -877,9 +878,10 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
               </button>
             ) : (
               <button
+                type="button"
                 onClick={() => void submit()}
 				disabled={!hasSendableContent || hasPendingTemplateFields || hasPendingUploads || !attachmentModelSupported || disabled || commitActive || polishing || briefingActive || (!steering && (scopeSelectionEmpty || profilesLoading || Boolean(profilesError)))}
-                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md ui-primary disabled:opacity-50"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border-0 bg-transparent text-selected-foreground transition-colors ui-interactive disabled:text-text-400 disabled:opacity-40"
 				aria-label={scopeSelectionEmpty && !steering ? '请选择有效的页面范围' : !attachmentModelSupported ? attachmentModelReason : '发送'}
 				title={scopeSelectionEmpty && !steering ? '请选择有效的页面范围' : !attachmentModelSupported ? attachmentModelReason : '发送'}
               >

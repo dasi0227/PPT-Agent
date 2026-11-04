@@ -40,6 +40,8 @@ export const settingsApi = {
 
 export interface AgentSettings {
   revision: string;
+  auto_rename_enabled: boolean;
+  auto_suggest_enabled: boolean;
   show_tool_failures: boolean;
   require_resource_approval: boolean;
   require_high_risk_approval: boolean;

@@ -31,6 +31,18 @@ func NewSuggestService(s store.Store, registry *llm.Registry, hub *ThreadEventHu
 	return &SuggestService{store: s, registry: registry, hub: hub}
 }
 
+func (s *SuggestService) AutomaticEnabled() bool {
+	settings, err := s.registry.AgentSettings()
+	return err == nil && settings.AutoSuggestEnabled
+}
+
+func (s *SuggestService) checkCommand(ctx context.Context, execution model.CommandExecution) error {
+	if execution.Source == "automatic" && !s.AutomaticEnabled() {
+		return context.Canceled
+	}
+	return s.store.CheckSuggestCommand(ctx, execution)
+}
+
 func (s *SuggestService) SetAutomatic(ctx context.Context, threadID string, enabled bool) (model.Thread, error) {
 	thread, err := s.store.UpdateThreadSuggestState(ctx, threadID, enabled)
 	if err == nil && s.hub != nil {
@@ -42,7 +54,7 @@ func (s *SuggestService) SetAutomatic(ctx context.Context, threadID string, enab
 func (s *SuggestService) Generate(ctx context.Context, execution model.CommandExecution) (SuggestResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	if err := s.store.CheckSuggestCommand(ctx, execution); err != nil {
+	if err := s.checkCommand(ctx, execution); err != nil {
 		return SuggestResult{}, err
 	}
 	project, err := s.store.GetProject(ctx, execution.ProjectID)
@@ -64,7 +76,7 @@ func (s *SuggestService) Generate(ctx context.Context, execution model.CommandEx
 	}
 	prompt := prompts.MustLoad("command_suggest")
 	session := llm.NewSubmissionSession("suggest")
-	session.Check = func(ctx context.Context) error { return s.store.CheckSuggestCommand(ctx, execution) }
+	session.Check = func(ctx context.Context) error { return s.checkCommand(ctx, execution) }
 	var requests []string
 	_, err = session.Generate(ctx, profile.Adapter(), llm.GenerateRequest{Messages: []llm.Message{
 		{Role: llm.RoleSystem, Content: llm.TextContent(prompts.RenderGroup("system_prompt", prompt))},
@@ -75,6 +87,9 @@ func (s *SuggestService) Generate(ctx context.Context, execution model.CommandEx
 		return parseErr
 	}, "Submit exactly one suggest_request call with a requests array of zero to three distinct single-line sentences, each at most 80 characters. Do not include ordinary text. Use an empty array if no useful suggestion is supported.")
 	if err != nil {
+		return SuggestResult{}, err
+	}
+	if err := s.checkCommand(ctx, execution); err != nil {
 		return SuggestResult{}, err
 	}
 	display := contextengine.ProjectPublicTextContext(project, reference)

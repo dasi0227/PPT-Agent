@@ -5,8 +5,10 @@ import { threadsApi } from '../../api/threads';
 import { useThreadStore } from '../../stores/threadStore';
 import { sessionCanWrite, useSessionStore } from '../../stores/sessionStore';
 import { useProjectStore } from '../../stores/projectStore';
+import { useAgentSettingsStore } from '../../stores/agentSettingsStore';
 
 export const SuggestPanel: React.FC = () => {
+  const automaticEnabled = useAgentSettingsStore(state => state.value?.auto_suggest_enabled === true);
   const target = useThreadStore(state => state.suggestPanelTarget);
   const thread = useThreadStore(state => target
     ? state.threadsByProjectId[target.projectId]?.find(item => item.id === target.threadId) : undefined);
@@ -67,8 +69,8 @@ export const SuggestPanel: React.FC = () => {
         </div>
         <div className="agent-inline-panel-settings">
           <span className="text-xs text-text-600">自动建议</span>
-          <Switch aria-label="自动建议" checked={thread.auto_suggest_enabled}
-            disabled={Boolean(busy)} onCheckedChange={() => void toggle()} title={thread.auto_suggest_enabled ? '自动建议已开启' : '自动建议已关闭'} />
+          <Switch aria-label="自动建议" checked={automaticEnabled && thread.auto_suggest_enabled}
+            disabled={Boolean(busy) || !automaticEnabled} onCheckedChange={() => void toggle()} title={automaticEnabled && thread.auto_suggest_enabled ? '自动建议已开启' : '自动建议已关闭'} />
         </div>
         <button type="button" onClick={close} className="agent-inline-panel-close inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-text-600 ui-interactive" aria-label="关闭建议面板" title="关闭建议面板">
           <X className="h-4 w-4" strokeWidth={1.75} />

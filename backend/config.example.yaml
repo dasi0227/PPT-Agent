@@ -41,6 +41,8 @@ side-road:
     suggest: null
 
 agent:
+    auto_rename_enabled: true
+    auto_suggest_enabled: true
     show_tool_failures: false
     require_resource_approval: true
     require_high_risk_approval: true

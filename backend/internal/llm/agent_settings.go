@@ -12,6 +12,8 @@ type AgentSettings struct {
 
 type AgentSettingsEdit struct {
 	Revision                string `json:"revision"`
+	AutoRenameEnabled       *bool  `json:"auto_rename_enabled"`
+	AutoSuggestEnabled      *bool  `json:"auto_suggest_enabled"`
 	ShowToolFailures        *bool  `json:"show_tool_failures"`
 	RequireResourceApproval *bool  `json:"require_resource_approval"`
 	RequireHighRiskApproval *bool  `json:"require_high_risk_approval"`
@@ -35,7 +37,7 @@ func (r *Registry) SaveAgentSettings(edit AgentSettingsEdit) (AgentSettings, err
 	if r == nil || r.manager == nil {
 		return AgentSettings{}, settingsError("SETTINGS_WRITE_FAILED", "智能体设置暂时不可用。")
 	}
-	if edit.ShowToolFailures == nil || edit.RequireResourceApproval == nil || edit.RequireHighRiskApproval == nil || edit.Revision == "" {
+	if edit.AutoRenameEnabled == nil || edit.AutoSuggestEnabled == nil || edit.ShowToolFailures == nil || edit.RequireResourceApproval == nil || edit.RequireHighRiskApproval == nil || edit.Revision == "" {
 		return AgentSettings{}, settingsError("SETTINGS_INVALID", "智能体设置格式无效。")
 	}
 	m := r.manager
@@ -46,6 +48,7 @@ func (r *Registry) SaveAgentSettings(edit AgentSettingsEdit) (AgentSettings, err
 	}
 	next := m.fileConfig
 	next.Agent = config.AgentConfig{
+		AutoRenameEnabled: *edit.AutoRenameEnabled, AutoSuggestEnabled: *edit.AutoSuggestEnabled,
 		ShowToolFailures: *edit.ShowToolFailures, RequireResourceApproval: *edit.RequireResourceApproval,
 		RequireHighRiskApproval: *edit.RequireHighRiskApproval,
 	}

@@ -70,6 +70,7 @@ type NamingService struct {
 	decisions          decision.Source
 	store              store.Store
 	provider           llm.Provider
+	registry           *llm.Registry
 	hub                *ThreadEventHub
 	log                *zap.Logger
 	rootCtx            context.Context
@@ -82,13 +83,18 @@ type NamingService struct {
 	projectLocks       map[string]*sync.RWMutex
 }
 
-func NewNamingService(s store.Store, provider llm.Provider, hub *ThreadEventHub, log *zap.Logger) *NamingService {
+func NewNamingService(s store.Store, provider llm.Provider, registry *llm.Registry, hub *ThreadEventHub, log *zap.Logger) *NamingService {
 	rootCtx, cancel := context.WithCancel(context.Background())
-	return &NamingService{store: s, provider: provider, hub: hub, log: log.Named("thread-naming"), rootCtx: rootCtx, cancel: cancel, workers: map[string]*renameWorker{}, latestInputs: map[string]pendingRename{}, direct: map[string]*directRename{}, projectGenerations: map[string]string{}, projectLocks: map[string]*sync.RWMutex{}}
+	return &NamingService{store: s, provider: provider, registry: registry, hub: hub, log: log.Named("thread-naming"), rootCtx: rootCtx, cancel: cancel, workers: map[string]*renameWorker{}, latestInputs: map[string]pendingRename{}, direct: map[string]*directRename{}, projectGenerations: map[string]string{}, projectLocks: map[string]*sync.RWMutex{}}
 }
 
 func (svc *NamingService) Close()                  { svc.cancel() }
 func (svc *NamingService) Events() *ThreadEventHub { return svc.hub }
+
+func (svc *NamingService) automaticEnabled() bool {
+	settings, err := svc.registry.AgentSettings()
+	return err == nil && settings.AutoRenameEnabled
+}
 
 type RenameResult struct {
 	Title         string                     `json:"title"`
@@ -162,7 +168,7 @@ func validateGeneratedThreadTitle(value string) (string, error) {
 }
 
 func (svc *NamingService) RecordInput(current model.Run, inputID string) {
-	if svc == nil || strings.TrimSpace(inputID) == "" {
+	if svc == nil || strings.TrimSpace(inputID) == "" || !svc.automaticEnabled() {
 		return
 	}
 	generation := svc.projectGeneration(current.ProjectID)
@@ -256,7 +262,7 @@ func (svc *NamingService) launchAutomatic(threadID, projectID string, input mode
 		projectLock := svc.projectLock(projectID)
 		projectLock.RLock()
 		defer projectLock.RUnlock()
-		if svc.projectGeneration(projectID) != generation {
+		if svc.projectGeneration(projectID) != generation || !svc.automaticEnabled() {
 			return false
 		}
 		if !svc.renameInputCurrent(threadID, generation, input) {
@@ -318,6 +324,9 @@ func (svc *NamingService) launchTask(task renameTask) bool {
 	go func() {
 		defer cancel()
 		title, err := svc.runTask(requestCtx, task)
+		if err == nil {
+			err = svc.renameTaskCurrent(requestCtx, task)
+		}
 		accepted.Status = "completed"
 		if err != nil {
 			accepted.Status = "failed"
@@ -714,7 +723,7 @@ func (svc *NamingService) renameTaskCurrent(ctx context.Context, task renameTask
 	if err != nil {
 		return err
 	}
-	if (task.trigger != RenameTriggerManual && !thread.AutoRenameEnabled) || thread.RenameOperationVersion != task.operationVersion || svc.projectGeneration(task.projectID) != task.projectGeneration {
+	if (task.trigger != RenameTriggerManual && (!thread.AutoRenameEnabled || !svc.automaticEnabled())) || thread.RenameOperationVersion != task.operationVersion || svc.projectGeneration(task.projectID) != task.projectGeneration {
 		return context.Canceled
 	}
 	if task.trigger != RenameTriggerManual && !svc.renameInputCurrent(task.threadID, task.projectGeneration, task.input) {
