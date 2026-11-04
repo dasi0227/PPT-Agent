@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import type { Slide } from '../../api/types';
+import type { ProjectContentSnapshot, Slide } from '../../api/types';
 import { Button, Disclosure, InlineNotice, Skeleton } from '../../components/ui/primitives';
 import { IllustratedEmptyState } from '../../components/ui/IllustratedEmptyState';
 import { cn } from '../../lib/utils';
@@ -15,6 +15,7 @@ import type { RuntimeSlide } from './previewProtocol';
 import { buildRuntimeFrame } from './runtimeFrame';
 import { slidePurposeLabel } from './semanticLabels';
 import { SlideSpecCard } from './SlideSpecCard';
+import { SlideThumbnail } from './SlideThumbnail';
 import { hasRenderedHTML, ResourceState, useSlideRenderCache } from './useSlideRenderCache';
 import { orderedSlides } from '../deck/selectors';
 import { useComposerStore } from '../../stores/composerStore';
@@ -148,47 +149,21 @@ function OverviewSlide({
   index,
   selected,
   view,
-  state,
-  load,
   select,
-  frame,
+  snapshot,
 }: {
   slide: Slide;
   index: number;
   selected: boolean;
   view: PageView;
-  state: ResourceState<string>;
-  load: () => void;
   select: () => void;
-  frame?: RuntimeSlide['frame'];
+  snapshot: ProjectContentSnapshot;
 }) {
-  const ref = useRef<HTMLButtonElement>(null);
-  const loadRef = useRef(load);
-  loadRef.current = load;
-  useEffect(() => {
-    const node = ref.current;
-    if (!node || view !== 'html' || !hasRenderedHTML(slide)) return;
-    if (typeof IntersectionObserver === 'undefined') {
-      void loadRef.current();
-      return;
-    }
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) {
-        void loadRef.current();
-        observer.disconnect();
-      }
-    }, { rootMargin: '160px' });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [slide, view]);
-
-  const html = state.status === 'ready' ? state.data : undefined;
   const title = slide.title || '未命名页面';
   const titleWeight = selected ? 'font-semibold' : 'font-medium';
   const core = slide.spec?.core?.trim() || '';
   return (
     <button
-      ref={ref}
       type="button"
       data-testid={`overview-slide-${slide.id}`}
       onClick={select}
@@ -212,24 +187,7 @@ function OverviewSlide({
         <div className="flex h-full items-center justify-center p-5 text-center text-xs font-normal text-text-400">
           未生成 HTML
         </div>
-      ) : html !== undefined && frame ? (
-        <IsolatedSlidePreview
-          slides={[{ id: slide.id, html, frame }]}
-          index={0}
-          className="h-[400%] w-[400%] origin-top-left scale-[0.25] border-0 bg-transparent pointer-events-none"
-          title={`第 ${index + 1} 页预览`}
-        />
-      ) : state.status === 'error' ? (
-        <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center text-xs font-normal text-danger">
-          <span>HTML 加载失败</span>
-          <span className="text-text-600">打开页面后可重试</span>
-        </div>
-      ) : (
-        <div className="flex h-full flex-col items-center justify-center gap-1.5 p-5 text-center">
-          <span className={cn('block w-full truncate text-[13px] leading-snug text-text-900', titleWeight)}>{title}</span>
-          <span className="text-[10px] font-normal text-text-400">缩略图加载中</span>
-        </div>
-      )}
+      ) : <SlideThumbnail slide={slide} snapshot={snapshot} className="h-full" />}
       <div className="absolute inset-x-2 bottom-2 flex items-center gap-1.5 text-[10px] leading-3">
         {view === 'outline' && (
           <span className="min-w-0 truncate rounded-full bg-accent-soft px-1.5 py-0.5 font-medium text-accent">
@@ -665,13 +623,11 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
                     index={index}
                     selected={safePage === index}
                     view={globalView}
-                    state={getState(slide)}
-                    load={() => load(slide, 'prefetch')}
                     select={() => {
                       setCurrentSlideId(slide.id);
                       exitOverview();
                     }}
-                    frame={snapshot ? buildRuntimeFrame(snapshot, slide.id) : undefined}
+                    snapshot={snapshot!}
                   />
                 ))}
               </div>

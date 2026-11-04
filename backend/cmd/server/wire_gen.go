@@ -92,7 +92,7 @@ func initApp(cfg *config.Config) (*App, func(), error) {
 	projectHandler := httpapi.NewProjectHandler(projectService, pptMutationService)
 	threadService := provideThreadService(store)
 	threadHandler := provideThreadHandler(threadService, namingService)
-	slideService := provideSlideService(store)
+	slideService := provideSlideService(store, themeService, nodeSlideRenderer)
 	slideHandler := httpapi.NewSlideHandler(slideService)
 	componentService := provideComponentService(store, workRoot)
 	skillService := provideSkillService(store, workRoot)

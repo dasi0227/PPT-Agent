@@ -15,6 +15,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
+	"github.com/dasi0227/PPT-Agent/backend/internal/slidepreview"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 )
@@ -180,6 +181,15 @@ func (s *PPTMutationService) snapshot(ctx context.Context, projectID string) (sp
 		}
 		if htmlErr == nil {
 			content.HTMLState = "available"
+			if out.Appearance != nil {
+				meta := spec.Meta{Title: project.Title}
+				if out.Meta != nil {
+					meta = *out.Meta
+				}
+				if frame, ok := spec.BuildRuntimeFrame(meta, outline, project.Decorations, out.Logo, id, slide, out.Appearance); ok {
+					out.Hashes["thumbnail:"+id] = slidepreview.Version(project.WorkDir, id, slidepreview.SourceKey(content.HTMLHash, frame))
+				}
+			}
 		} else if !errors.Is(htmlErr, fs.ErrNotExist) {
 			return spec.ProjectContentSnapshot{}, htmlErr
 		}

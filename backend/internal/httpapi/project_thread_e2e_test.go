@@ -73,7 +73,7 @@ func setupProjectThreadServerWithFactory(t *testing.T, factory service.Execution
 		httpapi.NewRunHandler(runSvc),
 		httpapi.NewProjectHandler(projectSvc, service.NewPPTMutationService(st)),
 		httpapi.NewThreadHandler(threadSvc, naming),
-		httpapi.NewSlideHandler(service.NewSlideService(st)),
+		httpapi.NewSlideHandler(service.NewSlideService(st, themes, nil)),
 		httpapi.NewRepositoryHandler(themes, components, skills),
 		nil,
 		nil,

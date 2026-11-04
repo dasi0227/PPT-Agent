@@ -2,9 +2,7 @@ import { ContentRequirementsIcon } from '../../components/ui/ContentRequirements
 import { GlobalConstraintsIcon } from '../../components/ui/GlobalConstraintsIcon';
 import {
   forwardRef,
-  useEffect,
   useMemo,
-  useRef,
   useState,
   type ComponentPropsWithoutRef,
   type ReactNode,
@@ -51,16 +49,10 @@ import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useActiveSession } from '../agent/useActiveSession';
-import { IsolatedSlidePreview } from '../viewer/IsolatedSlidePreview';
-import { buildRuntimeFrame } from '../viewer/runtimeFrame';
+import { SlideThumbnail } from '../viewer/SlideThumbnail';
 import { useAuthoringBlock } from '../viewer/useAuthoringBlock';
 import { TextField } from '../../components/ui/text-field';
 import { partLabel } from '../viewer/semanticLabels';
-import {
-  hasRenderedHTML,
-  type ResourceState,
-  useSlideRenderCache,
-} from '../viewer/useSlideRenderCache';
 import { flattenOutline, orderedSlides } from './selectors';
 
 const clientRef = (kind: string) => `${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -169,69 +161,6 @@ function DeckNavigatorChrome({
   );
 }
 
-function SlideThumbnail({
-  slide,
-  snapshot,
-  state,
-  load,
-}: {
-  slide: Slide;
-  snapshot: ProjectContentSnapshot;
-  state: ResourceState<string>;
-  load: () => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const loadRef = useRef(load);
-  loadRef.current = load;
-
-  useEffect(() => {
-    const node = ref.current;
-    if (!node || !hasRenderedHTML(slide)) return;
-    if (typeof IntersectionObserver === 'undefined') {
-      void loadRef.current();
-      return;
-    }
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) {
-        void loadRef.current();
-        observer.disconnect();
-      }
-    }, { rootMargin: '120px' });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [slide]);
-
-  const html = state.status === 'ready'
-    ? state.data
-    : state.status === 'loading' || state.status === 'error'
-      ? state.previous
-      : undefined;
-  const frame = buildRuntimeFrame(snapshot, slide.id);
-
-  return (
-    <div
-      ref={ref}
-      className="relative aspect-video w-full min-w-0 max-w-36 justify-self-center overflow-hidden rounded bg-surface shadow-sm ring-1 ring-inset ring-border-strong"
-    >
-      {html && frame ? (
-        <IsolatedSlidePreview
-          slides={[{ id: slide.id, html, frame }]}
-          index={0}
-          className="pointer-events-none h-[400%] w-[400%] origin-top-left scale-[0.25] border-0 bg-transparent"
-          title={`${slide.title || '页面'}缩略图`}
-        />
-      ) : (
-        <div className="flex h-full items-center justify-center bg-surface text-[10px] font-normal text-text-400">
-          {hasRenderedHTML(slide) ? '加载中' : '未生成'}
-        </div>
-      )}
-      {state.status === 'loading' && html && (
-        <span className="absolute right-1 top-1 h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-      )}
-    </div>
-  );
-}
-
 interface SlideRowProps {
   node: OutlineSlideNode;
   slide: Slide;
@@ -243,8 +172,6 @@ interface SlideRowProps {
   locked: boolean;
   pending: boolean;
   view: 'outline' | 'html';
-  state: ResourceState<string>;
-  load: () => void;
   onSelect: () => void;
   onRename: () => void;
   onRemove: () => void;
@@ -264,8 +191,6 @@ function SlideRow({
   locked,
   pending,
   view,
-  state,
-  load,
   onSelect,
   onRename,
   onRemove,
@@ -311,7 +236,7 @@ function SlideRow({
           {pending && <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-warning" title="等待生成设计稿" />}
         </span>
       ) : (
-        <SlideThumbnail slide={slide} snapshot={snapshot} state={state} load={load} />
+        <SlideThumbnail slide={slide} snapshot={snapshot} className="max-w-36 justify-self-center rounded shadow-sm ring-1 ring-inset ring-border-strong" />
       )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -357,7 +282,6 @@ export function DeckNavigator() {
   const flat = useMemo(() => flattenOutline(snapshot?.outline), [snapshot?.outline]);
   const ordinalById = useMemo(() => Object.fromEntries(flat.map((item) => [item.node.id, item.ordinal])), [flat]);
   const slideById = useMemo(() => Object.fromEntries(slides.map((slide) => [slide.id, slide])), [slides]);
-  const { getState, load } = useSlideRenderCache(activeProjectId);
   const runLocked = ['creating', 'running', 'waiting', 'paused', 'recovering', 'canceling'].includes(status);
   const managementBlocked = useAuthoringBlock(activeProjectId);
   const locked = pendingMutation || runLocked || Boolean(managementBlocked);
@@ -550,8 +474,6 @@ export function DeckNavigator() {
                           locked={locked}
                           pending={!snapshot.slides_by_id[node.id]?.spec}
                           view={globalView}
-                          state={getState(slide)}
-                          load={() => load(slide, 'prefetch')}
                           onSelect={() => setCurrentSlideId(node.id)}
                           onRename={() => setEditTarget({ kind: 'page', id: node.id, value: node.title, hash: outlineHash, scene: snapshot?.scene_revision })}
                           onRemove={() => setDeleteTarget({ hash: outlineHash, scene: snapshot?.scene_revision, kind: 'page', id: node.id, title: node.title })}
@@ -615,8 +537,6 @@ export function DeckNavigator() {
                               locked={locked}
                               pending={!snapshot.slides_by_id[node.id]?.spec}
                               view={globalView}
-                              state={getState(slide)}
-                              load={() => load(slide, 'prefetch')}
                               onSelect={() => setCurrentSlideId(node.id)}
                               onRename={() => setEditTarget({ kind: 'page', id: node.id, value: node.title, hash: outlineHash, scene: snapshot?.scene_revision })}
                               onRemove={() => setDeleteTarget({ hash: outlineHash, scene: snapshot?.scene_revision, kind: 'page', id: node.id, title: node.title })}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
+	"github.com/dasi0227/PPT-Agent/backend/internal/slidepreview"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -13,6 +14,28 @@ import (
 // SlideHandler 暴露当前单页预览端点。
 type SlideHandler struct {
 	svc *service.SlideService
+}
+
+func (h *SlideHandler) Thumbnail(c *gin.Context) {
+	c.Header("Cache-Control", "private, no-cache")
+	if c.Query("v") == "" {
+		AbortWithError(c, ErrBadRequest("thumbnail version is required"))
+		return
+	}
+	raw, err := h.svc.Thumbnail(c.Request.Context(), c.Param("id"), c.Query("v"))
+	switch {
+	case err == nil:
+		c.Header("X-Content-Type-Options", "nosniff")
+		serveCachedResource(c, "image/webp", raw, "private, no-cache")
+	case errors.Is(err, gorm.ErrRecordNotFound), errors.Is(err, service.ErrSlideHTMLMissing):
+		AbortWithError(c, ErrNotFound("slide thumbnail not found"))
+	case errors.Is(err, service.ErrSlideHTMLChanged):
+		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: model.CodeContentConflict, Message: "页面内容已更新，请重新加载。"})
+	case errors.Is(err, slidepreview.ErrUnavailable):
+		AbortWithError(c, &APIError{HTTPStatus: http.StatusServiceUnavailable, Code: "PREVIEW_UNAVAILABLE", Message: "页面预览暂不可用。"})
+	default:
+		AbortWithError(c, ErrInternal(err.Error()))
+	}
 }
 
 func NewSlideHandler(svc *service.SlideService) *SlideHandler {

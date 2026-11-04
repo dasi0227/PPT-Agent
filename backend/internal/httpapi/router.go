@@ -235,6 +235,7 @@ func (r *Router) register() {
 
 	// Slide HTML preview uses stable identities.
 	v1.GET("/slides/:id/render", r.slide.RenderSlide)
+	v1.GET("/slides/:id/thumbnail", r.slide.Thumbnail)
 
 }
 

@@ -165,6 +165,10 @@ func serveRuntimeResource(c *gin.Context, contentType string, raw []byte, immuta
 	if immutable {
 		cacheControl = "public, max-age=31536000, immutable"
 	}
+	serveCachedResource(c, contentType, raw, cacheControl)
+}
+
+func serveCachedResource(c *gin.Context, contentType string, raw []byte, cacheControl string) {
 	c.Header("Cache-Control", cacheControl)
 	etag := `"` + runtimeassets.Hash(raw) + `"`
 	c.Header("ETag", etag)
