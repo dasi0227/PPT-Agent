@@ -6,13 +6,13 @@ import (
 	"strconv"
 	"strings"
 
-	embedded "github.com/dasi0227/PPT-Agent/backend"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/decision"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/prompt"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	embedded "github.com/dasi0227/PPT-Agent/backend/prompts"
 )
 
 type inputDecisionStore interface {

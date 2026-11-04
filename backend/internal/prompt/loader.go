@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	embedded "github.com/dasi0227/PPT-Agent/backend"
+	embedded "github.com/dasi0227/PPT-Agent/backend/prompts"
 	"gopkg.in/yaml.v3"
 )
 

@@ -6,7 +6,7 @@ import (
 	"io/fs"
 	"strings"
 
-	embedded "github.com/dasi0227/PPT-Agent/backend"
+	embedded "github.com/dasi0227/PPT-Agent/backend/prompts"
 )
 
 // LoadTool reads a tool's plain Markdown description and JSON argument descriptions.
@@ -18,7 +18,7 @@ func loadTool(files fs.FS, name string) (string, map[string]string, error) {
 	if !moduleIDPattern.MatchString(name) {
 		return "", nil, fmt.Errorf("invalid tool name %q: use lowercase snake_case", name)
 	}
-	base := "prompts/tool/" + name
+	base := "tool/" + name
 	raw, err := fs.ReadFile(files, base+".md")
 	if err != nil {
 		return "", nil, fmt.Errorf("load tool description %s: %w", name, err)
