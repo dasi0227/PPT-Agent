@@ -7,7 +7,9 @@ import (
 	"errors"
 	"image"
 	"image/png"
+	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/chai2010/webp"
 	"github.com/dasi0227/PPT-Agent/backend/internal/artifactfs"
@@ -33,15 +35,75 @@ func InitialVersion(sourceKey string) string {
 	return spec.ContentHash([]byte(sourceKey + "\x00" + renderimage.ResourceSnapshotHash(nil)))
 }
 
+// ResourceVersion is independent of the theme/frame, so applying a theme alone
+// does not restart a live document. Empty resource sets need no cache buster.
+func ResourceVersion(root, id string) string {
+	_, cached, err := load(root, id)
+	if err != nil || len(cached.ResourceHashes) == 0 {
+		return ""
+	}
+	version, err := renderimage.ResourceHash(root, cached.ResourceHashes)
+	if err != nil {
+		return "unavailable"
+	}
+	return version
+}
+
+func Prune(root string, keep map[string]bool) {
+	sandbox, err := previewSandbox(root)
+	if err != nil {
+		return
+	}
+	dir, err := sandbox.Resolve(".runtime/previews")
+	if err != nil {
+		return
+	}
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, file := range files {
+		ext := filepath.Ext(file.Name())
+		id := strings.TrimSuffix(file.Name(), ext)
+		if !file.IsDir() && (ext == ".json" || ext == ".webp") && model.IsSlideID(id) && !keep[id] {
+			_ = sandbox.Delete(cachePath(id, ext))
+		}
+	}
+}
+
 func cachePath(id, extension string) string {
 	return filepath.ToSlash(filepath.Join(".runtime", "previews", id+extension))
+}
+
+func previewSandbox(root string) (*artifactfs.Sandbox, error) {
+	sandbox, err := artifactfs.NewSandbox(root)
+	if err != nil {
+		return nil, err
+	}
+	for _, name := range []string{".runtime", ".runtime/previews"} {
+		path, err := sandbox.Resolve(name)
+		if err != nil {
+			return nil, err
+		}
+		info, err := os.Lstat(path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return nil, ErrUnavailable
+		}
+	}
+	return sandbox, nil
 }
 
 func load(root, id string) (*artifactfs.Sandbox, entry, error) {
 	if !model.IsSlideID(id) {
 		return nil, entry{}, ErrUnavailable
 	}
-	sandbox, err := artifactfs.NewSandbox(root)
+	sandbox, err := previewSandbox(root)
 	if err != nil {
 		return nil, entry{}, err
 	}
@@ -110,7 +172,7 @@ func Write(root, id, sourceKey string, resources map[string]string, screenshot [
 	if err != nil {
 		return nil, err
 	}
-	sandbox, err := artifactfs.NewSandbox(root)
+	sandbox, err := previewSandbox(root)
 	if err != nil {
 		return nil, err
 	}

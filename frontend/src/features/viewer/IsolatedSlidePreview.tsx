@@ -54,7 +54,8 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
   const [renderError, setRenderError] = useState('');
   const [themeError, setThemeError] = useState('');
   const [themeLoading, setThemeLoading] = useState(true);
-  const [displayedDocument, setDisplayedDocument] = useState<{ id: string; html: string } | null>(null);
+  const [displayedDocument, setDisplayedDocument] = useState<{ id: string; html: string; resourceHash: string } | null>(null);
+  const resourceHash = slides[index]?.resource_hash || '';
   const appearanceHash = slides[index]?.frame.appearance?.hash || '';
   const [runtimeVersion, setRuntimeVersion] = useState(0);
   const shortcutBindings = useShortcutStore(state => state.bindings);
@@ -63,15 +64,17 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
   const deliveredReplayRef = useRef(replayRequest?.id);
   const activeSlideId = slides[index]?.id;
   const activeHTML = slides[index]?.html;
-  const hasDisplay = displayedDocument?.id === activeSlideId && displayedDocument?.html === activeHTML;
+  const hasDisplay = displayedDocument?.id === activeSlideId && displayedDocument?.html === activeHTML && displayedDocument?.resourceHash === resourceHash;
   useEffect(() => { onDisplayChange?.(hasDisplay); }, [hasDisplay, onDisplayChange]);
   const selectionHash = selectionSlide?.hash;
   // A response from an older displayed artifact must not reach the composer,
   // including presence probes that do not carry a hash themselves.
-  const sessionID = useMemo(() => `selection_${typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}`, [activeSlideId, selectionHash]);
+  const sessionID = useMemo(() => `selection_${typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}`, [activeSlideId, selectionHash, resourceHash]);
   indexRef.current = index;
 
   const sendDeck = useCallback(() => {
+    // Preserve connected documents while the requested page's HTML is still loading.
+    if (!slides[indexRef.current]) return;
     iframeRef.current?.contentWindow?.postMessage({
       type: 'updateDeck',
       slides,
@@ -133,11 +136,11 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
         setRuntimeReady(true);
         sendSelectionState();
       } else if (message.type === 'themeApplying' || message.type === 'themeApplied' || message.type === 'themeApplyFailed') {
-        if (message.slide_id !== activeSlideId || message.appearance_hash !== appearanceHash) return;
+        if (message.slide_id !== activeSlideId || message.appearance_hash !== appearanceHash || message.resource_hash !== resourceHash) return;
         setThemeLoading(message.type === 'themeApplying');
         setThemeError(message.type === 'themeApplyFailed' ? message.message : '');
         if (message.type === 'themeApplied' && activeSlideId && activeHTML !== undefined) {
-          setDisplayedDocument({ id: activeSlideId, html: activeHTML });
+          setDisplayedDocument({ id: activeSlideId, html: activeHTML, resourceHash });
         }
         if (active && message.type === 'themeApplied' && selectionSlide) {
           sendSelectionState();
@@ -162,13 +165,13 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [active, keyboardShortcuts, activeHTML, activeSlideId, appearanceHash, draftSelections, onSelection, onSelectionCanceled, onSelectionMessage, onSelectionPresence, selectionMode, selectionSlide, sessionID, sendDeck, sendSelectionState]);
+  }, [active, keyboardShortcuts, activeHTML, activeSlideId, appearanceHash, resourceHash, draftSelections, onSelection, onSelectionCanceled, onSelectionMessage, onSelectionPresence, selectionMode, selectionSlide, sessionID, sendDeck, sendSelectionState]);
 
   useEffect(() => {
     setThemeError('');
     setRenderError('');
     setThemeLoading(Boolean(activeSlideId));
-  }, [activeSlideId, activeHTML, appearanceHash]);
+  }, [activeSlideId, activeHTML, appearanceHash, resourceHash]);
 
   useEffect(() => {
     sendDeck();
@@ -184,6 +187,7 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
   }, [runtimeReady, runtimeVersion]);
 
   useEffect(() => {
+    if (index < 0) return;
     iframeRef.current?.contentWindow?.postMessage({ type: 'gotoSlide', index }, '*');
   }, [index]);
 

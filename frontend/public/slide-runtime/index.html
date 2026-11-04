@@ -75,6 +75,7 @@
         && typeof value.id === 'string'
         && value.id.length > 0
         && typeof value.html === 'string'
+        && (value.resource_hash === undefined || typeof value.resource_hash === 'string')
         && value.frame !== null
         && typeof value.frame === 'object'
         && value.frame.slide_id === value.id
@@ -177,23 +178,23 @@
       });
     }
 
-    function attachmentContentURL(projectID, source) {
+    function attachmentContentURL(projectID, source, resourceHash) {
       if (!projectID || typeof source !== 'string') return null;
       const normalized = source.startsWith('/') ? source : `/${source}`;
       const match = normalized.match(/^\/attachments\/(att_[A-Za-z0-9_-]{1,128})\/original\.(png|jpe?g|webp)$/i);
       if (!match) return null;
-      return `/api/v1/projects/${encodeURIComponent(projectID)}/attachments/${encodeURIComponent(match[1])}/content?variant=original`;
+      return `/api/v1/projects/${encodeURIComponent(projectID)}/attachments/${encodeURIComponent(match[1])}/content?variant=original${resourceHash ? `&v=${encodeURIComponent(resourceHash)}` : ''}`;
     }
 
-    function bridgeAttachmentPaths(source, projectID) {
+    function bridgeAttachmentPaths(source, projectID, resourceHash) {
       if (!projectID || typeof source !== 'string') return source;
       return source.replace(/\/?attachments\/(att_[A-Za-z0-9_-]{1,128})\/original\.(png|jpe?g|webp)/gi, (path, attachmentID) => (
-        attachmentContentURL(projectID, path) || path
+        attachmentContentURL(projectID, path, resourceHash) || path
       ));
     }
 
-    function normalizeSlideHTML(source, appearance, projectID, slideID, visible) {
-		const document = new DOMParser().parseFromString(bridgeAttachmentPaths(source, projectID), 'text/html');
+    function normalizeSlideHTML(source, appearance, projectID, slideID, visible, resourceHash) {
+		const document = new DOMParser().parseFromString(bridgeAttachmentPaths(source, projectID, resourceHash), 'text/html');
       const head = document.head;
       document.documentElement.dataset.previewActive = String(visible);
       const suspension = document.createElement('style');
@@ -215,7 +216,7 @@
       const themeBridge=document.createElement('script');themeBridge.src='/api/v1/runtime/theme-bridge.js';themeBridge.dataset.slideId=slideID;
       document.body.appendChild(themeBridge);
 		document.querySelectorAll('img[src], source[src]').forEach((node) => {
-			const bridged = attachmentContentURL(projectID, node.getAttribute('src'));
+			const bridged = attachmentContentURL(projectID, node.getAttribute('src'), resourceHash);
 			if (bridged) node.setAttribute('src', bridged);
 		});
       const bridge = document.createElement('script');
@@ -240,7 +241,7 @@
 
     function matches(execution, slide) {
       return execution && execution.container.isConnected && execution.html === slide.html
-        && execution.projectID === slide.frame.project_id;
+        && execution.projectID === slide.frame.project_id && execution.resourceHash === (slide.resource_hash || '');
     }
 
     function evictExecutions() {
@@ -254,8 +255,9 @@
 
     function prepareNeighbors() {
       clearTimeout(preloadTimer);
-      if (!state.activeExecution?.appliedHash) return;
+      if (!state.visible || !state.activeExecution?.appliedHash) return;
       preloadTimer = setTimeout(() => {
+        if (!state.visible) return;
         for (const index of [state.activeIndex + 1, state.activeIndex - 1]) {
           const slide = state.slides[index];
           if (!slide) continue;
@@ -302,10 +304,10 @@
       const hash = slide.frame.appearance?.hash || 'unavailable';
       if (execution.appliedHash === hash) {
         applyRuntimeFrame(execution.container, slide.frame);
-        window.parent.postMessage({type:'themeApplied',slide_id:slide.id,appearance_hash:hash}, '*');
+        window.parent.postMessage({type:'themeApplied',slide_id:slide.id,resource_hash:slide.resource_hash || '',appearance_hash:hash}, '*');
         prepareNeighbors();
       } else {
-        window.parent.postMessage({type:'themeApplying',slide_id:slide.id,appearance_hash:slide.frame.appearance?.hash || ''}, '*');
+        window.parent.postMessage({type:'themeApplying',slide_id:slide.id,resource_hash:slide.resource_hash || '',appearance_hash:slide.frame.appearance?.hash || ''}, '*');
         if (execution.requestedHash !== hash || execution.error) requestAppearance(slide, false, execution);
       }
       fitCanvas(execution.container, slide.frame.canvas);
@@ -316,7 +318,7 @@
     }
 
     function createExecution(slide, index, visible = false) {
-      const normalizedHTML = normalizeSlideHTML(slide.html, slide.frame.appearance, slide.frame.project_id, slide.id, visible);
+      const normalizedHTML = normalizeSlideHTML(slide.html, slide.frame.appearance, slide.frame.project_id, slide.id, visible, slide.resource_hash);
       const container = document.createElement('div');
       container.className = 'runtime-slide';
       container.dataset.slideFrame = 'true';
@@ -359,7 +361,7 @@
 
       const execution = {
         slideID: slide.id, projectID: slide.frame.project_id,
-        html: slide.html,
+        html: slide.html, resourceHash: slide.resource_hash || '',
         appliedHash: null, requestedHash: null, requestID:0, ready:false,
         container
       };
@@ -385,7 +387,7 @@
       execution.error = null;
       const request=++appearanceSequence;execution.requestID=request;execution.requestedHash=hash;
       execution.container.querySelector('iframe').contentWindow.postMessage({bridge:'ppt-theme-v1',type:'cancelTheme',slide_id:slide.id,request_id:request},'*');
-      if (execution === state.activeExecution) window.parent.postMessage({type:'themeApplying',slide_id:slide.id,appearance_hash:slide.frame.appearance?.hash || ''},'*');
+      if (execution === state.activeExecution) window.parent.postMessage({type:'themeApplying',slide_id:slide.id,resource_hash:slide.resource_hash || '',appearance_hash:slide.frame.appearance?.hash || ''},'*');
       try {
         if(!slide.frame.appearance)throw new Error('当前主题不可用，请从主题仓库选择现有主题');
         await window.PPTFonts.prepare();
@@ -394,13 +396,17 @@
       }catch(error){
         if(state.executions.get(slide.id)===execution && request===execution.requestID) {
           execution.error = error.message;
-          if (execution === state.activeExecution) window.parent.postMessage({type:'themeApplyFailed',slide_id:slide.id,appearance_hash:slide.frame.appearance?.hash || '',message:error.message},'*');
+          if (execution === state.activeExecution) window.parent.postMessage({type:'themeApplyFailed',slide_id:slide.id,resource_hash:slide.resource_hash || '',appearance_hash:slide.frame.appearance?.hash || '',message:error.message},'*');
         }
       }
     }
 
     function updateDeck(slides, index) {
       clearTimeout(preloadTimer);
+      const ids = new Set(slides.map(slide => slide.id));
+      for (const id of state.drafts.keys()) {
+        if (!ids.has(id)) state.drafts.delete(id);
+      }
       for (const [id, execution] of state.executions) {
         const slide = slides.find(slide => slide.id === id);
         if (!slide || !matches(execution, slide)) {
@@ -532,12 +538,12 @@
             applyRuntimeFrame(execution.container, current.frame);
             if (execution === state.activeExecution) {
               postModeToInner();
-              window.parent.postMessage({type:'themeApplied',slide_id:current.id,appearance_hash:message.appearance_hash}, '*');
+              window.parent.postMessage({type:'themeApplied',slide_id:current.id,resource_hash:current.resource_hash || '',appearance_hash:message.appearance_hash}, '*');
               prepareNeighbors();
             }
           } else if (message.type === 'themeApplyFailed') {
             execution.error = message.message;
-            if (execution === state.activeExecution) window.parent.postMessage({type:'themeApplyFailed',slide_id:current.id,appearance_hash:current.frame.appearance?.hash || '',message:message.message}, '*');
+            if (execution === state.activeExecution) window.parent.postMessage({type:'themeApplyFailed',slide_id:current.id,resource_hash:current.resource_hash || '',appearance_hash:current.frame.appearance?.hash || '',message:message.message}, '*');
           }
         }
         return;
@@ -597,7 +603,9 @@
           renderSlide(event.data.index);
         } else if (event.data?.type === 'setPreviewVisibility' && typeof event.data.active === 'boolean') {
           state.visible = event.data.active;
+          clearTimeout(preloadTimer);
           for (const execution of state.executions.values()) sendVisibility(execution);
+          if (state.visible) prepareNeighbors();
         } else if (event.data?.type === 'retryTheme') {
           const current=state.slides[state.activeIndex];if(current?.id===event.data.slide_id)requestAppearance(current,true);
         } else if (isReplayCurrentSlide(event.data)) {

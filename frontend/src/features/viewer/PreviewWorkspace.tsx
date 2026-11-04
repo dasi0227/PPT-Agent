@@ -85,16 +85,16 @@ function PreviewFrame({
   replayRequest?: { id: number; slideId: string };
 }) {
   const [displayedKey, setDisplayedKey] = useState<string>();
-  const displayKey = `${slide.id}:${slide.html_hash}`;
+  const displayKey = `${slide.id}:${slide.html_hash}:${snapshot.hashes[`assets:${slide.id}`] || ''}`;
   const onDisplayChange = useCallback((displayed: boolean) => setDisplayedKey(displayed ? displayKey : undefined), [displayKey]);
   const visibleHtml = visibleHTML(state);
-  const deck = runtimeSlides && runtimeIndex !== undefined && runtimeIndex >= 0
+  const deck = runtimeSlides
     ? runtimeSlides
     : visibleHtml !== undefined
       ? fallbackFrame ? [{ id: slide.id, html: visibleHtml, frame: fallbackFrame }] : []
       : [];
-  const deckIndex = runtimeSlides && runtimeIndex !== undefined && runtimeIndex >= 0
-    ? runtimeIndex
+  const deckIndex = runtimeSlides
+    ? runtimeIndex ?? -1
     : 0;
 
   return (
@@ -102,26 +102,24 @@ function PreviewFrame({
       'relative h-full w-full overflow-hidden bg-transparent',
       fullscreen ? 'rounded-none' : 'rounded shadow-canvas ring-1 ring-border',
     )}>
-      {deck.length > 0 && (
-        <IsolatedSlidePreview
-          keyboardShortcuts
-          active={active}
-          onDisplayChange={onDisplayChange}
-          slides={deck}
-          index={deckIndex}
-          className="h-full w-full border-0"
-          title={title}
-          selectionMode={selectionMode}
-          selectionSlide={selectionSlide}
-          draftSelections={draftSelections}
-          onSelection={onSelection}
-          onSelectionMessage={onSelectionMessage}
-          onSelectionCanceled={onSelectionCanceled}
-          onSelectionRemove={onSelectionRemove}
-          onSelectionPresence={onSelectionPresence}
-          replayRequest={replayRequest}
-        />
-      )}
+      <IsolatedSlidePreview
+        keyboardShortcuts
+        active={active && deckIndex >= 0}
+        onDisplayChange={onDisplayChange}
+        slides={deck}
+        index={deckIndex}
+        className="h-full w-full border-0"
+        title={title}
+        selectionMode={selectionMode}
+        selectionSlide={selectionSlide}
+        draftSelections={draftSelections}
+        onSelection={onSelection}
+        onSelectionMessage={onSelectionMessage}
+        onSelectionCanceled={onSelectionCanceled}
+        onSelectionRemove={onSelectionRemove}
+        onSelectionPresence={onSelectionPresence}
+        replayRequest={replayRequest}
+      />
       {(state.status === 'idle' || (state.status === 'loading' && !state.previous)) && (
         <div className="absolute inset-0 flex flex-col gap-3 p-8">
           <Skeleton className="h-10 w-2/3" />
@@ -306,13 +304,13 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
     : undefined;
   const currentState = currentSlide ? getState(currentSlide) : { status: 'idle' as const };
   const runtimeSlides = useMemo<RuntimeSlide[]>(() => {
-    return slides.flatMap((slide) => {
+    return slides.slice(Math.max(0, safePage - 2), safePage + 3).flatMap((slide) => {
       if (!hasRenderedHTML(slide)) return [];
       const html = visibleHTML(getState(slide));
       const frame = snapshot ? buildRuntimeFrame(snapshot, slide.id) : undefined;
-      return html === undefined || !frame ? [] : [{ id: slide.id, html, frame }];
+      return html === undefined || !frame ? [] : [{ id: slide.id, html, frame, resource_hash: snapshot?.hashes[`assets:${slide.id}`] || '' }];
     });
-  }, [getState, slides, snapshot]);
+  }, [getState, safePage, slides, snapshot]);
   const runtimeIndex = currentSlide
     ? runtimeSlides.findIndex((slide) => slide.id === currentSlide.id)
     : -1;
@@ -379,14 +377,17 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   }, [activeThreadId, ensureActiveThread, projectId, selectionMode, showRightPanel]);
 
   useEffect(() => {
-    if (activeDocument || !currentSlide || !currentHasHTML || currentView !== 'html' || previewMode !== 'main') return;
+    if (!mainCanvasVisible || !currentSlide || !currentHasHTML || currentState.status === 'error') return;
     void load(currentSlide, 'current').then(() => {
+      const deck = useDeckStore.getState();
+      if (useProjectStore.getState().activeProjectId !== projectId || (deck.currentSlideId && deck.currentSlideId !== currentSlide.id)
+        || deck.activeDocument || deck.previewMode !== 'main' || deck.globalView !== 'html' || deck.contentMode !== 'preview') return;
       const previous = slides[safePage - 1];
       const next = slides[safePage + 1];
       if (previous && hasRenderedHTML(previous)) void load(previous, 'prefetch');
       if (next && hasRenderedHTML(next)) void load(next, 'prefetch');
     });
-  }, [activeDocument, currentHasHTML, currentSlide, currentView, load, previewMode, safePage, slides]);
+  }, [mainCanvasVisible, currentHasHTML, currentSlide, currentState.status, load, projectId, safePage, slides]);
 
   useEffect(() => {
     const onFullscreenChange = () => setFullscreen(Boolean(canvasRef.current && document.fullscreenElement === canvasRef.current));

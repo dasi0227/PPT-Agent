@@ -8,13 +8,14 @@ export interface SelectionPresence {
 export interface RuntimeSlide {
   id: string;
   html: string;
+  resource_hash?: string;
   frame: import('./runtimeFrame').RuntimeFrameContext;
 }
 
 export type RuntimeEvent =
   | { type: 'runtimeReady' }
-  | { type: 'themeApplying' | 'themeApplied'; slide_id: string; appearance_hash: string }
-  | { type: 'themeApplyFailed'; slide_id: string; appearance_hash: string; message: string }
+  | { type: 'themeApplying' | 'themeApplied'; slide_id: string; appearance_hash: string; resource_hash: string }
+  | { type: 'themeApplyFailed'; slide_id: string; appearance_hash: string; resource_hash: string; message: string }
   | { type: 'renderError'; message: string; index?: number }
   | { type: 'selectionCreated'; session_id: string; slide_id: string; selection: import('../../api/types').DOMSelection }
   | { type: 'selectionCanceled'; session_id: string; slide_id: string }
@@ -81,7 +82,7 @@ export function parseRuntimeEvent(value: unknown): RuntimeEvent | null {
   if (!isRecord(value) || typeof value.type !== 'string') return null;
   if (value.type === 'runtimeReady') return { type: 'runtimeReady' };
   if (['themeApplying','themeApplied','themeApplyFailed'].includes(value.type)) {
-    return typeof value.slide_id === 'string' && typeof value.appearance_hash === 'string' && (value.type !== 'themeApplyFailed' || typeof value.message === 'string') ? value as RuntimeEvent : null;
+    return typeof value.slide_id === 'string' && typeof value.appearance_hash === 'string' && typeof value.resource_hash === 'string' && (value.type !== 'themeApplyFailed' || typeof value.message === 'string') ? value as RuntimeEvent : null;
   }
   if (value.type === 'selectionEmpty' || value.type === 'selectionRejected') {
     return isSessionMessage(value) && typeof value.message === 'string' ? value as RuntimeEvent : null;

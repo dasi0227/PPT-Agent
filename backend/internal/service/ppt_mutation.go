@@ -188,6 +188,7 @@ func (s *PPTMutationService) snapshot(ctx context.Context, projectID string) (sp
 				}
 				if frame, ok := spec.BuildRuntimeFrame(meta, outline, project.Decorations, out.Logo, id, slide, out.Appearance); ok {
 					out.Hashes["thumbnail:"+id] = slidepreview.Version(project.WorkDir, id, slidepreview.SourceKey(content.HTMLHash, frame))
+					out.Hashes["assets:"+id] = slidepreview.ResourceVersion(project.WorkDir, id)
 				}
 			}
 		} else if !errors.Is(htmlErr, fs.ErrNotExist) {
@@ -219,5 +220,13 @@ func (s *PPTMutationService) syncSlideIdentities(ctx context.Context, projectID,
 		slide.ProjectID = projectID
 		next = append(next, slide)
 	}
-	return s.store.ReplaceSlides(ctx, projectID, next)
+	if err := s.store.ReplaceSlides(ctx, projectID, next); err != nil {
+		return err
+	}
+	keep := make(map[string]bool, len(next))
+	for _, slide := range next {
+		keep[slide.ID] = true
+	}
+	slidepreview.Prune(workDir, keep)
+	return nil
 }
