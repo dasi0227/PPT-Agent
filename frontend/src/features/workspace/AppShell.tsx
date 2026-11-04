@@ -57,20 +57,19 @@ export const AppShell: React.FC = () => {
             <WorkspaceEmptyState />
           ) : (
             <PanelGroup
-              key={`group-${leftPanelHidden}-${rightPanelHidden}`}
               direction="horizontal"
               autoSaveId={`workspace-shell-v9-${leftPanelHidden ? 'noleft' : 'left'}-${rightPanelHidden ? 'noright' : 'right'}`}
             >
               {!leftPanelHidden && (
-                <>
+                <React.Fragment key="left">
                   <Panel id="left" order={1} defaultSize={layout.leftDefault} minSize={layout.leftMin} maxSize={26} collapsible={false} className="workspace-side-panel workspace-side-panel-left">
                     <DeckNavigator />
                   </Panel>
                   <PanelResizeHandle aria-label="调整左栏宽度" className="workspace-resize-handle" />
-                </>
+                </React.Fragment>
               )}
 
-              <Panel id="center" order={2} defaultSize={layout.centerDefault} minSize={layout.centerMin} className="bg-canvas flex flex-col">
+              <Panel key="center" id="center" order={2} defaultSize={layout.centerDefault} minSize={layout.centerMin} className="bg-canvas flex flex-col">
                 <PreviewWorkspace sidebarControls={{
                   leftHidden: leftPanelHidden,
                   rightHidden: rightPanelHidden,
@@ -82,7 +81,7 @@ export const AppShell: React.FC = () => {
               </Panel>
 
               {!rightPanelHidden && (
-                <>
+                <React.Fragment key="right">
                   <PanelResizeHandle aria-label="调整右栏宽度" className="workspace-resize-handle" />
                   <Panel
                     id="right"
@@ -95,7 +94,7 @@ export const AppShell: React.FC = () => {
                   >
                     <AgentPanel />
                   </Panel>
-                </>
+                </React.Fragment>
               )}
             </PanelGroup>
           )}

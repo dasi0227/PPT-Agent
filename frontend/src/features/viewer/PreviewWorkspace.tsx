@@ -47,6 +47,7 @@ function PreviewFrame({
   state,
   retry,
   title,
+  active,
   fullscreen = false,
   runtimeSlides,
   runtimeIndex,
@@ -65,6 +66,7 @@ function PreviewFrame({
   state: ResourceState<string>;
   retry: () => void;
   title: string;
+  active: boolean;
   fullscreen?: boolean;
   runtimeSlides?: RuntimeSlide[];
   runtimeIndex?: number;
@@ -97,6 +99,7 @@ function PreviewFrame({
       {deck.length > 0 && (
         <IsolatedSlidePreview
           keyboardShortcuts
+          active={active}
           slides={deck}
           index={deckIndex}
           className="h-full w-full border-0"
@@ -356,6 +359,8 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
     && !['creating', 'waiting', 'paused', 'recovering', 'canceling'].includes(runSession.status);
   const zoomEnabled = !activeDocument && contentMode === 'preview' && hasSlides && previewMode === 'main' && currentView === 'html' && currentHasHTML;
   const showStatusBar = !activeDocument && !fullscreen;
+  const mainCanvasVisible = !activeDocument && contentMode === 'preview' && previewMode === 'main' && currentView === 'html';
+  const overviewVisible = !activeDocument && previewMode === 'overview';
   const slideLayoutEnabled = !activeDocument && contentMode === 'preview' && previewMode === 'main' && currentView === 'html' && hasSlides && !fullscreen;
   const canvasPan = useCanvasPan({
     viewportRef: canvasRef,
@@ -561,18 +566,21 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
           <SlideSpecCard key={`${projectId}:${currentSlide.id}`} spec={currentSlide.spec}
             projectId={projectId ?? undefined} slideId={currentSlide.id} hash={snapshot?.hashes[`spec:${currentSlide.id}`]} sceneRevision={snapshot?.scene_revision}
             blocked={managementBlocked} error={specError ?? undefined} onRetry={() => { if (projectId) void loadProjectContent(projectId); }} />
-        ) : <div
+        ) : null}
+        <div
           ref={canvasRef}
           tabIndex={-1}
+          aria-hidden={!mainCanvasVisible || undefined}
+          {...(!mainCanvasVisible ? { inert: '' } : {})}
           data-fullscreen={fullscreen || undefined}
           className={cn(
-            'relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-canvas p-6 focus-visible:outline-none data-[fullscreen=true]:p-0',
+            'relative min-h-0 flex-1 items-center justify-center overflow-hidden bg-canvas p-6 focus-visible:outline-none data-[fullscreen=true]:p-0',
+            mainCanvasVisible ? 'flex' : 'hidden',
             canvasPan.canPan && 'touch-none select-none [&_iframe]:pointer-events-none',
             canvasPan.canPan && (canvasPan.dragging ? 'cursor-grabbing' : 'cursor-grab'),
           )}
           {...canvasPan.pointerHandlers}
         >
-          {previewMode === 'main' ? (
             <div
               ref={canvasPan.stageRef}
               data-testid="slide-preview-stage"
@@ -590,8 +598,10 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
                 <InlineNotice tone="info">请先从顶部项目 Tab 打开或新建项目。</InlineNotice>
               ) : !hasSlides ? (
                 <IllustratedEmptyState illustration="slides" label="暂无页面" />
-              ) : currentView === 'html' && currentHasHTML ? (
+              ) : currentHasHTML ? (
                 <PreviewFrame
+                  key={projectId}
+                  active={mainCanvasVisible}
                   slide={currentSlide}
                   state={currentState}
                   retry={() => void load(currentSlide, 'current')}
@@ -634,18 +644,19 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
                     });
                   }}
                 />
-              ) : currentView === 'html' ? (
+              ) : (
                 <div className="flex h-full w-full items-center justify-center rounded bg-surface shadow-canvas ring-1 ring-border">
                   <p className="text-sm text-text-400">幻灯片尚未生成</p>
                 </div>
-              ) : null}
+              )}
             </div>
-          ) : !hasSlides ? (
+        </div>
+        {overviewVisible && (!hasSlides ? (
             <div className="flex flex-1 items-center justify-center">
               <IllustratedEmptyState illustration="slides" label="暂无页面" />
             </div>
           ) : (
-            <div className="scrollbar-none absolute inset-0 overflow-y-auto p-6">
+            <div className="scrollbar-none relative min-h-0 flex-1 overflow-y-auto p-6">
               <div className="mx-auto grid max-w-6xl grid-cols-2 gap-5 md:grid-cols-3 lg:grid-cols-4">
                 {slides.map((slide, index) => (
                   <OverviewSlide
@@ -665,8 +676,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
                 ))}
               </div>
             </div>
-          )}
-        </div>}
+          ))}
       </div>
       {showStatusBar && <PreviewStatusBar
         view={globalView}

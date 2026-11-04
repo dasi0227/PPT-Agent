@@ -14,6 +14,7 @@ interface IsolatedSlidePreviewProps {
   title: string;
   className?: string;
   passive?: boolean;
+  active?: boolean;
   style?: React.CSSProperties;
   keyboardShortcuts?: boolean;
   selectionMode?: 'element' | 'region' | 'none';
@@ -33,6 +34,7 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
   title,
   className,
   passive = false,
+  active = true,
   style,
   keyboardShortcuts = false,
   selectionMode = 'none',
@@ -78,9 +80,9 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
     if (!activeSlideId) return;
     iframeRef.current?.contentWindow?.postMessage({
       type: 'setSelectionMode', session_id: sessionID, slide_id: activeSlideId,
-      mode: selectionSlide ? selectionMode : 'none', html_hash: selectionSlide?.hash ?? '',
+      mode: active && selectionSlide ? selectionMode : 'none', html_hash: selectionSlide?.hash ?? '',
     }, '*');
-    if (!selectionSlide) return;
+    if (!active || !selectionSlide) return;
     iframeRef.current?.contentWindow?.postMessage({
       type: 'renderDraftSelections', session_id: sessionID, slide_id: selectionSlide.id,
       selections: draftSelections.filter((item) => item.slide_id === selectionSlide.id).map((item) => ({
@@ -89,30 +91,33 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
     }, '*');
     const stale = draftSelections.filter((item) => item.slide_id === selectionSlide.id && (item.html_hash !== selectionSlide.hash));
     if (stale.length > 0) iframeRef.current?.contentWindow?.postMessage({ type: 'probeDraftSelections', session_id: sessionID, slide_id: selectionSlide.id, selections: stale }, '*');
-  }, [activeSlideId, draftSelections, selectionMode, selectionSlide, sessionID]);
+  }, [active, activeSlideId, draftSelections, selectionMode, selectionSlide, sessionID]);
 
   useEffect(() => {
     const frame = iframeRef.current;
-    if (!frame || typeof IntersectionObserver === 'undefined') return;
+    if (!frame) return;
+    const sendVisibility = (visible: boolean) => frame.contentWindow?.postMessage({ type: 'setPreviewVisibility', active: active && visible }, '*');
+    sendVisibility(active);
+    if (typeof IntersectionObserver === 'undefined') return;
     const observer = new IntersectionObserver(entries => {
-      frame.contentWindow?.postMessage({ type: 'setPreviewVisibility', active: entries.some(entry => entry.isIntersecting) }, '*');
+      sendVisibility(entries.some(entry => entry.isIntersecting));
     });
     observer.observe(frame);
     return () => observer.disconnect();
-  }, [runtimeVersion, runtimeReady]);
+  }, [active, runtimeVersion, runtimeReady]);
 
   useEffect(() => {
     if (!runtimeReady) return;
     iframeRef.current?.contentWindow?.postMessage({ type: 'setKeyboardShortcuts', mac: isMac(),
-      bindings: keyboardShortcuts && shortcutsReady ? Object.fromEntries(Object.entries(shortcutBindings).filter(([id]) => id.startsWith('deck.'))) : {},
+      bindings: active && keyboardShortcuts && shortcutsReady ? Object.fromEntries(Object.entries(shortcutBindings).filter(([id]) => id.startsWith('deck.'))) : {},
     }, '*');
-  }, [runtimeReady, runtimeVersion, keyboardShortcuts, shortcutsReady, shortcutBindings]);
+  }, [active, runtimeReady, runtimeVersion, keyboardShortcuts, shortcutsReady, shortcutBindings]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (event.source === iframeRef.current?.contentWindow && event.data?.type === 'shortcutRequested') {
         const id = event.data.id;
-        if (keyboardShortcuts && event.data.slide_id === activeSlideId && typeof id === 'string' && id.startsWith('deck.') && useShortcutStore.getState().bindings[id]) {
+        if (active && keyboardShortcuts && event.data.slide_id === activeSlideId && typeof id === 'string' && id.startsWith('deck.') && useShortcutStore.getState().bindings[id]) {
           window.dispatchEvent(new CustomEvent('ppt-deck-shortcut', { detail: id }));
         }
         return;
@@ -131,7 +136,7 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
         if (message.type === 'themeApplied' && activeSlideId && activeHTML !== undefined) {
           setDisplayedDocument({ id: activeSlideId, html: activeHTML });
         }
-        if (message.type === 'themeApplied' && selectionSlide) {
+        if (active && message.type === 'themeApplied' && selectionSlide) {
           sendSelectionState();
           const selections = draftSelections.filter(item => item.slide_id === selectionSlide.id && item.html_hash === selectionSlide.hash);
           if (selections.length) iframeRef.current?.contentWindow?.postMessage({type:'probeDraftSelections',session_id:sessionID,slide_id:selectionSlide.id,selections,refresh:true},'*');
@@ -139,6 +144,8 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
       } else if (message.type === 'renderError') {
         setRenderError(message.message);
         setThemeLoading(false);
+      } else if (!active) {
+        return;
       } else if (message.type === 'selectionCreated') {
         if (selectionMode !== 'none' && selectionSlide && message.session_id === sessionID && message.slide_id === selectionSlide.id
           && message.selection.slide_id === selectionSlide.id && message.selection.html_hash === selectionSlide.hash) onSelection?.(message.selection);
@@ -152,7 +159,7 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [keyboardShortcuts, activeHTML, activeSlideId, appearanceHash, draftSelections, onSelection, onSelectionCanceled, onSelectionMessage, onSelectionPresence, selectionMode, selectionSlide, sessionID, sendDeck, sendSelectionState]);
+  }, [active, keyboardShortcuts, activeHTML, activeSlideId, appearanceHash, draftSelections, onSelection, onSelectionCanceled, onSelectionMessage, onSelectionPresence, selectionMode, selectionSlide, sessionID, sendDeck, sendSelectionState]);
 
   useEffect(() => {
     setThemeError('');
@@ -180,13 +187,13 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
   useEffect(() => { sendSelectionState(); }, [sendSelectionState]);
 
   useEffect(() => {
-    if (!runtimeReady || !replayRequest || replayRequest.id === deliveredReplayRef.current) return;
+    if (!active || !runtimeReady || !replayRequest || replayRequest.id === deliveredReplayRef.current) return;
     deliveredReplayRef.current = replayRequest.id;
     iframeRef.current?.contentWindow?.postMessage({
       type: 'replayCurrentSlide',
       slide_id: replayRequest.slideId,
     }, '*');
-  }, [replayRequest, runtimeReady]);
+  }, [active, replayRequest, runtimeReady]);
 
   return (
     <div className="relative h-full w-full">
