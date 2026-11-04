@@ -5,8 +5,8 @@ import { Switch } from '../../components/ui/switch';
 import { useAgentSettingsStore } from '../../stores/agentSettingsStore';
 
 const fields: ReadonlyArray<readonly [Exclude<keyof AgentSettings, 'revision'>, string, string?]> = [
-  ['auto_rename_enabled', '开启自动命名'],
-  ['auto_suggest_enabled', '开启下一步推荐'],
+  ['auto_rename_enabled', '自动命名', '开启后，根据会话内容自动生成和更新会话名称。'],
+  ['auto_suggest_enabled', '下一步推荐', '开启后，根据当前会话和项目进展自动推荐下一步操作。'],
   ['show_tool_failures', '工具调用失败显示', '开启后，立即显示每次工具调用失败的原因。'],
   ['require_resource_approval', '全局参考编辑审批', '开启后，修改基本信息、全局约束和目录结构需手动审批。'],
   ['require_high_risk_approval', '高风险操作审批', '开启后，扩大修改范围需手动审批。'],

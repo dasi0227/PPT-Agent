@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
+import { RotateCcw } from 'lucide-react';
 import type { ProjectContentSnapshot, Slide } from '../../api/types';
-import { Button, Disclosure, InlineNotice, Skeleton } from '../../components/ui/primitives';
+import { Button, Disclosure, IconButton, InlineNotice, Skeleton } from '../../components/ui/primitives';
 import { IllustratedEmptyState } from '../../components/ui/IllustratedEmptyState';
 import { cn } from '../../lib/utils';
 import { useAppShortcuts } from '../../lib/useAppShortcuts';
@@ -335,6 +336,11 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
     zoom,
     pageKey: `${projectId}:${currentSlide?.id}`,
   });
+  const canResetView = zoomEnabled && !fullscreen && (zoom !== 1 || canvasPan.position.x !== 0 || canvasPan.position.y !== 0);
+  const resetView = useCallback(() => {
+    canvasPan.resetPosition();
+    setZoom(1);
+  }, [canvasPan.resetPosition]);
 
   const acceptSelection = useCallback(async (raw: DOMSelection) => {
     if (!projectId) return;
@@ -619,6 +625,13 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
                 </div>
               )}
             </div>
+          {canResetView && <IconButton
+            label="恢复默认"
+            onClick={resetView}
+            className="absolute left-1/2 top-4 z-10 -translate-x-1/2 rounded-full border border-border bg-panel"
+          >
+            <RotateCcw className="h-[18px] w-[18px]" strokeWidth={1.75} />
+          </IconButton>}
         </div>
         {overviewVisible && (!hasSlides ? (
             <div className="flex flex-1 items-center justify-center">

@@ -3,6 +3,7 @@ import { useCallback, useLayoutEffect, useRef, useState, type PointerEvent, type
 type Point = { x: number; y: number };
 type Bounds = { minX: number; maxX: number; minY: number; maxY: number };
 type StageLayout = { width: number; height: number; top: number };
+type StageGeometry = StageLayout & { zoom: number; focusY: number };
 const ORIGIN: Point = { x: 0, y: 0 };
 const NO_BOUNDS: Bounds = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
 
@@ -28,6 +29,7 @@ export function useCanvasPan({
   const [bounds, setBounds] = useState<Bounds>(NO_BOUNDS);
   const [stageLayout, setStageLayout] = useState<StageLayout>();
   const [dragging, setDragging] = useState(false);
+  const geometryRef = useRef<StageGeometry | null>(null);
   const dragRef = useRef<{ pointerId: number; client: Point; origin: Point } | null>(null);
   const canPan = enabled && !selectionActive && (bounds.minX < bounds.maxX || bounds.minY < bounds.maxY);
 
@@ -41,14 +43,21 @@ export function useCanvasPan({
     }
   }, [viewportRef]);
 
-  useLayoutEffect(() => {
+  const resetPosition = useCallback(() => {
+    stopDragging();
+    geometryRef.current = null;
     setPosition(ORIGIN);
-  }, [enabled, pageKey]);
+  }, [stopDragging]);
+
+  useLayoutEffect(() => {
+    resetPosition();
+  }, [enabled, pageKey, resetPosition]);
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
     const stage = stageRef.current;
     if (!layoutEnabled || !viewport || !stage) {
+      geometryRef.current = null;
       setBounds(NO_BOUNDS);
       setStageLayout(undefined);
       return;
@@ -72,14 +81,28 @@ export function useCanvasPan({
         ? value : { width, height, top });
       const scaledWidth = width * zoom;
       const scaledHeight = height * zoom;
-      const next: Bounds = enabled ? {
-        minX: Math.min(0, (viewport.clientWidth - scaledWidth) / 2),
-        maxX: Math.max(0, (scaledWidth - viewport.clientWidth) / 2),
-        minY: Math.min(0, viewport.clientHeight - top - scaledHeight / 2),
-        maxY: Math.max(0, scaledHeight / 2 - top),
+      const focusY = (paddingTop + viewport.clientHeight - paddingBottom) / 2;
+      const canMove = enabled && zoom > 1 && width > 0;
+      // Each slide edge can reach the viewport center, even without overflow.
+      const next: Bounds = canMove ? {
+        minX: -scaledWidth / 2,
+        maxX: scaledWidth / 2,
+        minY: Math.min(0, focusY - top - scaledHeight / 2),
+        maxY: Math.max(0, focusY - top + scaledHeight / 2),
       } : NO_BOUNDS;
+      const previous = geometryRef.current;
+      geometryRef.current = width > 0 ? { width, height, top, zoom, focusY } : null;
       setBounds(next);
-      setPosition((value) => clampPosition(value, next));
+      setPosition((value) => {
+        if (!canMove) return ORIGIN;
+        if (!previous) return clampPosition(value, next);
+        // Keep the same slide point under the viewport center while scaling or resizing.
+        const ratio = scaledWidth / (previous.width * previous.zoom);
+        return clampPosition({
+          x: value.x * ratio,
+          y: focusY - top - (previous.focusY - previous.top - value.y) * ratio,
+        }, next);
+      });
       stopDragging();
     };
     measure();
@@ -105,6 +128,7 @@ export function useCanvasPan({
     stageRef,
     stageLayout,
     position,
+    resetPosition,
     canPan,
     dragging,
     pointerHandlers: {
