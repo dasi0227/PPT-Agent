@@ -49,6 +49,7 @@ function PreviewFrame({
   retry,
   title,
   active,
+  snapshot,
   fullscreen = false,
   runtimeSlides,
   runtimeIndex,
@@ -68,6 +69,7 @@ function PreviewFrame({
   retry: () => void;
   title: string;
   active: boolean;
+  snapshot: ProjectContentSnapshot;
   fullscreen?: boolean;
   runtimeSlides?: RuntimeSlide[];
   runtimeIndex?: number;
@@ -82,6 +84,9 @@ function PreviewFrame({
   onSelectionPresence?: (statuses: import('./previewProtocol').SelectionPresence[]) => void;
   replayRequest?: { id: number; slideId: string };
 }) {
+  const [displayedKey, setDisplayedKey] = useState<string>();
+  const displayKey = `${slide.id}:${slide.html_hash}`;
+  const onDisplayChange = useCallback((displayed: boolean) => setDisplayedKey(displayed ? displayKey : undefined), [displayKey]);
   const visibleHtml = visibleHTML(state);
   const deck = runtimeSlides && runtimeIndex !== undefined && runtimeIndex >= 0
     ? runtimeSlides
@@ -101,6 +106,7 @@ function PreviewFrame({
         <IsolatedSlidePreview
           keyboardShortcuts
           active={active}
+          onDisplayChange={onDisplayChange}
           slides={deck}
           index={deckIndex}
           className="h-full w-full border-0"
@@ -128,6 +134,9 @@ function PreviewFrame({
         <div className="absolute right-3 top-3 rounded-md border border-accent/20 bg-panel/95 px-2 py-1 text-xs text-accent shadow-overlay">
           页面正在更新
         </div>
+      )}
+      {active && displayedKey !== displayKey && (
+        <SlideThumbnail slide={slide} snapshot={snapshot} cachedOnly className="pointer-events-none absolute inset-0 h-full" />
       )}
       {state.status === 'error' && (
         <InlineNotice tone="danger" className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-3 bg-danger-soft/95">
@@ -560,6 +569,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
                 <PreviewFrame
                   key={projectId}
                   active={mainCanvasVisible}
+                  snapshot={snapshot!}
                   slide={currentSlide}
                   state={currentState}
                   retry={() => void load(currentSlide, 'current')}

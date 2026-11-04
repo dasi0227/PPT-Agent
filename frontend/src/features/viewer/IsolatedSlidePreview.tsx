@@ -15,6 +15,7 @@ interface IsolatedSlidePreviewProps {
   className?: string;
   passive?: boolean;
   active?: boolean;
+  onDisplayChange?: (displayed: boolean) => void;
   style?: React.CSSProperties;
   keyboardShortcuts?: boolean;
   selectionMode?: 'element' | 'region' | 'none';
@@ -35,6 +36,7 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
   className,
   passive = false,
   active = true,
+  onDisplayChange,
   style,
   keyboardShortcuts = false,
   selectionMode = 'none',
@@ -62,6 +64,7 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
   const activeSlideId = slides[index]?.id;
   const activeHTML = slides[index]?.html;
   const hasDisplay = displayedDocument?.id === activeSlideId && displayedDocument?.html === activeHTML;
+  useEffect(() => { onDisplayChange?.(hasDisplay); }, [hasDisplay, onDisplayChange]);
   const selectionHash = selectionSlide?.hash;
   // A response from an older displayed artifact must not reach the composer,
   // including presence probes that do not carry a hash themselves.

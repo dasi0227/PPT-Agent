@@ -36,6 +36,17 @@ func Hash(raw []byte) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
+var versionedFontsCSS = sync.OnceValue(func() []byte {
+	urls := regexp.MustCompile(`url\("(fonts/[^"/]+\.ttf)"\)`)
+	return urls.ReplaceAllFunc(mustRead("fonts.css"), func(source []byte) []byte {
+		name := string(urls.FindSubmatch(source)[1])
+		version := strings.TrimPrefix(Hash(mustRead(name)), "sha256:")
+		return []byte(`url("` + name + `?v=` + version + `")`)
+	})
+})
+
+func VersionedFontsCSS() []byte { return versionedFontsCSS() }
+
 var resourcesHash = sync.OnceValue(func() string {
 	h := sha256.New()
 	_ = fs.WalkDir(files, ".", func(path string, entry fs.DirEntry, err error) error {

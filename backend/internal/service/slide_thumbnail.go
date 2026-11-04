@@ -86,7 +86,7 @@ func (svc *SlideService) thumbnailInput(ctx context.Context, project model.Proje
 		version: slidepreview.Version(project.WorkDir, slideID, key), themeCSS: themeCSS}, nil
 }
 
-func (svc *SlideService) Thumbnail(ctx context.Context, slideID, expectedVersion string) ([]byte, error) {
+func (svc *SlideService) Thumbnail(ctx context.Context, slideID, expectedVersion string, generate bool) ([]byte, error) {
 	slide, err := svc.store.GetSlide(ctx, slideID)
 	if err != nil {
 		return nil, err
@@ -111,6 +111,9 @@ func (svc *SlideService) Thumbnail(ctx context.Context, slideID, expectedVersion
 	_, raw, err := read()
 	if err != nil || raw != nil {
 		return raw, err
+	}
+	if !generate {
+		return nil, slidepreview.ErrUnavailable
 	}
 	// One thumbnail job at a time leaves shared render capacity for authoring/export.
 	select {

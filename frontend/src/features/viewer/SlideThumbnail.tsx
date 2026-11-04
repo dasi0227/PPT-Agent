@@ -5,10 +5,11 @@ import { Skeleton } from '../../components/ui/primitives';
 import { cn } from '../../lib/utils';
 import { hasRenderedHTML } from './useSlideRenderCache';
 
-export function SlideThumbnail({ slide, snapshot, className }: {
+export function SlideThumbnail({ slide, snapshot, className, cachedOnly = false }: {
   slide: Slide;
   snapshot: ProjectContentSnapshot;
   className?: string;
+  cachedOnly?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
@@ -16,7 +17,7 @@ export function SlideThumbnail({ slide, snapshot, className }: {
   const [failedURL, setFailedURL] = useState('');
   const version = snapshot.hashes[`thumbnail:${slide.id}`];
   const url = version
-    ? `/api/v1/slides/${encodeURIComponent(slide.id)}/thumbnail?v=${encodeURIComponent(version)}`
+    ? `/api/v1/slides/${encodeURIComponent(slide.id)}/thumbnail?v=${encodeURIComponent(version)}${cachedOnly ? '&cached=1' : ''}`
     : '';
 
   useEffect(() => {
@@ -39,12 +40,12 @@ export function SlideThumbnail({ slide, snapshot, className }: {
   const ready = Boolean(url) && loadedURL === url;
   const failed = Boolean(url) && failedURL === url;
   return (
-    <div ref={ref} className={cn('relative aspect-video w-full min-w-0 overflow-hidden bg-surface', className)} aria-busy={hasRenderedHTML(slide) && !ready && !failed}>
-      {!hasRenderedHTML(slide) ? (
+    <div ref={ref} className={cn('relative aspect-video w-full min-w-0 overflow-hidden', !cachedOnly && 'bg-surface', className)} aria-busy={!cachedOnly && hasRenderedHTML(slide) && !ready && !failed}>
+      {!cachedOnly && (!hasRenderedHTML(slide) ? (
         <div className="flex h-full items-center justify-center text-[10px] font-normal text-text-400">未生成</div>
       ) : failed ? (
         <div className="flex h-full items-center justify-center text-text-400"><ImageOff className="h-4 w-4" aria-hidden="true" /></div>
-      ) : !ready && <Skeleton className="absolute inset-0 h-full w-full rounded-none" />}
+      ) : !ready && <Skeleton className="absolute inset-0 h-full w-full rounded-none" />)}
       {visible && url && (
         <img
           key={url}

@@ -128,10 +128,22 @@ func (h *RepositoryHandler) RuntimeFont(c *gin.Context) {
 	h.runtimeResource(c, "fonts/"+path.Base(c.Param("name")))
 }
 func (h *RepositoryHandler) runtimeResource(c *gin.Context, name string) {
+	c.Header("Cache-Control", "no-store")
 	raw, err := runtimeassets.Read(name)
 	if err != nil {
 		c.Status(http.StatusNotFound)
 		return
+	}
+	if name == "fonts.css" {
+		raw = runtimeassets.VersionedFontsCSS()
+	}
+	immutable := false
+	if version := c.Query("v"); version != "" {
+		if version != strings.TrimPrefix(runtimeassets.Hash(raw), "sha256:") {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		immutable = true
 	}
 	contentType := "text/plain; charset=utf-8"
 	switch path.Ext(name) {
@@ -143,7 +155,7 @@ func (h *RepositoryHandler) runtimeResource(c *gin.Context, name string) {
 		contentType = "font/ttf"
 	}
 	c.Header("Access-Control-Allow-Origin", "*")
-	serveRuntimeResource(c, contentType, raw, false)
+	serveRuntimeResource(c, contentType, raw, immutable)
 }
 func (h *RepositoryHandler) RuntimeExample(c *gin.Context) {
 	name := c.Param("name")

@@ -72,6 +72,7 @@ func (h *ProjectHandler) Logo(c *gin.Context) {
 }
 
 func (h *ProjectHandler) LogoContent(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	logo, raw, err := h.svc.LogoContent(c.Request.Context(), c.Param("id"))
 	if err != nil {
 		handleAppearanceError(c, err)
@@ -81,10 +82,12 @@ func (h *ProjectHandler) LogoContent(c *gin.Context) {
 		AbortWithError(c, ErrNotFound("logo image has changed"))
 		return
 	}
-	c.Header("Cache-Control", "private, no-store")
+	cacheControl := "private, no-cache"
+	if c.Query("v") != "" {
+		cacheControl = "private, max-age=31536000, immutable"
+	}
 	c.Header("X-Content-Type-Options", "nosniff")
-	c.Header("ETag", `"`+logo.Hash+`"`)
-	c.Data(http.StatusOK, logo.MediaType, raw)
+	serveCachedResource(c, logo.MediaType, raw, cacheControl)
 }
 
 func (h *ProjectHandler) DeleteLogo(c *gin.Context) {

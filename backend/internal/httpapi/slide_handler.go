@@ -17,12 +17,13 @@ type SlideHandler struct {
 }
 
 func (h *SlideHandler) Thumbnail(c *gin.Context) {
-	c.Header("Cache-Control", "private, no-cache")
+	c.Header("Cache-Control", "no-store")
 	if c.Query("v") == "" {
 		AbortWithError(c, ErrBadRequest("thumbnail version is required"))
 		return
 	}
-	raw, err := h.svc.Thumbnail(c.Request.Context(), c.Param("id"), c.Query("v"))
+	generate := c.Query("cached") != "1"
+	raw, err := h.svc.Thumbnail(c.Request.Context(), c.Param("id"), c.Query("v"), generate)
 	switch {
 	case err == nil:
 		c.Header("X-Content-Type-Options", "nosniff")
@@ -32,6 +33,10 @@ func (h *SlideHandler) Thumbnail(c *gin.Context) {
 	case errors.Is(err, service.ErrSlideHTMLChanged):
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: model.CodeContentConflict, Message: "页面内容已更新，请重新加载。"})
 	case errors.Is(err, slidepreview.ErrUnavailable):
+		if !generate {
+			c.Status(http.StatusNotFound)
+			return
+		}
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusServiceUnavailable, Code: "PREVIEW_UNAVAILABLE", Message: "页面预览暂不可用。"})
 	default:
 		AbortWithError(c, ErrInternal(err.Error()))
@@ -46,12 +51,12 @@ func NewSlideHandler(svc *service.SlideService) *SlideHandler {
 // 使用稳定的 slide_id 定位页面，避免暴露任意文件路径。
 // 可选 expected_hash 校验源文件；未找到 → 404；内容已变 → 409。
 func (h *SlideHandler) RenderSlide(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	raw, err := h.svc.ReadHTML(c.Request.Context(), c.Param("id"), c.Query("expected_hash"))
 	switch {
 	case err == nil:
-		c.Header("Cache-Control", "no-store")
 		c.Header("X-Content-Type-Options", "nosniff")
-		c.Data(http.StatusOK, "text/html; charset=utf-8", raw)
+		serveCachedResource(c, "text/html; charset=utf-8", raw, "private, no-cache")
 	case errors.Is(err, gorm.ErrRecordNotFound):
 		AbortWithError(c, ErrNotFound("slide not found"))
 	case errors.Is(err, service.ErrSlideHTMLMissing):
