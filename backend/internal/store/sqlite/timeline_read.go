@@ -54,7 +54,9 @@ func readGroupItems(tx *gorm.DB, head sessionHead, groupID string, before *sessi
 		if err != nil {
 			return page, err
 		}
-		if len(raw)+1 > remaining {
+		// A nonempty page must advance even when its first record exceeds the
+		// byte budget. Keep that record whole and defer subsequent records.
+		if len(raw)+1 > remaining && keep > 0 {
 			page.HasMore = true
 			break
 		}
@@ -100,7 +102,9 @@ func readTimeline(tx *gorm.DB, head sessionHead, before *sessionstate.PageCursor
 			return page, err
 		}
 		cost := len(raw) + 512
-		if cost > remainingBytes {
+		// Group summaries can also exceed the budget; retain the first one so
+		// the history cursor can advance and its items remain reachable.
+		if cost > remainingBytes && len(selectedGroups) > 0 {
 			page.HasMore = true
 			break
 		}
