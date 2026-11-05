@@ -85,7 +85,7 @@ initialize_project() {
     mkdir -p "$WORK_ROOT" || exit 1
     touch "$WORK_ROOT/.desktop-initializing" || exit 1
     cd "$BACKEND_DIR" || exit 1
-    go run ./cmd/init-resources --work-root "$WORK_ROOT" --seed-root "$BACKEND_DIR/seed" || exit 1
+    go run ./cmd/init-resources --seed-root "$BACKEND_DIR/seed" || exit 1
     rm -f "$WORK_ROOT/.desktop-initializing"
   ) >"$LOG_DIR/init-resources.log" 2>&1; then
     print_result "$STEP_2" '❌' '初始化失败（日志:tmp/run/init-resources.log）'

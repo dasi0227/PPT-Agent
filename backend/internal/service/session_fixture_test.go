@@ -23,7 +23,7 @@ type serviceFixture struct {
 func newServiceFixture(t *testing.T) serviceFixture {
 	t.Helper()
 	root := t.TempDir()
-	db, cleanup, err := sqlitestore.Open(&config.Config{WorkRoot: root, DBPath: filepath.Join(root, "test.db")}, zap.NewNop())
+	db, cleanup, err := sqlitestore.Open(&config.RuntimeConfig{WorkRoot: root, DBPath: filepath.Join(root, "test.db")}, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}

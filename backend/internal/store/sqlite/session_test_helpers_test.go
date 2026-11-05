@@ -67,7 +67,7 @@ func conversationMessageForTest(t *testing.T, s *Store, runID, text string, publ
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
 	root := t.TempDir()
-	cfg := &config.Config{WorkRoot: root, DBPath: filepath.Join(root, "test.db")}
+	cfg := &config.RuntimeConfig{WorkRoot: root, DBPath: filepath.Join(root, "test.db")}
 	db, cleanup, err := Open(cfg, zap.NewNop())
 	if err != nil {
 		t.Fatalf("open: %v", err)

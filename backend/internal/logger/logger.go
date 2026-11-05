@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -11,7 +12,7 @@ import (
 )
 
 // New 返回结构化 zap logger 及其 flush 清理函数。
-func New(cfg *config.Config) (*zap.Logger, func(), error) {
+func New(cfg *config.RuntimeConfig) (*zap.Logger, func(), error) {
 	level, err := parseLevel(cfg)
 	if err != nil {
 		return nil, nil, err
@@ -32,14 +33,14 @@ func New(cfg *config.Config) (*zap.Logger, func(), error) {
 	}, nil
 }
 
-func parseLevel(cfg *config.Config) (zapcore.Level, error) {
-	raw := "debug"
-	if cfg != nil && strings.TrimSpace(cfg.LogLevel) != "" {
-		raw = strings.TrimSpace(cfg.LogLevel)
-	}
+func parseLevel(cfg *config.RuntimeConfig) (zapcore.Level, error) {
+	raw := strings.TrimSpace(cfg.App.LogLevel)
 	var level zapcore.Level
+	if raw == "" {
+		return zapcore.InfoLevel, errors.New("app.log_level is required")
+	}
 	if err := level.Set(raw); err != nil {
-		return zapcore.InfoLevel, fmt.Errorf("invalid LOG_LEVEL %q: %w", raw, err)
+		return zapcore.InfoLevel, fmt.Errorf("invalid app.log_level %q: %w", raw, err)
 	}
 	return level, nil
 }

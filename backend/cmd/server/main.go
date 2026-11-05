@@ -37,11 +37,11 @@ type App struct {
 
 const shutdownTimeout = 8 * time.Second
 
-var workRootFlag = flag.String("work-root", "", "使用指定的新工作目录；省略时使用默认目录")
 var frontendDirFlag = flag.String("frontend-dir", "", "提供已构建的前端文件")
 var desktopFlag = flag.Bool("desktop", false, "跟随桌面父进程退出，并输出就绪地址")
 var printAddressFlag = flag.String("print-address", "", "打印指定配置文件的监听地址后退出")
 
+// main 是后端服务的程序入口，解析命令行参数，并统一处理启动和运行错误。
 func main() {
 	flag.Parse()
 	if err := serve(); err != nil {
@@ -50,7 +50,9 @@ func main() {
 	}
 }
 
+// serve 管理服务的完整生命周期：加载配置、独占工作目录、组装依赖、恢复状态、监听请求和关闭。
 func serve() error {
+	// 开发脚本和前端代理只需读取监听地址时，直接退出，不打开数据库或启动服务。
 	if *printAddressFlag != "" {
 		cfg, err := config.LoadFile(*printAddressFlag)
 		if err != nil {
@@ -64,10 +66,10 @@ func serve() error {
 	ctx, cancel := context.WithCancel(signalCtx)
 	defer cancel()
 	if *desktopFlag {
+		// 桌面父进程退出并关闭标准输入后，触发与退出信号相同的收尾流程。
 		go func() {
 			_, _ = io.Copy(io.Discard, os.Stdin)
-			// Keep signal handlers installed during cleanup. Electron also sends
-			// TERM; unregistering here could make that signal abort persistence.
+			// 收尾期间仍保留信号处理；Electron 也会发送 TERM，不能让它中断状态保存。
 			cancel()
 		}()
 	}
@@ -78,6 +80,7 @@ func serve() error {
 	if err := os.MkdirAll(cfg.WorkRoot, 0700); err != nil {
 		return err
 	}
+	// 同一工作目录只允许一个服务或资源初始化进程使用，避免并发修改数据。
 	lock, err := os.OpenFile(filepath.Join(cfg.WorkRoot, ".server.lock"), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return err
@@ -87,20 +90,20 @@ func serve() error {
 		return fmt.Errorf("工作目录正在被另一个 PPT-Agent 服务使用: %w", err)
 	}
 	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
-	// Reserve the address before recovery or any database changes. A development
-	// server using this address must be stopped, never silently adopted or killed.
+	// 先占用端口，再恢复状态或修改数据库；端口冲突时要求先退出已有服务。
 	listener, err := net.Listen("tcp", cfg.WorkAddr)
 	if err != nil {
 		return fmt.Errorf("无法监听 %s，请先退出占用端口的开发服务: %w", cfg.WorkAddr, err)
 	}
 	defer listener.Close()
+	// initApp 的实际实现位于 wire_gen.go，按依赖关系创建数据库、服务、路由等对象。
 	app, cleanup, err := initApp(cfg)
 	if err != nil {
 		return err
 	}
+	// 最终关闭数据库等底层资源；正常退出时先由 app.shutdown 保存运行状态。
 	defer cleanup()
-	// HTTP streams and requests have a service lifetime. Run execution owns its
-	// own context so its durable pause is saved before the worker is canceled.
+	// HTTP 请求与 Agent 执行使用独立的取消上下文，避免断开请求时提前中断运行状态保存。
 	requestCtx, cancelRequests := context.WithCancel(context.Background())
 	defer cancelRequests()
 	app.server.BaseContext = func(net.Listener) context.Context { return requestCtx }
@@ -110,6 +113,7 @@ func serve() error {
 			return err
 		}
 	}
+	// 接收请求前，先恢复上次中断的项目文件变更，避免用户读到未完成的修改。
 	recoveryCtx, cancelRecovery := context.WithTimeout(ctx, 30*time.Second)
 	if err := app.runs.RecoverAllProjectMutations(recoveryCtx); err != nil {
 		cancelRecovery()
@@ -119,6 +123,7 @@ func serve() error {
 	stopSessionMaintenance := startSessionMaintenance(ctx, app.pruneSessionChanges, app.log)
 	defer stopSessionMaintenance()
 
+	// 后台处理 HTTP 请求，主流程等待退出信号或监听错误。
 	serverError := make(chan error, 1)
 	go func() {
 		app.log.Info("server starting", zap.String("addr", app.server.Addr))
@@ -135,16 +140,18 @@ func serve() error {
 		}
 	}
 
+	// 退出信号已取消 ctx，因此另建上下文，为保存状态和释放资源提供统一的收尾时间。
 	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancelShutdown()
 	stopSessionMaintenance()
 	return errors.Join(err, app.shutdown(shutdownCtx, cancelRequests))
 }
 
+// shutdown 在关闭底层资源前保存运行的暂停状态，并停止后台任务、导出、命令及 HTTP 服务。
 func (a *App) shutdown(ctx context.Context, cancelRequests context.CancelFunc) error {
 	started := time.Now()
 	a.log.Info("server shutting down")
-	cancelRequests() // SSE handlers must return before HTTP Shutdown can finish.
+	cancelRequests() // 先结束 SSE 等长连接，否则 HTTP Shutdown 会一直等待请求返回。
 	a.stopBackground()
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -160,6 +167,7 @@ func (a *App) shutdown(ctx context.Context, cancelRequests context.CancelFunc) e
 			}
 		}()
 	}
+	// 各模块并行停止，共用上面的收尾期限；PauseAll 负责持久化暂停状态。
 	stop("pause runs", func(ctx context.Context) error { return a.engine.PauseAll(ctx, "server_shutdown") })
 	stop("stop exports", a.shutdownExports)
 	stop("stop commands", a.shutdownCommands)
@@ -171,8 +179,7 @@ func (a *App) shutdown(ctx context.Context, cancelRequests context.CancelFunc) e
 		return nil
 	})
 	wg.Wait()
-	// Runs and exports no longer need the browser. Its close uses the remaining
-	// budget instead of starting another independent shutdown timeout.
+	// 等运行和导出停止后再关闭渲染器，仍使用同一个收尾期限。
 	if err := a.shutdownRenderer(ctx); err != nil {
 		failures = append(failures, fmt.Errorf("stop renderer: %w", err))
 	}

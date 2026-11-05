@@ -22,7 +22,7 @@ type Router struct {
 	history       *projecthistory.Manager
 	source        *service.SlideSourceService
 	engine        *gin.Engine
-	cfg           *config.Config
+	cfg           *config.RuntimeConfig
 	log           *zap.Logger
 	health        *HealthHandler
 	run           *RunHandler
@@ -70,7 +70,7 @@ func (r *Router) registerExport() {
 	v1.DELETE("/exports/:id", r.export.Cancel)
 }
 
-func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, projectH *ProjectHandler, threadH *ThreadHandler, slideH *SlideHandler, repositoryH *RepositoryHandler, llmH *LLMHandler, polishH *PolishHandler, briefingH *BriefingHandler, gitCommitH *GitCommitHandler, resourceH *ResourceHandler, contextWindowH *ContextWindowHandler, attachmentH ...*AttachmentHandler) *Router {
+func NewRouter(cfg *config.RuntimeConfig, log *zap.Logger, health *HealthHandler, runH *RunHandler, projectH *ProjectHandler, threadH *ThreadHandler, slideH *SlideHandler, repositoryH *RepositoryHandler, llmH *LLMHandler, polishH *PolishHandler, briefingH *BriefingHandler, gitCommitH *GitCommitHandler, resourceH *ResourceHandler, contextWindowH *ContextWindowHandler, attachmentH ...*AttachmentHandler) *Router {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	engine.Use(RequestID(), RecoverWithZap(log), LogWithZap(log))

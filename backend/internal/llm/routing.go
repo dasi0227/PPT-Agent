@@ -53,7 +53,7 @@ func (r *Registry) RoutedProfile(purpose, selected string) (Profile, error) {
 	}
 	first, backup := selected, r.routing.Main.Fallback
 	if purpose != "main" {
-		value, known := r.routing.Side.Uses()[purpose]
+		value, known := r.routing.Side.ModelsByPurpose()[purpose]
 		// Standalone chat uses the existing side-road default and fallback.
 		if !known && purpose != "reply" {
 			return Profile{}, errors.New("unknown model purpose")

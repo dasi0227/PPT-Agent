@@ -39,7 +39,7 @@ func setupProjectThreadServer(t *testing.T) (*httptest.Server, string) {
 func setupProjectThreadServerWithFactory(t *testing.T, factory service.ExecutionFactory) (*httptest.Server, string) {
 	t.Helper()
 	root := t.TempDir()
-	cfg := &config.Config{DBPath: filepath.Join(root, "api.db"), WorkRoot: root}
+	cfg := &config.RuntimeConfig{DBPath: filepath.Join(root, "api.db"), WorkRoot: root}
 	db, cleanup, err := sqlitestore.Open(cfg, zap.NewNop())
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)

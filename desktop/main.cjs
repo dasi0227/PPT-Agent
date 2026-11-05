@@ -97,7 +97,7 @@ async function initializeResources(resources, workRoot, env) {
   if (quitting) return;
   initializer = new BackendProcess({
     executable: path.join(resources, 'bin', 'init-resources'),
-    args: ['--work-root', workRoot, '--seed-root', path.join(resources, 'seed')],
+    args: ['--seed-root', path.join(resources, 'seed')],
     cwd: app.getPath('userData'), env, log: backendLog,
   });
   try {
@@ -143,7 +143,7 @@ async function start() {
   if (quitting) return;
   backend = new BackendProcess({
     executable: path.join(resources, 'bin', 'ppt-agent-server'),
-    args: ['--desktop', '--work-root', workRoot, '--frontend-dir', path.join(resources, 'frontend')],
+    args: ['--desktop', '--frontend-dir', path.join(resources, 'frontend')],
     cwd: userData, env, log: backendLog,
   });
   origin = await backend.waitReady();

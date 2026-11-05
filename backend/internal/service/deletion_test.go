@@ -16,7 +16,7 @@ import (
 func TestDeletionWorkerRecoversRemainingWindowAfterRestart(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
-	db, cleanup, err := sqlite.Open(&config.Config{WorkRoot: root, DBPath: filepath.Join(root, "test.db")}, zap.NewNop())
+	db, cleanup, err := sqlite.Open(&config.RuntimeConfig{WorkRoot: root, DBPath: filepath.Join(root, "test.db")}, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}

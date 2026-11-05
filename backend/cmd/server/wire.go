@@ -16,11 +16,14 @@ import (
 	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
 )
 
-// providerSet 声明全部 provider；wire 在编译期据此生成装配代码。
+// 本文件仅在 Wire 生成代码时通过 wireinject 构建标签启用，正常构建使用 wire_gen.go。
+
+// providerSet 列出对象创建函数，Wire 根据参数和返回类型推导创建顺序，生成依赖装配代码。
 var providerSet = wire.NewSet(
 	logger.New,
 	sqlitestore.Open,
 	persistence.NewStore,
+	// 同一个 SQLite Store 分别满足业务存储接口和运行引擎的存储接口。
 	wire.Bind(new(store.Store), new(*sqlitestore.Store)),
 	wire.Bind(new(run.Store), new(*sqlitestore.Store)),
 	provideLLMRegistry,
@@ -69,6 +72,7 @@ var providerSet = wire.NewSet(
 	provideApp,
 )
 
-func initApp(cfg *config.Config) (*App, func(), error) {
+// initApp 根据配置装配应用，并返回失败或退出时释放资源的 cleanup 函数。
+func initApp(cfg *config.RuntimeConfig) (*App, func(), error) {
 	panic(wire.Build(providerSet))
 }

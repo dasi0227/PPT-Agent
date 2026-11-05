@@ -9,7 +9,6 @@ require (
 	github.com/glebarez/sqlite v1.11.0
 	github.com/google/uuid v1.6.0
 	github.com/google/wire v0.7.0
-	github.com/openai/openai-go/v3 v3.73.0
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/tiktoken-go/tokenizer v0.8.1

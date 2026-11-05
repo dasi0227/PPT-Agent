@@ -62,7 +62,7 @@ type ModelConfigManager struct {
 	path          string
 	diskHash      [32]byte
 	config        config.LLMConfig
-	fileConfig    config.FileConfig
+	fileConfig    config.RuntimeConfig
 	current       *Registry
 	agentRevision string
 }
@@ -76,16 +76,12 @@ func NewConfiguredRegistry(path string, cfg config.LLMConfig) (*Registry, error)
 	if err != nil {
 		return nil, errors.New("read model configuration failed")
 	}
-	fileConfig, err := config.ParseFileConfig(raw)
+	fileConfig, err := config.Parse(raw)
 	if err != nil {
 		return nil, err
 	}
-	cfg = fileConfig.LLMConfig
+	cfg = fileConfig.LLM
 	snapshot, err := buildSnapshot(cfg)
-	if err != nil {
-		return nil, err
-	}
-	snapshot.decision, err = decision.NewSnapshot(fileConfig.Decision)
 	if err != nil {
 		return nil, err
 	}
@@ -110,6 +106,10 @@ func buildSnapshot(cfg config.LLMConfig) (*Registry, error) {
 	digest := sha256.Sum256(raw)
 	r.revision = uuid.NewString()
 	r.routing = RoadConfig{Main: cfg.MainRoad, Side: cfg.SideRoad, Fingerprint: hex.EncodeToString(digest[:])}
+	r.decision, err = decision.NewSnapshot(cfg.Jev)
+	if err != nil {
+		return nil, err
+	}
 	return r, nil
 }
 func (r *Registry) Snapshot() *Registry {
@@ -147,18 +147,14 @@ func (r *Registry) ReloadSettings() (ModelSettings, error) {
 	if digest == m.diskHash {
 		return m.public(), nil
 	}
-	fileConfig, err := config.ParseFileConfig(raw)
-	cfg := fileConfig.LLMConfig
+	fileConfig, err := config.Parse(raw)
 	if err != nil {
 		return ModelSettings{}, settingsError("SETTINGS_INVALID", "配置文件无效，原设置仍然有效："+err.Error())
 	}
+	cfg := fileConfig.LLM
 	next, err := buildSnapshot(cfg)
 	if err != nil {
 		return ModelSettings{}, settingsError("SETTINGS_INVALID", "无法加载配置，原设置仍然有效："+err.Error())
-	}
-	next.decision, err = decision.NewSnapshot(fileConfig.Decision)
-	if err != nil {
-		return ModelSettings{}, settingsError("SETTINGS_INVALID", "Decision 配置无效")
 	}
 	if next.routing.Fingerprint == m.current.routing.Fingerprint {
 		next.revision = m.current.revision
@@ -193,7 +189,8 @@ func (r *Registry) SaveSettings(edit SettingsEdit) (ModelSettings, error) {
 	for _, p := range m.config.Profiles {
 		old[p.Name] = p
 	}
-	cfg := config.LLMConfig{MainRoad: edit.Main, SideRoad: edit.Side}
+	// 前端只编辑模型与路由，JEV 配置始终保留在服务端，随整个 llm 块一起写回。
+	cfg := config.LLMConfig{MainRoad: edit.Main, SideRoad: edit.Side, Jev: m.config.Jev}
 	for i, p := range edit.Profiles {
 		previous, exists := old[p.PreviousName]
 		if p.PreviousName != "" && (!exists || used[p.PreviousName]) {
@@ -214,8 +211,7 @@ func (r *Registry) SaveSettings(edit SettingsEdit) (ModelSettings, error) {
 		return ModelSettings{}, settingsError("SETTINGS_INVALID", err.Error())
 	}
 	fileConfig := m.fileConfig
-	fileConfig.LLMConfig = cfg
-	next.decision = m.current.decision
+	fileConfig.LLM = cfg
 	if err := m.writeFileConfig(fileConfig); err != nil {
 		return ModelSettings{}, err
 	}
@@ -226,7 +222,7 @@ func (r *Registry) SaveSettings(edit SettingsEdit) (ModelSettings, error) {
 
 // All settings share the same lock and atomic file writer so independent edits
 // preserve each other's fields and never expose unsaved values to running work.
-func (m *ModelConfigManager) writeFileConfig(fileConfig config.FileConfig) error {
+func (m *ModelConfigManager) writeFileConfig(fileConfig config.RuntimeConfig) error {
 	raw, err := os.ReadFile(m.path)
 	if err != nil {
 		return settingsError("SETTINGS_WRITE_FAILED", "无法读取配置文件，原设置仍然有效。")
@@ -265,7 +261,7 @@ func (m *ModelConfigManager) writeFileConfig(fileConfig config.FileConfig) error
 	return nil
 }
 
-// DecisionSnapshot captures the globally selected server-only decision provider.
+// DecisionSnapshot captures the server-only JEV configuration for this model snapshot.
 func (r *Registry) DecisionSnapshot() decision.Snapshot {
 	r = r.Snapshot()
 	if r == nil {

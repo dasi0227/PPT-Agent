@@ -13,15 +13,16 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"go.uber.org/zap/zapcore"
 	"gopkg.in/yaml.v3"
 )
 
 const (
-	listenHost    = "127.0.0.1"
-	llmConfigPath = "config.yaml"
-	logLevel      = "debug"
+	listenHost = "127.0.0.1"
+	configPath = "config.yaml"
 )
 
+// LLMProfile 记录不同模型的调用信息，其中 name 是用户自定义的标识
 type LLMProfile struct {
 	Name     string `yaml:"name"`
 	Protocol string `yaml:"protocol"`
@@ -30,11 +31,13 @@ type LLMProfile struct {
 	Key      string `yaml:"key"`
 }
 
+// MainRoadLLMConfig 记录主路对话使用的模型，值为 LLMProfile 中的 name 标识
 type MainRoadLLMConfig struct {
 	Default  string `yaml:"default" json:"default"`
 	Fallback string `yaml:"fallback" json:"fallback"`
 }
 
+// SideRoadLLMConfig 记录旁路对话使用的模型，值为 LLMProfile 中的 name 标识，支持根据不同类型操作划分
 type SideRoadLLMConfig struct {
 	Default  string `yaml:"default" json:"default"`
 	Fallback string `yaml:"fallback" json:"fallback"`
@@ -46,27 +49,29 @@ type SideRoadLLMConfig struct {
 	Suggest  string `yaml:"suggest" json:"suggest"`
 }
 
-func (s SideRoadLLMConfig) Uses() map[string]string {
-	return map[string]string{"rename": s.Rename, "compact": s.Compact, "commit": s.Commit, "polish": s.Polish, "handoff": s.Handoff, "suggest": s.Suggest}
+// ModelsByPurpose 负责返回具体操作类型对应的模型名称
+func (s SideRoadLLMConfig) ModelsByPurpose() map[string]string {
+	return map[string]string{
+		"rename":  s.Rename,
+		"compact": s.Compact,
+		"commit":  s.Commit,
+		"polish":  s.Polish,
+		"handoff": s.Handoff,
+		"suggest": s.Suggest,
+	}
 }
 
+// LLMConfig 记录所有与模型相关的配置
 type LLMConfig struct {
-	Profiles []LLMProfile      `yaml:"llm"`
+	Profiles []LLMProfile      `yaml:"profiles"`
 	MainRoad MainRoadLLMConfig `yaml:"main-road"`
 	SideRoad SideRoadLLMConfig `yaml:"side-road"`
-}
-
-// FileConfig owns every top-level field in config.yaml.
-type FileConfig struct {
-	App       AppConfig `yaml:"app"`
-	LLMConfig `yaml:",inline"`
-	Decision  *DecisionConfig `yaml:"decision,omitempty"`
-	Agent     AgentConfig     `yaml:"agent"`
-	Sandbox   SandboxConfig   `yaml:"sandbox,omitempty"`
+	Jev      *JevConfig        `yaml:"jev,omitempty" json:"-"`
 }
 
 type AppConfig struct {
-	Port int `yaml:"port"`
+	Port     int    `yaml:"port"`
+	LogLevel string `yaml:"log_level"`
 }
 
 type AgentConfig struct {
@@ -81,47 +86,61 @@ func DefaultAgentConfig() AgentConfig {
 	return AgentConfig{AutoRenameEnabled: true, AutoSuggestEnabled: true, RequireResourceApproval: true, RequireHighRiskApproval: true}
 }
 
-// Config combines runtime paths and the loaded server configuration.
-type Config struct {
-	Decision *DecisionConfig
-	WorkAddr string
-	WorkRoot string
-	DBPath   string
-	LogLevel string
-	LLM      LLMConfig
-	LLMPath  string
-	Sandbox  SandboxConfig
+// RuntimeConfig 统一保存 YAML 配置与加载后生成的运行参数。
+type RuntimeConfig struct {
+	App     AppConfig     `yaml:"app"`
+	LLM     LLMConfig     `yaml:"llm"`
+	Agent   AgentConfig   `yaml:"agent"`
+	Sandbox SandboxConfig `yaml:"sandbox,omitempty"`
+
+	// 派生字段在加载时计算，不参与 YAML 读写。
+	WorkAddr   string `yaml:"-" json:"-"`
+	WorkRoot   string `yaml:"-" json:"-"`
+	DBPath     string `yaml:"-" json:"-"`
+	ConfigPath string `yaml:"-" json:"-"`
 }
 
-func Load() (*Config, error) {
-	return LoadFile(llmConfigPath)
+func Load() (*RuntimeConfig, error) {
+	return LoadFile(configPath)
 }
 
-func LoadFile(path string) (*Config, error) {
+func LoadFile(path string) (*RuntimeConfig, error) {
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, errors.New("read config.yaml failed")
 	}
-	fileConfig, err := ParseFileConfig(raw)
+	cfg, err := Parse(raw)
 	if err != nil {
 		return nil, err
 	}
-	workRoot := defaultWorkRoot()
-	cfg := &Config{
-		WorkAddr: net.JoinHostPort(listenHost, strconv.Itoa(fileConfig.App.Port)),
-		WorkRoot: workRoot,
-		LogLevel: logLevel,
-		LLM:      fileConfig.LLMConfig,
-		Decision: fileConfig.Decision,
-		LLMPath:  path,
-		Sandbox:  fileConfig.Sandbox,
+	cfg.ConfigPath = path
+	cfg.WorkAddr = net.JoinHostPort(listenHost, strconv.Itoa(cfg.App.Port))
+	cfg.WorkRoot, err = UserWorkRoot()
+	if err != nil {
+		return nil, err
 	}
 	cfg.DBPath = filepath.Join(cfg.WorkRoot, "db", "ppt.db")
-	return cfg, nil
+	return &cfg, nil
 }
 
-func ParseFileConfig(raw []byte) (FileConfig, error) {
-	cfg := FileConfig{Agent: DefaultAgentConfig(), Sandbox: DefaultSandboxConfig()}
+// UserWorkRoot 固定使用用户主目录下的 .dasi/ppt，不接受配置文件或命令行覆盖。
+func UserWorkRoot() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".dasi", "ppt"), nil
+}
+
+// Parse 读取并校验唯一的配置结构；文件路径等派生参数由 LoadFile 填充。
+func Parse(raw []byte) (RuntimeConfig, error) {
+	cfg := RuntimeConfig{
+		Agent: DefaultAgentConfig(), Sandbox: DefaultSandboxConfig(),
+	}
 	decoder := yaml.NewDecoder(bytes.NewReader(raw))
 	decoder.KnownFields(true)
 	if err := decoder.Decode(&cfg); err != nil {
@@ -145,6 +164,9 @@ func ParseFileConfig(raw []byte) (FileConfig, error) {
 					if block.Content[j].Value == "port" && block.Content[j+1].Tag != "!!int" {
 						return cfg, errors.New("app.port must be an integer between 1 and 65535")
 					}
+					if block.Content[j].Value == "log_level" && block.Content[j+1].Tag != "!!str" {
+						return cfg, errors.New("app.log_level must be a string")
+					}
 				}
 			}
 			if root.Content[i].Value == "sandbox" && root.Content[i+1].Kind != yaml.MappingNode {
@@ -161,14 +183,14 @@ func ParseFileConfig(raw []byte) (FileConfig, error) {
 					}
 				}
 			}
-			if root.Content[i].Value == "decision" {
+			if root.Content[i].Value == "llm" {
 				block := root.Content[i+1]
 				if block.Kind != yaml.MappingNode {
-					return cfg, errors.New("decision must be a settings object; omit the block to disable")
+					return cfg, errors.New("llm must be a settings object")
 				}
 				for j := 0; j+1 < len(block.Content); j += 2 {
-					if (block.Content[j].Value == "jev" || block.Content[j].Value == "openai") && block.Content[j+1].Kind != yaml.MappingNode {
-						return cfg, errors.New("decision provider settings must be objects; omit unused providers")
+					if block.Content[j].Value == "jev" && block.Content[j+1].Kind != yaml.MappingNode {
+						return cfg, errors.New("llm.jev must be a settings object; omit the block to disable")
 					}
 				}
 			}
@@ -177,14 +199,19 @@ func ParseFileConfig(raw []byte) (FileConfig, error) {
 	if cfg.App.Port < 1 || cfg.App.Port > 65535 {
 		return cfg, errors.New("app.port must be an integer between 1 and 65535")
 	}
-	NormalizeLLMConfig(&cfg.LLMConfig)
+	cfg.App.LogLevel = strings.ToLower(strings.TrimSpace(cfg.App.LogLevel))
+	if cfg.App.LogLevel == "" {
+		return cfg, errors.New("app.log_level is required")
+	}
+	var level zapcore.Level
+	if err := level.Set(cfg.App.LogLevel); err != nil {
+		return cfg, errors.New("app.log_level is invalid")
+	}
+	NormalizeLLMConfig(&cfg.LLM)
 	if err := ValidateSandboxConfig(cfg.Sandbox); err != nil {
 		return cfg, err
 	}
-	if err := ValidateDecisionConfig(cfg.Decision); err != nil {
-		return cfg, err
-	}
-	return cfg, validateLLMConfig(cfg.LLMConfig)
+	return cfg, validateLLMConfig(cfg.LLM)
 }
 
 func NormalizeLLMConfig(cfg *LLMConfig) {
@@ -205,34 +232,34 @@ func NormalizeLLMConfig(cfg *LLMConfig) {
 func ValidateLLMConfig(cfg LLMConfig) error { return validateLLMConfig(cfg) }
 func validateLLMConfig(cfg LLMConfig) error {
 	if len(cfg.Profiles) == 0 {
-		return errors.New("llm must contain at least one profile")
+		return errors.New("llm.profiles must contain at least one profile")
 	}
 	seen := make(map[string]bool, len(cfg.Profiles))
 	for i, profile := range cfg.Profiles {
-		if err := validateLLMProfile(profile, fmt.Sprintf("llm[%d]", i)); err != nil {
+		if err := validateLLMProfile(profile, fmt.Sprintf("llm.profiles[%d]", i)); err != nil {
 			return err
 		}
 		if seen[profile.Name] {
-			return fmt.Errorf("llm[%d].name must be unique", i)
+			return fmt.Errorf("llm.profiles[%d].name must be unique", i)
 		}
 		seen[profile.Name] = true
 	}
-	refs := map[string]string{"main-road.default": cfg.MainRoad.Default, "side-road.default": cfg.SideRoad.Default}
+	refs := map[string]string{"llm.main-road.default": cfg.MainRoad.Default, "llm.side-road.default": cfg.SideRoad.Default}
 	for path, name := range refs {
 		if !seen[name] {
 			return fmt.Errorf("%s must reference a configured model", path)
 		}
 	}
-	refs = map[string]string{"main-road.fallback": cfg.MainRoad.Fallback, "side-road.fallback": cfg.SideRoad.Fallback}
-	for purpose, name := range cfg.SideRoad.Uses() {
-		refs["side-road."+purpose] = name
+	refs = map[string]string{"llm.main-road.fallback": cfg.MainRoad.Fallback, "llm.side-road.fallback": cfg.SideRoad.Fallback}
+	for purpose, name := range cfg.SideRoad.ModelsByPurpose() {
+		refs["llm.side-road."+purpose] = name
 	}
 	for path, name := range refs {
 		if name != "" && !seen[name] {
 			return fmt.Errorf("%s must reference a configured model", path)
 		}
 	}
-	return nil
+	return ValidateJevConfig(cfg.Jev)
 }
 
 func validateLLMProfile(profile LLMProfile, label string) error {
@@ -265,12 +292,4 @@ func validateLLMProfile(profile LLMProfile, label string) error {
 		}
 	}
 	return nil
-}
-
-func defaultWorkRoot() string {
-	home, err := os.UserHomeDir()
-	if err != nil || strings.TrimSpace(home) == "" {
-		return filepath.Join(".dasi", "ppt")
-	}
-	return filepath.Join(home, ".dasi", "ppt")
 }

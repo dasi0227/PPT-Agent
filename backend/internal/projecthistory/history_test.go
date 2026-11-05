@@ -23,7 +23,7 @@ import (
 func fixture(t *testing.T) (*Manager, model.Project) {
 	t.Helper()
 	root := t.TempDir()
-	db, close, err := sqlite.Open(&config.Config{WorkRoot: root, DBPath: filepath.Join(root, "db")}, zap.NewNop())
+	db, close, err := sqlite.Open(&config.RuntimeConfig{WorkRoot: root, DBPath: filepath.Join(root, "db")}, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}

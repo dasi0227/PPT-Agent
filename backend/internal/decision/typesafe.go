@@ -47,7 +47,9 @@ type Client struct {
 
 func (c *Client) String() string   { return "DecisionClient{redacted}" }
 func (c *Client) GoString() string { return c.String() }
-func newJevSnapshot(cfg *config.JevConfig) (Snapshot, error) {
+
+// NewSnapshot 固定当前 JEV 配置与凭证；省略 llm.jev 时关闭决策调用。
+func NewSnapshot(cfg *config.JevConfig) (Snapshot, error) {
 	if cfg == nil {
 		return Snapshot{}, nil
 	}

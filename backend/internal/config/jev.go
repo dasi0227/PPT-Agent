@@ -25,15 +25,15 @@ func ValidateJevConfig(c *JevConfig) error {
 	c.Model, c.Key = strings.TrimSpace(c.Model), strings.TrimSpace(c.Key)
 	u, err := url.Parse(c.BaseURL)
 	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || strings.HasSuffix(u.Path, "/systemone") {
-		return errors.New("decision.jev.base_url must be an HTTP API prefix without credentials, query, fragment or /systemone")
+		return errors.New("llm.jev.base_url must be an HTTP API prefix without credentials, query, fragment or /systemone")
 	}
 	if c.Model == "" || c.Key == "" {
-		return errors.New("decision.jev requires base_url, model and key")
+		return errors.New("llm.jev requires base_url, model and key")
 	}
 	for _, value := range []string{c.Model, c.Key} {
 		for _, ch := range value {
 			if unicode.IsControl(ch) {
-				return errors.New("decision.jev.model/key must be single-line values")
+				return errors.New("llm.jev.model/key must be single-line values")
 			}
 		}
 	}

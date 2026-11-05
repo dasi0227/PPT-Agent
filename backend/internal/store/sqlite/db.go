@@ -18,7 +18,7 @@ import (
 
 // Open 用 GORM + modernc.org/sqlite（纯 Go，无 cgo，经 glebarez 适配）打开数据库。
 // DSN 开启 WAL、busy_timeout 与外键（ADR-0012 / ARCH-BACKEND-004）。
-func Open(cfg *config.Config, log *zap.Logger) (*gorm.DB, func(), error) {
+func Open(cfg *config.RuntimeConfig, log *zap.Logger) (*gorm.DB, func(), error) {
 	release, err := workrootlock.Acquire(cfg.WorkRoot)
 	if err != nil {
 		return nil, nil, err

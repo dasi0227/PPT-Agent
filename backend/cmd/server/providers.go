@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"net/http"
-	"path/filepath"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -24,13 +23,17 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
 
-func provideHTTPServer(cfg *config.Config, engine *gin.Engine) *http.Server {
+// 本文件集中提供供 Wire 调用的对象创建函数；业务实现位于 internal 下的各个包。
+
+// provideHTTPServer 将路由引擎接到 HTTP 服务上；实际监听由 main.go 中的 serve 启动。
+func provideHTTPServer(cfg *config.RuntimeConfig, engine *gin.Engine) *http.Server {
 	return &http.Server{
 		Addr:    cfg.WorkAddr,
 		Handler: engine,
 	}
 }
 
+// provideApp 汇总主流程需要的对象，以及各模块的维护和关闭函数。
 func provideApp(server *http.Server, engine *run.Engine, runs *service.RunService, log *zap.Logger, renderer *workflow.NodeSlideRenderer, exports *presentationexport.Manager, naming *service.NamingService, router *httpapi.Router, dbStore *sqlitestore.Store) *App {
 	return &App{server: server, engine: engine, runs: runs, log: log,
 		pruneSessionChanges: dbStore.PruneSessionChanges,
@@ -39,8 +42,9 @@ func provideApp(server *http.Server, engine *run.Engine, runs *service.RunServic
 
 func engineFromRouter(r *httpapi.Router) *gin.Engine { return r.Engine() }
 
-func provideLLMRegistry(cfg *config.Config) (*llm.Registry, error) {
-	return llm.NewConfiguredRegistry(cfg.LLMPath, cfg.LLM)
+// provideLLMRegistry 根据模型配置创建注册表，供运行、命名等服务选择模型。
+func provideLLMRegistry(cfg *config.RuntimeConfig) (*llm.Registry, error) {
+	return llm.NewConfiguredRegistry(cfg.ConfigPath, cfg.LLM)
 }
 
 func provideRenameProvider(registry *llm.Registry) (llm.Provider, error) {
@@ -66,8 +70,9 @@ func provideNamingService(s store.Store, provider llm.Provider, registry *llm.Re
 	return svc, svc.Close
 }
 
-func provideRunService(s store.Store, engine *run.Engine, registry *llm.Registry, workRoot service.WorkRoot, renderer *workflow.NodeSlideRenderer, transcripts *contextengine.ContextStore, naming *service.NamingService, cfg *config.Config) *service.RunService {
-	commands := commandexec.NewRunner(cfg.Sandbox, cfg.LLMPath, cfg.WorkRoot)
+// provideRunService 将运行引擎、模型、上下文、渲染器和命令执行器接入 Agent 运行服务。
+func provideRunService(s store.Store, engine *run.Engine, registry *llm.Registry, workRoot service.WorkRoot, renderer *workflow.NodeSlideRenderer, transcripts *contextengine.ContextStore, naming *service.NamingService, cfg *config.RuntimeConfig) *service.RunService {
+	commands := commandexec.NewRunner(cfg.Sandbox, cfg.ConfigPath, cfg.WorkRoot)
 	return service.NewRunService(s, engine, registry, workRoot, renderer, transcripts).WithNaming(naming).WithCommandRunner(commands)
 }
 
@@ -83,8 +88,10 @@ func provideGitCommitService(s store.Store, registry *llm.Registry, locks *run.L
 	return svc, nil
 }
 
-// provideWorkRoot 从配置暴露全局 work_root（供 /repo 资产操作）。
-func provideWorkRoot(cfg *config.Config) service.WorkRoot { return service.WorkRoot(cfg.WorkRoot) }
+// provideWorkRoot 向资源服务提供固定的全局工作目录。
+func provideWorkRoot(cfg *config.RuntimeConfig) service.WorkRoot {
+	return service.WorkRoot(cfg.WorkRoot)
+}
 
 func provideThemeService(s store.Store, workRoot service.WorkRoot) *service.ThemeService {
 	return service.NewThemeService(workRoot, s)
@@ -117,7 +124,8 @@ func provideExportManager(renderer *workflow.NodeSlideRenderer, workRoot service
 	return manager, manager.Close, nil
 }
 
-func provideRouter(cfg *config.Config, log *zap.Logger, health *httpapi.HealthHandler, runH *httpapi.RunHandler, projectH *httpapi.ProjectHandler, threadH *httpapi.ThreadHandler, slideH *httpapi.SlideHandler, repositoryH *httpapi.RepositoryHandler, llmH *httpapi.LLMHandler, polishH *httpapi.PolishHandler, briefingH *httpapi.BriefingHandler, gitCommitH *httpapi.GitCommitHandler, resourceH *httpapi.ResourceHandler, contextWindowH *httpapi.ContextWindowHandler, attachmentH *httpapi.AttachmentHandler, exportH *httpapi.ExportHandler, dbStore *sqlitestore.Store, registry *llm.Registry, hub *service.ThreadEventHub) (*httpapi.Router, error) {
+// provideRouter 汇总各业务处理器，并接入推荐、导出、快捷键、文件打开设置和项目历史功能。
+func provideRouter(cfg *config.RuntimeConfig, log *zap.Logger, health *httpapi.HealthHandler, runH *httpapi.RunHandler, projectH *httpapi.ProjectHandler, threadH *httpapi.ThreadHandler, slideH *httpapi.SlideHandler, repositoryH *httpapi.RepositoryHandler, llmH *httpapi.LLMHandler, polishH *httpapi.PolishHandler, briefingH *httpapi.BriefingHandler, gitCommitH *httpapi.GitCommitHandler, resourceH *httpapi.ResourceHandler, contextWindowH *httpapi.ContextWindowHandler, attachmentH *httpapi.AttachmentHandler, exportH *httpapi.ExportHandler, dbStore *sqlitestore.Store, registry *llm.Registry, hub *service.ThreadEventHub) (*httpapi.Router, error) {
 	return httpapi.NewRouter(cfg, log, health, runH, projectH, threadH, slideH, repositoryH, llmH, polishH, briefingH, gitCommitH, resourceH, contextWindowH, attachmentH).WithSuggestions(service.NewSuggestService(dbStore, registry, hub)).WithExportHandler(exportH).WithShortcutSettings(shortcuts.NewService(dbStore)).WithFileSettings(fileopen.NewService(dbStore, cfg.WorkRoot)).WithProjectHistory()
 }
 
@@ -125,6 +133,7 @@ func provideSlideService(s store.Store, themes *service.ThemeService, renderer *
 	return service.NewSlideService(s, themes, renderer)
 }
 
+// provideResourceService 先恢复中断的资源删除，再开放资源管理；导入预置资源由 init-resources 单独执行。
 func provideResourceService(s store.Store, workRoot service.WorkRoot) (*service.ResourceService, error) {
 	svc := service.NewResourceService(workRoot, s)
 	if err := svc.RecoverDeletes(context.Background()); err != nil {
@@ -141,6 +150,7 @@ func provideEngine(rs run.Store, locks *run.LockManager, log *zap.Logger) (*run.
 	return engine, nil
 }
 
+// provideRenderWorker 检查渲染 Worker 是否可用，并返回退出或装配失败时使用的清理函数。
 func provideRenderWorker() (*workflow.NodeSlideRenderer, func(), error) {
 	renderer := workflow.NewNodeSlideRenderer(workflow.NodeRendererConfig{})
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -152,17 +162,7 @@ func provideRenderWorker() (*workflow.NodeSlideRenderer, func(), error) {
 	return renderer, func() { _ = renderer.Close() }, nil
 }
 
-func provideConfig() (*config.Config, error) {
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, err
-	}
-	if *workRootFlag != "" {
-		cfg.WorkRoot, err = filepath.Abs(*workRootFlag)
-		if err != nil {
-			return nil, err
-		}
-		cfg.DBPath = filepath.Join(cfg.WorkRoot, "db", "ppt.db")
-	}
-	return cfg, nil
+// provideConfig 加载配置，并生成固定工作目录、数据库路径及监听地址。
+func provideConfig() (*config.RuntimeConfig, error) {
+	return config.Load()
 }
