@@ -9,7 +9,7 @@ export default defineConfig(({ command, mode }) => ({
     port: 5173,
     proxy: command === "serve" && mode !== "test" ? {
       "/api": {
-        target: `http://${execFileSync("go", ["run", "./cmd/server", "--print-address", "config.yaml"], {
+        target: `http://${execFileSync("go", ["run", "./cmd/server", "--print-address"], {
           cwd: fileURLToPath(new URL("../backend", import.meta.url)),
           encoding: "utf8",
         }).trim()}`,

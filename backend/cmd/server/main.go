@@ -39,7 +39,7 @@ const shutdownTimeout = 8 * time.Second
 
 var frontendDirFlag = flag.String("frontend-dir", "", "提供已构建的前端文件")
 var desktopFlag = flag.Bool("desktop", false, "跟随桌面父进程退出，并输出就绪地址")
-var printAddressFlag = flag.String("print-address", "", "打印指定配置文件的监听地址后退出")
+var printAddressFlag = flag.Bool("print-address", false, "打印监听地址后退出")
 
 // main 是后端服务的程序入口，解析命令行参数，并统一处理启动和运行错误。
 func main() {
@@ -53,8 +53,8 @@ func main() {
 // serve 管理服务的完整生命周期：加载配置、独占工作目录、组装依赖、恢复状态、监听请求和关闭。
 func serve() error {
 	// 开发脚本和前端代理只需读取监听地址时，直接退出，不打开数据库或启动服务。
-	if *printAddressFlag != "" {
-		cfg, err := config.LoadFile(*printAddressFlag)
+	if *printAddressFlag {
+		cfg, err := config.LoadConfig()
 		if err != nil {
 			return err
 		}

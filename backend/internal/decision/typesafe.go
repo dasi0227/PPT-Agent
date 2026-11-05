@@ -48,17 +48,13 @@ type Client struct {
 func (c *Client) String() string   { return "DecisionClient{redacted}" }
 func (c *Client) GoString() string { return c.String() }
 
-// NewSnapshot 固定当前 JEV 配置与凭证；省略 llm.jev 时关闭决策调用。
-func NewSnapshot(cfg *config.JevConfig) (Snapshot, error) {
-	if cfg == nil {
-		return Snapshot{}, nil
-	}
-	value := *cfg
-	if err := config.ValidateJevConfig(&value); err != nil {
+// NewSnapshot 校验必填的 JEV 配置，并固定当前凭证。
+func NewSnapshot(cfg config.JevConfig) (Snapshot, error) {
+	if err := config.ValidateJevConfig(&cfg); err != nil {
 		return Snapshot{}, err
 	}
-	hash := sha256.Sum256([]byte("jev-images-v1\x00" + value.BaseURL + "\x00" + value.Model + "\x00" + value.Key))
-	return Snapshot{Identity: hex.EncodeToString(hash[:]), Provider: &Client{endpoint: value.BaseURL + "/systemone", model: value.Model, key: value.Key, http: &http.Client{Timeout: 20 * time.Second, Transport: modelusage.NewTransport(nil, "jev", value.Model), CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}}, nil
+	hash := sha256.Sum256([]byte("jev-images-v1\x00" + cfg.BaseURL + "\x00" + cfg.Model + "\x00" + cfg.Key))
+	return Snapshot{Identity: hex.EncodeToString(hash[:]), Provider: &Client{endpoint: cfg.BaseURL + "/systemone", model: cfg.Model, key: cfg.Key, http: &http.Client{Timeout: 20 * time.Second, Transport: modelusage.NewTransport(nil, "jev", cfg.Model), CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}}, nil
 }
 
 // Conservative UTF-8 byte bounds also protect CJK requests without pretending to

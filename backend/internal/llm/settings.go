@@ -76,7 +76,7 @@ func NewConfiguredRegistry(path string, cfg config.LLMConfig) (*Registry, error)
 	if err != nil {
 		return nil, errors.New("read model configuration failed")
 	}
-	fileConfig, err := config.Parse(raw)
+	fileConfig, err := config.ParseConfigFile(raw)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +147,7 @@ func (r *Registry) ReloadSettings() (ModelSettings, error) {
 	if digest == m.diskHash {
 		return m.public(), nil
 	}
-	fileConfig, err := config.Parse(raw)
+	fileConfig, err := config.ParseConfigFile(raw)
 	if err != nil {
 		return ModelSettings{}, settingsError("SETTINGS_INVALID", "配置文件无效，原设置仍然有效："+err.Error())
 	}

@@ -164,5 +164,5 @@ func provideRenderWorker() (*workflow.NodeSlideRenderer, func(), error) {
 
 // provideConfig 加载配置，并生成固定工作目录、数据库路径及监听地址。
 func provideConfig() (*config.RuntimeConfig, error) {
-	return config.Load()
+	return config.LoadConfig()
 }

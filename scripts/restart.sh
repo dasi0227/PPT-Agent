@@ -34,12 +34,10 @@ FRONTEND_DIR="$ROOT_DIR/frontend"
 RENDERER_DIR="$BACKEND_DIR/render-worker"
 COMMAND_WORKER_DIR="$BACKEND_DIR/command-worker"
 WORK_ROOT="$HOME/.dasi/ppt"
-BACKEND_CONFIG="$BACKEND_DIR/config.yaml"
-if [ "$RUN_MODE" = "app" ] && [ -f "$HOME/Library/Application Support/PPT-Agent/config.yaml" ]; then
-  BACKEND_CONFIG="$HOME/Library/Application Support/PPT-Agent/config.yaml"
+if [ "$RUN_MODE" = "web" ]; then
+  BACKEND_ADDR="$(cd "$BACKEND_DIR" && go run ./cmd/server --print-address)"
+  BACKEND_PORT="${BACKEND_ADDR##*:}"
 fi
-BACKEND_ADDR="$(cd "$BACKEND_DIR" && go run ./cmd/server --print-address "$BACKEND_CONFIG")"
-BACKEND_PORT="${BACKEND_ADDR##*:}"
 FRONTEND_URL="http://localhost:5173"
 LOG_DIR="$ROOT_DIR/tmp/run"
 mkdir -p "$LOG_DIR"
@@ -259,8 +257,10 @@ else
   exit 1
 fi
 
-ensure_port_free "$BACKEND_PORT"
-if [ "$RUN_MODE" = "web" ]; then ensure_port_free 5173; fi
+if [ "$RUN_MODE" = "web" ]; then
+  ensure_port_free "$BACKEND_PORT"
+  ensure_port_free 5173
+fi
 
 if [ "$RUN_MODE" = "app" ]; then
   initialize_project || exit 1
@@ -285,6 +285,8 @@ if [ "$RUN_MODE" = "app" ]; then
     exit 1
   fi
   APP_PATH="$ROOT_DIR/desktop/out/PPT-Agent-darwin-$app_arch/PPT-Agent.app"
+  BACKEND_ADDR="$(cd "$HOME/Library/Application Support/PPT-Agent" && "$APP_PATH/Contents/Resources/runtime/bin/ppt-agent-server" --print-address)"
+  ensure_port_free "${BACKEND_ADDR##*:}"
   if open "$APP_PATH" && wait_for_url "http://$BACKEND_ADDR/api/v1/healthz"; then
     print_result '[4/4]打开应用' '✅' "mode=$RUN_MODE"
   else
