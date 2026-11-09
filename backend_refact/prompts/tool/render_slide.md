@@ -1,0 +1,1 @@
+Render a slide's saved HTML. Returns the screenshot and rendering problems in `diagnostics`. If quality assessment is requested and available, `preview` contains advisory feedback with scores from 0 to 3; higher is better.

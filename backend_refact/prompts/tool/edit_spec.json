@@ -1,0 +1,9 @@
+{
+  "core": "Main audience takeaway, not the slide title, a content inventory or layout instructions.",
+  "elements": "Complete list of content units in reading order.",
+  "elements.intent": "Message, facts, evidence or relationship this element conveys and its relevance to the slide.",
+  "elements.type": "Content representation; use metric for a key figure, diagram for relationships, and asset for visual media.",
+  "layout": "Spatial arrangement and reading order, e.g. 'chart left, explanation right'; not HTML or CSS.",
+  "purpose": "Dominant narrative role. Use content_other for body-content roles outside the listed content categories, and other for page roles outside the listed categories.",
+  "slide_id": "Slide ID from the current outline."
+}

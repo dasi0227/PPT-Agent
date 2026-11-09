@@ -1,0 +1,1 @@
+Create or update presentation basics. Omitted fields retain their saved values. Returns the complete saved meta as a JSON object in `content`, including user revisions made during approval.

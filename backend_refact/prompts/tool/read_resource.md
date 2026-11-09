@@ -1,0 +1,1 @@
+Read a presentation resource's complete saved source when its content is absent from context or stale. Skip resources marked missing in `project_state`. Provide `slide_id` for `spec` and `html`; omit it otherwise. Returns JSON or HTML source as a string in `content`.

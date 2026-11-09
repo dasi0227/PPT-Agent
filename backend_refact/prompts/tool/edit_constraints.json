@@ -1,0 +1,5 @@
+{
+  "type": "Constraint domain to update.",
+  "prohibitions": "Complete list of restrictions for the selected domain.",
+  "requirements": "Complete list of requirements for the selected domain."
+}
