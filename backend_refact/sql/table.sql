@@ -1,28 +1,7 @@
--- Schema source: docs/note/DATABASE.html (2026-11-10), including HTML comments.
--- Enable PRAGMA foreign_keys = ON on the connection BEFORE starting a transaction.
--- No transaction boundary here: table.sql and init.sql may share one caller transaction.
--- First creation: run table.sql + init.sql once. Normal startup does not run init.sql.
--- Explicit preset reset: run init.sql only; never clear business tables or recreate schema.
---
--- Backend write transactions must enforce cross-table/business rules:
--- * projects.theme refers to a theme; asset/tag kinds are stable and associations
---   have matching kinds, at most two tags per asset. Trim/Unicode-lowercase names
---   for snippet uniqueness and per-kind tag uniqueness (SQLite NOCASE is insufficient).
--- * Run/project/session ownership, command group session/kind and revision consistency;
---   allocate immutable seq jointly across messages/commands, including same-batch inserts.
--- * Match tool_result to its same-Run call; validate kind-specific JSON payloads,
---   plan steps (at most one processing), scope and original-request hash equality.
--- * Commit final response with done/rejected; execute tools while current output
---   contains calls. Chitchat is rejected; concurrent follow-up policy remains deferred.
--- * Validate checkpoint Run ownership on creation, preserve checkpoints when Runs are
---   removed, and coordinate history/file restoration, invalidation and revisions.
--- * receipts.owner_id is polymorphic: validate/clean session or Run owners and result
---   targets by kind in the same transaction; no static FK can express this relation.
--- * Validate custom-app membership/normalized paths, supported punctuation, shortcut
---   key/modifier/reserved-combination/conflict rules and atomic full-settings updates.
--- Run-linked messages/commands must be removed/restored in FK-safe order during history
--- switching; checkpoints.run_id deliberately has NO Run foreign key.
-
+-- 执行方须在事务开始前启用 PRAGMA foreign_keys = ON；事务由执行方管理。
+-- 跨表归属、共享 seq 分配、Unicode 名称唯一性及业务 JSON 由后端事务校验。
+-- 资产标签须同类且最多两个；receipts 的多态归属与清理由后端事务校验。
+-- checkpoints.run_id 不设外键，避免回退删除 Run 时丢失返回最新所需的检查点。
 
 CREATE TABLE assets (
     id TEXT NOT NULL PRIMARY KEY,
@@ -191,7 +170,7 @@ CREATE TABLE asset_tags (
     PRIMARY KEY (asset_id, tag_id)
 );
 
-CREATE TABLE fileopen (
+CREATE TABLE settings_fileopen (
     id INTEGER NOT NULL PRIMARY KEY DEFAULT 1,
     default_open TEXT NOT NULL DEFAULT 'system',
     json_open TEXT NOT NULL DEFAULT 'inherit',
@@ -204,7 +183,7 @@ CREATE TABLE fileopen (
     CHECK (html_open IN ('system', 'finder', 'textedit', 'vscode', 'inherit') OR (html_open GLOB 'app:/*' AND length(html_open) > 5))
 );
 
-CREATE TABLE shortcuts (
+CREATE TABLE settings_shortcut (
     id INTEGER NOT NULL PRIMARY KEY DEFAULT 1,
     command_trigger TEXT NOT NULL DEFAULT '/',
     reference_trigger TEXT NOT NULL DEFAULT '@',
@@ -240,6 +219,49 @@ CREATE TABLE shortcuts (
     CHECK (component_trigger <> page_trigger),
     CHECK (component_trigger <> snippet_trigger),
     CHECK (page_trigger <> snippet_trigger)
+);
+
+CREATE TABLE settings_llm (
+    name TEXT NOT NULL PRIMARY KEY,
+    protocol TEXT NOT NULL,
+    base_url TEXT NOT NULL,
+    model TEXT NOT NULL,
+    key TEXT NOT NULL,
+    CHECK (length(trim(name)) BETWEEN 1 AND 80),
+    CHECK (protocol IN ('responses', 'anthropic')),
+    CHECK (length(trim(base_url)) > 0),
+    CHECK (length(trim(model)) > 0),
+    CHECK (length(trim(key)) > 0)
+);
+
+CREATE TABLE settings_route (
+    id INTEGER NOT NULL PRIMARY KEY DEFAULT 1,
+    main_default TEXT NOT NULL REFERENCES settings_llm(name) ON UPDATE CASCADE ON DELETE RESTRICT,
+    main_fallback TEXT DEFAULT NULL REFERENCES settings_llm(name) ON UPDATE CASCADE ON DELETE RESTRICT,
+    side_default TEXT NOT NULL REFERENCES settings_llm(name) ON UPDATE CASCADE ON DELETE RESTRICT,
+    side_fallback TEXT DEFAULT NULL REFERENCES settings_llm(name) ON UPDATE CASCADE ON DELETE RESTRICT,
+    rename TEXT DEFAULT NULL REFERENCES settings_llm(name) ON UPDATE CASCADE ON DELETE RESTRICT,
+    compact TEXT DEFAULT NULL REFERENCES settings_llm(name) ON UPDATE CASCADE ON DELETE RESTRICT,
+    "commit" TEXT DEFAULT NULL REFERENCES settings_llm(name) ON UPDATE CASCADE ON DELETE RESTRICT,
+    polish TEXT DEFAULT NULL REFERENCES settings_llm(name) ON UPDATE CASCADE ON DELETE RESTRICT,
+    handoff TEXT DEFAULT NULL REFERENCES settings_llm(name) ON UPDATE CASCADE ON DELETE RESTRICT,
+    suggest TEXT DEFAULT NULL REFERENCES settings_llm(name) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CHECK (id = 1)
+);
+
+CREATE TABLE settings_behavior (
+    id INTEGER NOT NULL PRIMARY KEY DEFAULT 1,
+    auto_rename_enabled INTEGER NOT NULL DEFAULT 1,
+    auto_suggest_enabled INTEGER NOT NULL DEFAULT 1,
+    show_tool_failures INTEGER NOT NULL DEFAULT 0,
+    require_resource_approval INTEGER NOT NULL DEFAULT 0,
+    require_high_risk_approval INTEGER NOT NULL DEFAULT 1,
+    CHECK (id = 1),
+    CHECK (auto_rename_enabled IN (0, 1)),
+    CHECK (auto_suggest_enabled IN (0, 1)),
+    CHECK (show_tool_failures IN (0, 1)),
+    CHECK (require_resource_approval IN (0, 1)),
+    CHECK (require_high_risk_approval IN (0, 1))
 );
 
 CREATE INDEX idx_projects_theme ON projects(theme);

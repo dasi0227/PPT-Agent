@@ -277,7 +277,7 @@
       </div>
     </article>
 
-    <!-- 自动命名与自动建议开关归入用户全局设置；会话不保存独立开关或名称锁定状态。
+    <!-- 自动命名与自动建议开关归入 settings_behavior 全局设置；会话不保存独立开关或名称锁定状态。
          已确认删除 events，以 sessions.revision 保存唯一的会话提交版本；初始值 0，每次会话持久化变更在同一写事务递增一次。
          本次修改的 runs/messages/commands 取得相同 revision；检查点更新、删除和历史切换也推进会话版本，但 checkpoints 不重复存储版本。
          plan 保存当前生效计划，JSON 为 {run_id, steps}；run_id 标识当前承接计划的 Run，steps 每项为 {title, status}，状态为 pending/processing/completed，同时最多一步 processing。
@@ -1276,7 +1276,7 @@
         </table>
       </div>
     </article>
-    <!-- fileopen 与 shortcuts 已确定，均属于应用全局设置。
+    <!-- settings_fileopen 与 settings_shortcut 已确定，均属于应用全局设置。
          两表各保存一行，id 固定为 1；每个设置项目使用独立字段。
          两表按单窗口和单一写入入口设计，不保存 revision；前端串行保存设置，并忽略过期读取结果。
          不增加用户、项目、会话关联，不增加创建/更新时间或设置历史。
@@ -1288,7 +1288,7 @@
          custom_apps 是按添加顺序保存的 JSON 路径数组；应用名从路径计算，内置应用与平台支持状态由程序提供，不重复入库。
          自定义应用即使暂未选用仍保留在列表中；已卸载应用仍允许移除。
          删除自定义应用时，引用它的 default_open 改为 system，json_open / html_open 改为 inherit，与列表删除同事务提交。
-         shortcuts 按具体操作拆成独立列，保存整套当前配置；共 18 个操作字段，不使用 overrides 或 binding JSON。
+         settings_shortcut 按具体操作拆成独立列，保存整套当前配置；共 18 个操作字段，不使用 overrides 或 binding JSON。
          五个输入触发符各存一个标点字符；十三个快捷键各存一个规范化字符串，如 Primary+Shift+KeyP。
          组合键按 Primary、Alt、Shift、按键代码的固定顺序连接，未启用的修饰键省略；大小写固定，不存空格或平台显示文案。
          Primary 在 macOS 为 Command，在其他已支持环境为 Ctrl；Alt 在 macOS 为 Option。
@@ -1303,11 +1303,11 @@
          deck.previous / deck.next / deck.zoom_in / deck.zoom_out / deck.overview 对应 previous_page / next_page / zoom_in / zoom_out / toggle_overview；
          deck.export / deck.view / deck.form / deck.theme 对应 export_deck / toggle_view / toggle_source / switch_theme；
          composer.submit / composer.suggestion1 / composer.suggestion2 / composer.suggestion3 对应 submit_request / suggestion_1 / suggestion_2 / suggestion_3。 -->
-    <article class="database-card" id="fileopen" aria-labelledby="fileopen-heading">
+    <article class="database-card" id="settings-fileopen" aria-labelledby="settings-fileopen-heading">
       <header class="card-header">
         <div>
           <div class="table-heading">
-            <h2 id="fileopen-heading"><code>fileopen</code></h2>
+            <h2 id="settings-fileopen-heading"><code>settings_fileopen</code></h2>
             <span class="table-label">文件打开设置</span>
           </div>
           <p class="table-purpose">保存应用全局的文件打开方式与自定义应用列表。</p>
@@ -1315,8 +1315,8 @@
         <span class="status">已确定</span>
       </header>
 
-      <div class="table-scroll" role="region" aria-label="fileopen 字段与设计建议" tabindex="0">
-        <table aria-label="fileopen 字段设计与讨论结论">
+      <div class="table-scroll" role="region" aria-label="settings_fileopen 字段与设计建议" tabindex="0">
+        <table aria-label="settings_fileopen 字段设计与讨论结论">
           <colgroup>
             <col class="field-col"><col class="type-col"><col class="nullable-col">
             <col class="default-col"><col class="meaning-col"><col class="decision-col">
@@ -1332,7 +1332,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr id="fileopen-id">
+            <tr id="settings-fileopen-id">
               <th scope="row"><code>id</code></th>
               <td><code>INTEGER</code></td>
               <td class="nullable">否</td>
@@ -1340,7 +1340,7 @@
               <td>唯一的文件设置记录。</td>
               <td class="decision">固定为 <code>1</code>，全表一行。</td>
             </tr>
-            <tr id="fileopen-default-open">
+            <tr id="settings-fileopen-default-open">
               <th scope="row"><code>default_open</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1348,7 +1348,7 @@
               <td>文件的默认打开方式。</td>
               <td class="decision"><code>system / finder / textedit / vscode</code>，或 <code>app:绝对路径</code>。</td>
             </tr>
-            <tr id="fileopen-json-open">
+            <tr id="settings-fileopen-json-open">
               <th scope="row"><code>json_open</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1356,7 +1356,7 @@
               <td>JSON 文件的打开方式。</td>
               <td class="decision">可指定打开方式；<code>inherit</code> 表示使用 <code>default_open</code>。</td>
             </tr>
-            <tr id="fileopen-html-open">
+            <tr id="settings-fileopen-html-open">
               <th scope="row"><code>html_open</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1364,7 +1364,7 @@
               <td>HTML 文件的打开方式。</td>
               <td class="decision">适用于 <code>.html / .htm</code>；<code>inherit</code> 表示使用 <code>default_open</code>。</td>
             </tr>
-            <tr id="fileopen-custom-apps">
+            <tr id="settings-fileopen-custom-apps">
               <th scope="row"><code>custom_apps</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1377,11 +1377,11 @@
       </div>
     </article>
 
-    <article class="database-card" id="shortcuts" aria-labelledby="shortcuts-heading">
+    <article class="database-card" id="settings-shortcut" aria-labelledby="settings-shortcut-heading">
       <header class="card-header">
         <div>
           <div class="table-heading">
-            <h2 id="shortcuts-heading"><code>shortcuts</code></h2>
+            <h2 id="settings-shortcut-heading"><code>settings_shortcut</code></h2>
             <span class="table-label">快捷键设置</span>
           </div>
           <p class="table-purpose">保存应用全局的快捷键与输入触发符，每个操作对应一个独立字段。</p>
@@ -1389,8 +1389,8 @@
         <span class="status">已确定</span>
       </header>
 
-      <div class="table-scroll" role="region" aria-label="shortcuts 字段与设计建议" tabindex="0">
-        <table aria-label="shortcuts 字段设计与讨论结论">
+      <div class="table-scroll" role="region" aria-label="settings_shortcut 字段与设计建议" tabindex="0">
+        <table aria-label="settings_shortcut 字段设计与讨论结论">
           <colgroup>
             <col class="field-col"><col class="type-col"><col class="nullable-col">
             <col class="default-col"><col class="meaning-col"><col class="decision-col">
@@ -1406,7 +1406,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr id="shortcuts-id">
+            <tr id="settings-shortcut-id">
               <th scope="row"><code>id</code></th>
               <td><code>INTEGER</code></td>
               <td class="nullable">否</td>
@@ -1414,7 +1414,7 @@
               <td>唯一的快捷键设置记录。</td>
               <td class="decision">固定为 <code>1</code>，全表一行。</td>
             </tr>
-            <tr id="shortcuts-command-trigger">
+            <tr id="settings-shortcut-command-trigger">
               <th scope="row"><code>command_trigger</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1422,7 +1422,7 @@
               <td>打开命令菜单的输入触发符。</td>
               <td class="decision">单个支持的标点符号；五种触发符不得重复。</td>
             </tr>
-            <tr id="shortcuts-reference-trigger">
+            <tr id="settings-shortcut-reference-trigger">
               <th scope="row"><code>reference_trigger</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1430,7 +1430,7 @@
               <td>打开综合引用菜单的输入触发符。</td>
               <td class="decision">单个支持的标点符号。</td>
             </tr>
-            <tr id="shortcuts-component-trigger">
+            <tr id="settings-shortcut-component-trigger">
               <th scope="row"><code>component_trigger</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1438,7 +1438,7 @@
               <td>引用组件的输入触发符。</td>
               <td class="decision">单个支持的标点符号。</td>
             </tr>
-            <tr id="shortcuts-page-trigger">
+            <tr id="settings-shortcut-page-trigger">
               <th scope="row"><code>page_trigger</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1446,7 +1446,7 @@
               <td>引用页面的输入触发符。</td>
               <td class="decision">单个支持的标点符号。</td>
             </tr>
-            <tr id="shortcuts-snippet-trigger">
+            <tr id="settings-shortcut-snippet-trigger">
               <th scope="row"><code>snippet_trigger</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1454,7 +1454,7 @@
               <td>插入短语的输入触发符。</td>
               <td class="decision">单个支持的标点符号。</td>
             </tr>
-            <tr id="shortcuts-previous-page">
+            <tr id="settings-shortcut-previous-page">
               <th scope="row"><code>previous_page</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1462,7 +1462,7 @@
               <td>切换到上一页的快捷键。</td>
               <td class="decision">普通字符串；<code>Primary</code> 对应 Command／Ctrl。</td>
             </tr>
-            <tr id="shortcuts-next-page">
+            <tr id="settings-shortcut-next-page">
               <th scope="row"><code>next_page</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1470,7 +1470,7 @@
               <td>切换到下一页的快捷键。</td>
               <td class="decision">修饰键与按键代码用 <code>+</code> 连接。</td>
             </tr>
-            <tr id="shortcuts-zoom-in">
+            <tr id="settings-shortcut-zoom-in">
               <th scope="row"><code>zoom_in</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1478,7 +1478,7 @@
               <td>放大演示文稿的快捷键。</td>
               <td class="decision">按键保存 <code>Equal</code> 等代码。</td>
             </tr>
-            <tr id="shortcuts-zoom-out">
+            <tr id="settings-shortcut-zoom-out">
               <th scope="row"><code>zoom_out</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1486,7 +1486,7 @@
               <td>缩小演示文稿的快捷键。</td>
               <td class="decision">按键保存 <code>Minus</code> 等代码。</td>
             </tr>
-            <tr id="shortcuts-toggle-overview">
+            <tr id="settings-shortcut-toggle-overview">
               <th scope="row"><code>toggle_overview</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1494,7 +1494,7 @@
               <td>切换总览的快捷键。</td>
               <td class="decision">组合键须通过按键与冲突校验。</td>
             </tr>
-            <tr id="shortcuts-export-deck">
+            <tr id="settings-shortcut-export-deck">
               <th scope="row"><code>export_deck</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1502,7 +1502,7 @@
               <td>导出演示文稿的快捷键。</td>
               <td class="decision">组合键须通过按键与冲突校验。</td>
             </tr>
-            <tr id="shortcuts-toggle-view">
+            <tr id="settings-shortcut-toggle-view">
               <th scope="row"><code>toggle_view</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1510,7 +1510,7 @@
               <td>切换视图的快捷键。</td>
               <td class="decision">组合键须通过按键与冲突校验。</td>
             </tr>
-            <tr id="shortcuts-toggle-source">
+            <tr id="settings-shortcut-toggle-source">
               <th scope="row"><code>toggle_source</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1518,7 +1518,7 @@
               <td>切换 HTML 预览与源码的快捷键。</td>
               <td class="decision">组合键须通过按键与冲突校验。</td>
             </tr>
-            <tr id="shortcuts-switch-theme">
+            <tr id="settings-shortcut-switch-theme">
               <th scope="row"><code>switch_theme</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1526,7 +1526,7 @@
               <td>切换主题的快捷键。</td>
               <td class="decision">组合键须通过按键与冲突校验。</td>
             </tr>
-            <tr id="shortcuts-submit-request">
+            <tr id="settings-shortcut-submit-request">
               <th scope="row"><code>submit_request</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1534,7 +1534,7 @@
               <td>提交输入框请求的快捷键。</td>
               <td class="decision">组合键须通过按键与冲突校验。</td>
             </tr>
-            <tr id="shortcuts-suggestion-1">
+            <tr id="settings-shortcut-suggestion-1">
               <th scope="row"><code>suggestion_1</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1542,7 +1542,7 @@
               <td>填入第 1 条建议的快捷键。</td>
               <td class="decision"><code>Alt</code> 对应 Option／Alt。</td>
             </tr>
-            <tr id="shortcuts-suggestion-2">
+            <tr id="settings-shortcut-suggestion-2">
               <th scope="row"><code>suggestion_2</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1550,7 +1550,7 @@
               <td>填入第 2 条建议的快捷键。</td>
               <td class="decision">组合键须通过按键与冲突校验。</td>
             </tr>
-            <tr id="shortcuts-suggestion-3">
+            <tr id="settings-shortcut-suggestion-3">
               <th scope="row"><code>suggestion_3</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1571,6 +1571,302 @@
          初始视图和 sessions.revision 在同一读事务读取；先建立订阅再读取当前视图，加载期间的更高版本通知触发补读，避免读取与订阅之间遗漏更新。
          seq 仍用于 messages/commands 的创建顺序；回退后的旧分页游标随视图重置废弃，revision 始终从 sessions 单独持久分配。
          会话实际删除后客户端按删除通知或不存在结果关闭会话，无额外事件清理或保留期限。 -->
+
+    <!-- settings_llm 与 settings_route 为讨论稿，仅覆盖主路和旁路模型，JEV 继续使用独立配置。
+         settings_llm.name 是配置的唯一标识；不另增 id、provider、能力、排序或时间戳字段。
+         路由字段均外键关联配置名：改名同步更新引用；删除前必须改配仍引用它的路由。
+         runs.model 保留运行时选中的配置名，不建立外键，不因配置改名改写历史记录。
+         保存时校验完整配置与引用，在同一事务提交，再发布新的运行时配置；已运行任务继续使用已加载的配置。
+         空旁路覆盖项使用 side_default，旁路共用 side_fallback；备用与当前模型相同时不重复尝试。
+         密钥仅供后端调用；has_key 根据密钥是否存在计算，不额外存列，也不将密钥返回普通设置接口。
+         实施后数据库为这两组配置的唯一持久来源；不与 YAML 双读双写，不纳入会话检查点恢复。
+         init.sql 在本地保存实际模型配置和密钥，并由 Git 忽略；首次初始化同时写入模型与路由，reset=1 保留已有配置。
+         与其他全局设置一样串行保存，不增加 revision 或设置历史。 -->
+    <article class="database-card" id="settings-llm" aria-labelledby="settings-llm-heading">
+      <header class="card-header">
+        <div>
+          <div class="table-heading">
+            <h2 id="settings-llm-heading"><code>settings_llm</code></h2>
+            <span class="table-label">模型配置</span>
+          </div>
+          <p class="table-purpose">每行保存一套可选用的模型连接配置。</p>
+        </div>
+        <span class="status">讨论稿</span>
+      </header>
+
+      <div class="table-scroll" role="region" aria-label="settings_llm 字段与设计建议" tabindex="0">
+        <table aria-label="settings_llm 字段设计与讨论结论">
+          <colgroup>
+            <col class="field-col"><col class="type-col"><col class="nullable-col">
+            <col class="default-col"><col class="meaning-col"><col class="decision-col">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">字段</th>
+              <th scope="col">类型</th>
+              <th scope="col" class="nullable">可空</th>
+              <th scope="col">默认值</th>
+              <th scope="col">业务含义</th>
+              <th scope="col">设计建议</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr id="settings-llm-name">
+              <th scope="row"><code>name</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>模型配置名称。</td>
+              <td class="decision">全局唯一；供模型选择与路由引用。</td>
+            </tr>
+            <tr id="settings-llm-protocol">
+              <th scope="row"><code>protocol</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>调用模型所使用的 API 协议。</td>
+              <td class="decision"><code>responses</code> / <code>anthropic</code>。</td>
+            </tr>
+            <tr id="settings-llm-base-url">
+              <th scope="row"><code>base_url</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>模型 API 的基础地址。</td>
+              <td class="decision">HTTP(S) 地址；保存 API 前缀，不含具体请求端点。</td>
+            </tr>
+            <tr id="settings-llm-model">
+              <th scope="row"><code>model</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>实际请求的模型标识。</td>
+              <td class="decision">填写服务端接受的模型名称。</td>
+            </tr>
+            <tr id="settings-llm-key">
+              <th scope="row"><code>key</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>调用模型所需的密钥。</td>
+              <td class="decision">普通查询仅返回 <code>has_key</code>；编辑时未提交密钥则保留原值。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+
+    <article class="database-card" id="settings-route" aria-labelledby="settings-route-heading">
+      <header class="card-header">
+        <div>
+          <div class="table-heading">
+            <h2 id="settings-route-heading"><code>settings_route</code></h2>
+            <span class="table-label">模型选择</span>
+          </div>
+          <p class="table-purpose">保存主路、旁路及各旁路用途的模型选择。</p>
+        </div>
+        <span class="status">讨论稿</span>
+      </header>
+
+      <div class="table-scroll" role="region" aria-label="settings_route 字段与设计建议" tabindex="0">
+        <table aria-label="settings_route 字段设计与讨论结论">
+          <colgroup>
+            <col class="field-col"><col class="type-col"><col class="nullable-col">
+            <col class="default-col"><col class="meaning-col"><col class="decision-col">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">字段</th>
+              <th scope="col">类型</th>
+              <th scope="col" class="nullable">可空</th>
+              <th scope="col">默认值</th>
+              <th scope="col">业务含义</th>
+              <th scope="col">设计建议</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr id="settings-route-id">
+              <th scope="row"><code>id</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td><code>1</code></td>
+              <td>唯一的模型选择设置记录。</td>
+              <td class="decision">固定为 <code>1</code>，全表一行。</td>
+            </tr>
+            <tr id="settings-route-main-default">
+              <th scope="row"><code>main_default</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>主路默认模型配置。</td>
+              <td class="decision">外键关联 <code>settings_llm.name</code>；未单独选择模型时使用。</td>
+            </tr>
+            <tr id="settings-route-main-fallback">
+              <th scope="row"><code>main_fallback</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">是</td>
+              <td><code>NULL</code></td>
+              <td>主路备用模型配置。</td>
+              <td class="decision">外键关联 <code>settings_llm.name</code>；为空表示不启用备用。</td>
+            </tr>
+            <tr id="settings-route-side-default">
+              <th scope="row"><code>side_default</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>旁路默认模型配置。</td>
+              <td class="decision">外键关联 <code>settings_llm.name</code>；旁路未单独指定时使用。</td>
+            </tr>
+            <tr id="settings-route-side-fallback">
+              <th scope="row"><code>side_fallback</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">是</td>
+              <td><code>NULL</code></td>
+              <td>旁路统一备用模型配置。</td>
+              <td class="decision">外键关联 <code>settings_llm.name</code>；为空表示不启用备用。</td>
+            </tr>
+            <tr id="settings-route-rename">
+              <th scope="row"><code>rename</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">是</td>
+              <td><code>NULL</code></td>
+              <td>会话命名使用的模型配置。</td>
+              <td class="decision">外键关联 <code>settings_llm.name</code>；为空时使用 <code>side_default</code>。</td>
+            </tr>
+            <tr id="settings-route-compact">
+              <th scope="row"><code>compact</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">是</td>
+              <td><code>NULL</code></td>
+              <td>上下文压缩使用的模型配置。</td>
+              <td class="decision">外键关联 <code>settings_llm.name</code>；为空时使用 <code>side_default</code>。</td>
+            </tr>
+            <tr id="settings-route-commit">
+              <th scope="row"><code>commit</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">是</td>
+              <td><code>NULL</code></td>
+              <td>提交说明生成使用的模型配置。</td>
+              <td class="decision">外键关联 <code>settings_llm.name</code>；为空时使用 <code>side_default</code>。</td>
+            </tr>
+            <tr id="settings-route-polish">
+              <th scope="row"><code>polish</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">是</td>
+              <td><code>NULL</code></td>
+              <td>提示词润色使用的模型配置。</td>
+              <td class="decision">外键关联 <code>settings_llm.name</code>；为空时使用 <code>side_default</code>。</td>
+            </tr>
+            <tr id="settings-route-handoff">
+              <th scope="row"><code>handoff</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">是</td>
+              <td><code>NULL</code></td>
+              <td>交接说明生成使用的模型配置。</td>
+              <td class="decision">外键关联 <code>settings_llm.name</code>；为空时使用 <code>side_default</code>。</td>
+            </tr>
+            <tr id="settings-route-suggest">
+              <th scope="row"><code>suggest</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">是</td>
+              <td><code>NULL</code></td>
+              <td>下一步建议生成使用的模型配置。</td>
+              <td class="decision">外键关联 <code>settings_llm.name</code>；为空时使用 <code>side_default</code>。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+
+    <!-- settings_behavior 保存应用全局智能体设置，id 固定为 1，五个开关各占一列并限制为 0/1。
+         默认值采用用户提供的配置：自动命名 1、自动建议 1、显示工具失败 0、全局资料审批 0、高风险审批 1。
+         与 settings_fileopen/settings_shortcut 一样按单窗口串行保存，不增加 revision、时间戳、历史或用户/项目/会话关联。
+         自动开关仅控制后续自动触发，已受理命令继续执行；手动触发不受自动开关限制，手动改名后仍允许自动命名。
+         show_tool_failures 仅影响时间线展示，不抑制失败 tool_result 的持久化或模型反馈；审批开关不替代权限、基准及范围校验。
+         数据库为该组设置的唯一持久化来源，实施时移除 YAML 中的 agent 配置，不双读双写；全局设置不纳入会话检查点恢复。
+         init.sql 仅补建缺失行；普通启动不覆盖用户设置，reset=1 恢复预置内容时也保留本行已有选择。本轮仅补充表设计。 -->
+    <article class="database-card" id="settings-behavior" aria-labelledby="settings-behavior-heading">
+      <header class="card-header">
+        <div>
+          <div class="table-heading">
+            <h2 id="settings-behavior-heading"><code>settings_behavior</code></h2>
+            <span class="table-label">智能体设置</span>
+          </div>
+          <p class="table-purpose">保存应用全局的自动行为、工具展示和审批设置。</p>
+        </div>
+        <span class="status">已确定</span>
+      </header>
+
+      <div class="table-scroll" role="region" aria-label="settings_behavior 字段与设计建议" tabindex="0">
+        <table aria-label="settings_behavior 字段设计与讨论结论">
+          <colgroup>
+            <col class="field-col"><col class="type-col"><col class="nullable-col">
+            <col class="default-col"><col class="meaning-col"><col class="decision-col">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">字段</th>
+              <th scope="col">类型</th>
+              <th scope="col" class="nullable">可空</th>
+              <th scope="col">默认值</th>
+              <th scope="col">业务含义</th>
+              <th scope="col">设计建议</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr id="settings-behavior-id">
+              <th scope="row"><code>id</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td><code>1</code></td>
+              <td>唯一的智能体设置记录。</td>
+              <td class="decision">固定为 <code>1</code>，全表一行。</td>
+            </tr>
+            <tr id="settings-behavior-auto-rename-enabled">
+              <th scope="row"><code>auto_rename_enabled</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td><code>1</code></td>
+              <td>是否自动生成和更新会话名称。</td>
+              <td class="decision">全局生效；关闭后不再自动触发，已受理任务继续执行。</td>
+            </tr>
+            <tr id="settings-behavior-auto-suggest-enabled">
+              <th scope="row"><code>auto_suggest_enabled</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td><code>1</code></td>
+              <td>是否自动生成下一步建议。</td>
+              <td class="decision">全局生效；关闭不影响手动触发，已受理任务继续执行。</td>
+            </tr>
+            <tr id="settings-behavior-show-tool-failures">
+              <th scope="row"><code>show_tool_failures</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td><code>0</code></td>
+              <td>是否在时间线显示工具调用失败。</td>
+              <td class="decision">只控制展示，工具结果仍正常保存并反馈给模型。</td>
+            </tr>
+            <tr id="settings-behavior-require-resource-approval">
+              <th scope="row"><code>require_resource_approval</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td><code>0</code></td>
+              <td>编辑项目全局资料是否需要审批。</td>
+              <td class="decision">适用于项目基本信息、全局约束和目录结构。</td>
+            </tr>
+            <tr id="settings-behavior-require-high-risk-approval">
+              <th scope="row"><code>require_high_risk_approval</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td><code>1</code></td>
+              <td>高风险操作是否需要人工审批。</td>
+              <td class="decision">控制审批要求，权限和修改范围校验仍须执行。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+
   </main>
 </body>
 </html>

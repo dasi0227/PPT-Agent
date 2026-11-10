@@ -24,6 +24,7 @@
 
 # 本地 LLM Profile（可能包含明文 Key）
 config.yaml
+/backend_refact/sql/init.sql
 
 # 编辑器/系统
 .idea/
