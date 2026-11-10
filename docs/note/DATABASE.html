@@ -1,0 +1,1576 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>数据库设计</title>
+  <link rel="stylesheet" href="../../frontend/public/interaction-tokens.css">
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: rgb(var(--ui-workspace));
+      color: rgb(var(--ui-foreground));
+      font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    main { width: min(1280px, calc(100% - 48px)); margin: 48px auto 64px; }
+
+    .page-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px 24px;
+      margin-bottom: 24px;
+    }
+
+    h1 { margin: 0; font-size: 28px; font-weight: 650; letter-spacing: -.04em; line-height: 1.3; }
+    .page-meta { display: flex; flex-wrap: wrap; gap: 16px; color: rgb(var(--ui-text-500)); font-size: 13px; }
+
+    .database-card {
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid rgb(var(--ui-border));
+      border-radius: var(--radius-panel);
+      background: rgb(var(--ui-surface));
+    }
+
+    .database-card + .database-card { margin-top: 28px; }
+
+    .card-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px 24px;
+      padding: 22px 24px 20px;
+    }
+
+    .table-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; }
+    h2 { margin: 0; font-size: 20px; font-weight: 600; line-height: 1.4; }
+    h2 code { color: inherit; font-size: inherit; }
+    .table-label { color: rgb(var(--ui-text-600)); font-size: 15px; }
+    .table-purpose { margin: 8px 0 0; color: rgb(var(--ui-text-700)); font-size: 14px; line-height: 1.6; }
+
+    .status {
+      padding: 4px 10px;
+      border: 1px solid rgb(var(--ui-border));
+      border-radius: var(--radius-control);
+      color: rgb(var(--ui-text-600));
+      font-size: 12px;
+      line-height: 1.5;
+      white-space: nowrap;
+    }
+
+    .table-scroll { overflow-x: auto; scrollbar-color: rgb(var(--ui-border-strong)) rgb(var(--ui-surface)); }
+    table { width: 100%; min-width: 1040px; border-collapse: collapse; table-layout: fixed; }
+    .field-col { width: 24%; }
+    .type-col { width: 8%; }
+    .nullable-col { width: 6%; }
+    .default-col { width: 11%; }
+    .meaning-col { width: 22%; }
+    .decision-col { width: 29%; }
+
+    th, td {
+      padding: 18px 16px;
+      border-top: 1px solid rgb(var(--ui-border));
+      text-align: left;
+      vertical-align: top;
+      font-size: 14px;
+      line-height: 1.65;
+      overflow-wrap: anywhere;
+    }
+
+    tbody th:last-child, tbody td:last-child { padding-right: 24px; }
+    thead th { padding-block: 11px; background: rgb(var(--ui-panel-muted)); color: rgb(var(--ui-text-600)); font-size: 12px; font-weight: 500; text-align: center; vertical-align: middle; }
+    tbody th { font-weight: 500; }
+    tbody th, tbody td:nth-child(2), tbody td:nth-child(4) { text-align: center; }
+    td { color: rgb(var(--ui-text-700)); }
+    .nullable { text-align: center; }
+    .decision { color: rgb(var(--ui-text-800)); }
+
+    code {
+      color: rgb(var(--ui-text-800));
+      font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+      font-size: .92em;
+      overflow-wrap: anywhere;
+    }
+
+    time { font-variant-numeric: tabular-nums; }
+    ::selection { background: rgb(var(--ui-selected)); color: rgb(var(--ui-foreground)); }
+    .table-scroll:focus-visible { outline: none; box-shadow: inset 0 0 0 1px rgb(var(--ui-border-strong)); }
+
+    @media (max-width: 680px) {
+      main { width: calc(100% - 32px); margin-block: 28px 40px; }
+      h1 { font-size: 24px; }
+      .page-header { margin-bottom: 20px; }
+      .card-header { padding: 20px; }
+      tbody th:last-child, tbody td:last-child { padding-right: 20px; }
+    }
+
+    @media print {
+      @page { size: A4 landscape; margin: 12mm; }
+      body { background: rgb(var(--ui-surface)); }
+      main { width: 100%; margin: 0; }
+      .table-scroll { overflow: visible; }
+      table { min-width: 0; }
+      th, td { padding: 10px; font-size: 12px; }
+      thead { display: table-header-group; }
+      tr, .card-header { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header class="page-header">
+      <h1>数据库设计</h1>
+      <div class="page-meta"><code>backend_refact</code><span>SQLite</span><time datetime="2026-11-10">2026-11-10</time></div>
+    </header>
+
+    <!-- 每讨论一张表，在 main 下增加一张 database-card；未确认的建议保持“讨论稿”。 -->
+    <!-- 已确认不保留 slides、briefing_versions、thread_context_versions、context_compactions 及独立 interactions 表。
+         页面统一使用 project_id + page_id 定位，页面清单与顺序从项目大纲读取，正文从项目文件读取；预览、缩略图、引用和页面操作入口均携带项目身份，不维护另一套持久化页面索引。
+         交接文稿及修订归入 commands；当前模型上下文由 messages.context_position 表达，摘要正文保存为 summary 消息。
+         会话历史快照按新结构保存并恢复本会话的 messages 及其 context_position，连同本会话可撤销的文件修改一起恢复，不覆盖其它会话，不另存逐次上下文版本。 -->
+    <!-- 已确认不再单独建立 conversation_rounds 与 model_request_snapshots。
+         不恢复或重新开启原 Run 后，对话轮次可按 messages.run_id 分组；同 Run 的追加输入与等待答复仍属于该轮，未处理输入转交新 Run 后按新归属分组。
+         开始位置、消息数量与是否包含任务输入可由消息及 instruction_decision 推导；按稳定 seq 排序，不持久化重复汇总。
+         输入判定先以 seq 小于当前 instruction.seq 截断，再按轮次选择最近历史；任务历史的筛选与汇总也必须在同一截止范围内进行。
+         按轮次截取不等于只取已结束的 Run：最新未结束轮次在截止线前已有的用户与助手内容仍可参与，不补入截止线之后的消息。
+         summary、工具结果和旁路命令不计为新的用户对话轮次；历史读取保留实际用户输入及所需助手文本，消息数量不能代替轮次数量。
+         模型请求在运行内存中组装并调用；正常消息写入 messages.content，后续协议重放必需数据写入 messages.raw，用量累积到 runs 对应字段。
+         不再持久化整次模型请求、工具定义副本、请求阶段或完整响应来恢复原 Run；不把这些快照转存进 raw。
+         此处记录已确认的表设计结论，不修改后端执行逻辑。 -->
+    <!-- 已确认取消独立 tool_executions 表。
+         工具名称与参数归入 messages 的 tool_call，最终结果归入 tool_result，使用 run_id + tool_call_id 关联。
+         同一 Run 内的待执行、执行中、等待答复、完成结果及有限重试由活跃执行器内存维护，不另存执行阶段、attempt_no 或恢复策略。
+         工具调用先持久化并登记，再由单一调度入口执行；同一 run_id + tool_call_id 不重复启动，重复 ID 携带不同名称或参数应拒绝。
+         参数一致性可以读取调用消息或在内存计算，不重复持久化 arguments_hash；不同调用 ID 的合法重复读取不得按参数误去重。
+         消息唯一约束只能防止重复记录，不能单独保证外部副作用只执行一次；执行去重由活跃 Run 的调度与在执行状态检查承担。
+         调用结果已确认时保存实际结果；成功不得因随后取消改写为失败。执行结束后的消息保存重试只重试保存，不重跑工具。
+         确定安全的短暂重试在活跃执行内处理；文件修改或外部命令结果不明时，不因结果消息缺失自动重跑。
+         后端重启后原 Run 按终态规则结束，不接管或续跑其工具。缺少 tool_result 只表示尚无已记录结果，不能据此断言未执行或执行失败。
+         未完成调用保留在聊天历史；后续模型上下文排除缺失结果的原生工具调用组，保持协议配对完整，不从历史消息恢复执行。
+         文件提交入口原有的执行表查询须改由活跃 Run/调用状态及项目写入校验承担；保留项目锁、基准检查、原子提交与失败回滚。
+         项目文件提交凭据与重复请求处理归入下方已定稿的 receipts，不能随工具执行表一并删除。
+         不把旧执行表的状态机、恢复字段或重复结果塞入 messages.raw，也不新增替代执行表。 -->
+    <!-- 已确认删除 timeline_groups、timeline_items 与 timeline_details。
+         Run/命令分组由业务记录生成；保留稳定排序、命令分组最新执行状态与最近成功结果，以及 rename/suggest 不占可见历史的规则。
+         展示条目由 messages、runs、commands 组装；同一工具调用与结果合并展示，保留分组分页、组内分页和详情按需读取，不再独立持久化展示条目。
+         长消息正文归 messages.content，工具完整业务结果与单次修改差异归 tool_result.content，辅助命令内容归 commands.input/result/error；大内容仍按需读取，不另建详情表。
+         整个 Run 的净修改差异与具体失败信息分别归入已定稿的 runs.changes/error；净差异不能简单拼接单次工具 diff。
+         保留现有历史差异查看与错误说明能力，展示数据由对应业务记录生成。 -->
+    <article class="database-card" id="projects" aria-labelledby="projects-heading">
+      <header class="card-header">
+        <div>
+          <div class="table-heading">
+            <h2 id="projects-heading"><code>projects</code></h2>
+            <span class="table-label">项目</span>
+          </div>
+          <p class="table-purpose">一行对应一个创作项目，保存项目身份、管理名称和项目级设置。</p>
+        </div>
+        <span class="status">已确定</span>
+      </header>
+
+      <div class="table-scroll" role="region" aria-label="projects 字段与设计建议" tabindex="0">
+        <table aria-label="projects 字段设计与讨论结论">
+          <colgroup>
+            <col class="field-col"><col class="type-col"><col class="nullable-col">
+            <col class="default-col"><col class="meaning-col"><col class="decision-col">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">字段</th>
+              <th scope="col">类型</th>
+              <th scope="col" class="nullable">可空</th>
+              <th scope="col">默认值</th>
+              <th scope="col">业务含义</th>
+              <th scope="col">设计建议</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr id="projects-id">
+              <th scope="row"><code>id</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>项目的稳定标识，不随项目重命名变化。</td>
+              <td class="decision">后端生成唯一 ID。</td>
+            </tr>
+            <tr id="projects-title">
+              <th scope="row"><code>title</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>项目管理名称；与演示文稿内容标题独立。</td>
+              <td class="decision">允许项目同名；重命名不修改演示文稿标题。</td>
+            </tr>
+            <tr id="projects-theme">
+              <th scope="row"><code>theme</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>当前选中的主题 ID；不保存主题 CSS。</td>
+              <td class="decision">外键关联 <code>assets.id</code>；写入时校验 <code>assets.kind = 'theme'</code>。</td>
+            </tr>
+            <tr id="projects-logo">
+              <th scope="row"><code>logo</code></th>
+              <td><code>BLOB</code></td>
+              <td class="nullable">是</td>
+              <td><code>NULL</code></td>
+              <td>当前 Logo 的图片文件二进制内容。</td>
+              <td class="decision">只保存图片二进制，不保存原始文件名；后缀、MIME、尺寸与哈希按需计算。</td>
+            </tr>
+            <tr id="projects-slide-pagination-position">
+              <th scope="row"><code>slide_pagination_position</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'bottom-right'</code></td>
+              <td>页码的显示位置；<code>none</code> 表示关闭。</td>
+              <td class="decision">位置可选上／下 × 左／中／右，关闭用 <code>none</code>；四项启用位置不得重复。</td>
+            </tr>
+            <tr id="projects-deck-title-position">
+              <th scope="row"><code>deck_title_position</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'none'</code></td>
+              <td>演示文稿标题的显示位置；不保存标题文字。</td>
+              <td class="decision">与页码使用相同的位置枚举和互斥规则。</td>
+            </tr>
+            <tr id="projects-section-title-position">
+              <th scope="row"><code>section_title_position</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'top-left'</code></td>
+              <td>章节标题的显示位置；不保存章节名称。</td>
+              <td class="decision">与页码使用相同的位置枚举和互斥规则。</td>
+            </tr>
+            <tr id="projects-project-logo-position">
+              <th scope="row"><code>project_logo_position</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'none'</code></td>
+              <td>Logo 的显示位置；与图片是否已上传分别保存。</td>
+              <td class="decision">与页码使用相同的位置枚举和互斥规则；关闭显示不删除图片。</td>
+            </tr>
+            <tr id="projects-created-at">
+              <th scope="row"><code>created_at</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>项目的创建时间。</td>
+              <td class="decision">由后端在创建项目时写入，此后不变。</td>
+            </tr>
+            <tr id="projects-updated-at">
+              <th scope="row"><code>updated_at</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>项目更新标记，供项目列表排序及显示。</td>
+              <td class="decision">由后端维护。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+
+    <!-- 自动命名与自动建议开关归入用户全局设置；会话不保存独立开关或名称锁定状态。
+         已确认删除 events，以 sessions.revision 保存唯一的会话提交版本；初始值 0，每次会话持久化变更在同一写事务递增一次。
+         本次修改的 runs/messages/commands 取得相同 revision；检查点更新、删除和历史切换也推进会话版本，但 checkpoints 不重复存储版本。
+         plan 保存当前生效计划，JSON 为 {run_id, steps}；run_id 标识当前承接计划的 Run，steps 每项为 {title, status}，状态为 pending/processing/completed，同时最多一步 processing。
+         plan 用于计划进度展示、后续任务及建议生成的上下文；NULL 表示无计划或已手动清除，不从历史工具消息重新推导而使已清除计划复活。
+         计划更新与相关业务结果在同一事务提交并推进 sessions.revision，不另设 plan_revision；待审批草稿仍归活跃 Run 内存，生效后保存当前计划。
+         保留现有规则：当前会话任务执行期间不允许手动清除计划；新任务承接未完成计划时更新其 run_id，已完成计划在新任务开始时清空。检查点同时保存及恢复 plan。
+         历史恢复不覆盖 sessions.revision；恢复后的业务记录使用此次提交版本，不能从可删除或回退记录的最大 revision 重新分配版本。 -->
+    <article class="database-card" id="sessions" aria-labelledby="sessions-heading">
+      <header class="card-header">
+        <div>
+          <div class="table-heading">
+            <h2 id="sessions-heading"><code>sessions</code></h2>
+            <span class="table-label">会话</span>
+          </div>
+          <p class="table-purpose">一行对应项目中的一个会话，保存会话身份、名称、所属项目和当前计划。</p>
+        </div>
+        <span class="status">已确定</span>
+      </header>
+
+      <div class="table-scroll" role="region" aria-label="sessions 字段与设计建议" tabindex="0">
+        <table aria-label="sessions 字段设计与讨论结论">
+          <colgroup>
+            <col class="field-col"><col class="type-col"><col class="nullable-col">
+            <col class="default-col"><col class="meaning-col"><col class="decision-col">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">字段</th>
+              <th scope="col">类型</th>
+              <th scope="col" class="nullable">可空</th>
+              <th scope="col">默认值</th>
+              <th scope="col">业务含义</th>
+              <th scope="col">设计建议</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr id="sessions-id">
+              <th scope="row"><code>id</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>会话的唯一标识。</td>
+              <td class="decision">后端生成唯一 ID。</td>
+            </tr>
+            <tr id="sessions-project-id">
+              <th scope="row"><code>project_id</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>会话所属的项目。</td>
+              <td class="decision">外键关联 <code>projects.id</code>，随项目删除；为按项目查询建立索引。</td>
+            </tr>
+            <tr id="sessions-revision">
+              <th scope="row"><code>revision</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td><code>0</code></td>
+              <td>当前会话的统一提交版本。</td>
+              <td class="decision">事务内递增并赋给变更的业务记录；用于同步和过期操作校验，回退时保持递增。</td>
+            </tr>
+            <tr id="sessions-title">
+              <th scope="row"><code>title</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'新会话'</code></td>
+              <td>会话名称。</td>
+              <td class="decision">允许会话同名；自动命名统一由全局设置控制，手动改名后仍可自动覆盖。</td>
+            </tr>
+            <tr id="sessions-plan">
+              <th scope="row"><code>plan</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">是</td>
+              <td><code>NULL</code></td>
+              <td>会话当前生效的执行计划。</td>
+              <td class="decision">JSON 对象 <code>{run_id, steps}</code>；步骤保存标题和状态，清除时置空，版本沿用会话。</td>
+            </tr>
+            <tr id="sessions-created-at">
+              <th scope="row"><code>created_at</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>会话的创建时间。</td>
+              <td class="decision">由后端维护。</td>
+            </tr>
+            <tr id="sessions-updated-at">
+              <th scope="row"><code>updated_at</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>会话的更新时间。</td>
+              <td class="decision">由后端维护。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+    <!-- 历史操作使用当前会话提交版本校验，checkpoints 不另存 revision；runs.revision 仅表示该记录最近变更的提交版本，不单独保存场景世代。
+         历史恢复须与项目执行互斥；上下文容量按需重新计算，不在 runs 保存估算缓存或其版本字段。
+         Run 不接管、不恢复；后端重启时收尾遗留任务，取消中的任务记为 cancelled，其余未结束任务记为 interrupted。
+         waiting 仅等待回答或审批，执行器仍在；问题、审批草稿及临时答复由活跃 Run 内存维护，回答后继续同一 Run，最终交互结果写入对应 tool_result，不设 interactions 表。
+         输入统一纳入 messages，不另设输入表；用户消息保留必要的去重、JEV 判定及处理状态，不原样搬运旧输入字段。
+         messages.run_id 关联 runs.id，首条和追加输入各自保存正文与引用；执行输入由消息及 Run 设置组装，不另存 command。
+         首条输入按本 Run 的真实用户消息序号查询；最终答复按消息类型查询，每个 Run 最多一条。
+         最终答复与相应终态在同一事务提交，成功为 done，输入拒绝为 rejected；不在 runs 保存首尾消息指针。
+         已按用户最新规则保留每个 Run 最多一条 response；正常主循环中，模型返回工具调用则执行工具并继续，无工具调用则以最终答复结束 Run。
+         “没有工具调用”指本次模型输出不含 tool_call，不是模型调用次数为零，也不是整个 Run 从未使用工具；等待用户回答或审批仍沿用同一 Run。
+         闲聊由输入检测作为特殊情况拒绝，instruction_decision 保留 chat，Run 进入 rejected；不再沿用旧实现的闲聊生成回复流程。
+         闲聊判定或拒绝期间立即追加实际任务的归属、收尾受理边界与后续调度留待具体开发时讨论；本稿只确定 response 至多一条，不预先决定该并发情形的转交规则。
+         activity、commentary 仅由运行中任务的后端内存维护，通过实时推送及重连接口返回；结束后清理，不入库。
+         changes 与 error 已确认，承接时间线中的 Run 净修改差异与具体失败信息；runs 全部字段已定稿。
+         changes 为结束时冻结的净变更 JSON 数组，目标按页面 ID 与资源部位或项目内相对路径定位；项目 ID 复用当前 Run，不复制绝对路径及打开链接。
+         每项保存新增/修改/删除类别与实际差异，保留文本、结构化字段、大纲、二进制及差异不可用的现有表达能力；不保存仅供展示的完整事件封装。
+         changes 比较 Run 开始基准与收尾时已提交的最终内容，不能累加每次工具差异；改后又改回不算净变化，未提交或已回滚的修改不计入。
+         changes 为 NULL 表示尚未生成或无法取得可靠净差异，[] 表示已确认没有净变化；失败、取消与中断也可有此前已成功提交的变更。
+         正常收尾时在放开项目写入前取得一致的结束状态，changes 与终态一并提交；异常收尾无法可靠取得时不以空数组冒充无变化，历史展示不再对比当前项目文件。
+         error 为 {code,message}，仅保存导致整个 Run 失败的已知错误；code 用于识别错误类别，message 用于展示具体原因。
+         可继续执行的单次工具失败保留在 tool_result；正常取消、中断及拒绝由 status 与已有消息表达，不恢复 cancel_reason，不添加原 Run 续跑标记或错误堆栈。
+         Run 列表与状态同步按需选择字段，不默认展开完整 changes；差异详情可按 Run 与目标读取，无须为此复制一套时间线存储。 -->
+    <article class="database-card" id="runs" aria-labelledby="runs-heading">
+      <header class="card-header">
+        <div>
+          <div class="table-heading">
+            <h2 id="runs-heading"><code>runs</code></h2>
+            <span class="table-label">执行任务</span>
+          </div>
+          <p class="table-purpose">一行对应一次 Agent 任务；等待回答或审批沿用当前 Run，任务结束后重新发起新 Run。</p>
+        </div>
+        <span class="status">已确定</span>
+      </header>
+
+      <div class="table-scroll" role="region" aria-label="runs 字段与设计建议" tabindex="0">
+        <table aria-label="runs 字段设计与讨论结论">
+          <colgroup>
+            <col class="field-col"><col class="type-col"><col class="nullable-col">
+            <col class="default-col"><col class="meaning-col"><col class="decision-col">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">字段</th>
+              <th scope="col">类型</th>
+              <th scope="col" class="nullable">可空</th>
+              <th scope="col">默认值</th>
+              <th scope="col">业务含义</th>
+              <th scope="col">设计建议</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr id="runs-id">
+              <th scope="row"><code>id</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>任务的唯一标识。</td>
+              <td class="decision">后端生成；任务结束后不恢复。</td>
+            </tr>
+            <tr id="runs-session-id">
+              <th scope="row"><code>session_id</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>任务所属的会话。</td>
+              <td class="decision">外键关联 <code>sessions.id</code>，随会话删除；建立索引。</td>
+            </tr>
+            <tr id="runs-project-id">
+              <th scope="row"><code>project_id</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>任务操作的项目。</td>
+              <td class="decision">外键关联 <code>projects.id</code>；校验会话归属，非终态任务按项目唯一。</td>
+            </tr>
+            <tr id="runs-revision">
+              <th scope="row"><code>revision</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>任务状态最近一次提交的版本。</td>
+              <td class="decision">使用会话提交序号；同一事务只发布最终状态，兼作同步位置与并发校验值。</td>
+            </tr>
+            <tr id="runs-mode">
+              <th scope="row"><code>mode</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>当前执行模式。</td>
+              <td class="decision"><code>chat / ask / plan / create</code>。</td>
+            </tr>
+            <tr id="runs-model">
+              <th scope="row"><code>model</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>任务选择的模型配置名。</td>
+              <td class="decision">启动时读取该配置；不保存供应商、模型名称和地址快照。</td>
+            </tr>
+            <tr id="runs-scope">
+              <th scope="row"><code>scope</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">是</td>
+              <td><code>NULL</code></td>
+              <td>当前允许操作的页面 ID 列表。</td>
+              <td class="decision"><code>NULL</code> 不限本项目页面；JSON 数组限定页面 ID，章节提交时展开，<code>[]</code> 不授权任何页面。仅经范围审批变更。</td>
+            </tr>
+            <tr id="runs-status">
+              <th scope="row"><code>status</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'pending'</code></td>
+              <td>任务的执行状态与结束结果。</td>
+              <td class="decision"><code>pending / running / waiting / cancelling / done / rejected / failed / interrupted / cancelled</code>；<code>waiting</code>、<code>cancelling</code> 仍占用项目。</td>
+            </tr>
+            <tr id="runs-changes">
+              <th scope="row"><code>changes</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">是</td>
+              <td><code>NULL</code></td>
+              <td>任务结束时冻结的净修改差异。</td>
+              <td class="decision">JSON 数组，保存目标、变更类别与差异；<code>[]</code> 表示无净变化，<code>NULL</code> 表示尚未生成或不可用。</td>
+            </tr>
+            <tr id="runs-error">
+              <th scope="row"><code>error</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">是</td>
+              <td><code>NULL</code></td>
+              <td>导致整个任务失败的具体错误。</td>
+              <td class="decision">JSON 对象 <code>{code, message}</code>；无对应错误时为空。</td>
+            </tr>
+            <tr id="runs-input-tokens">
+              <th scope="row"><code>input_tokens</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td><code>0</code></td>
+              <td>累计已报告的输入 Token 数。</td>
+              <td class="decision">非负整数；按模型调用去重累计。</td>
+            </tr>
+            <tr id="runs-output-tokens">
+              <th scope="row"><code>output_tokens</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td><code>0</code></td>
+              <td>累计已报告的输出 Token 数。</td>
+              <td class="decision">非负整数；按模型调用去重累计。</td>
+            </tr>
+            <tr id="runs-total-tokens">
+              <th scope="row"><code>total_tokens</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td><code>0</code></td>
+              <td>累计已报告的总 Token 数。</td>
+              <td class="decision">保留供应商报告的总量。</td>
+            </tr>
+            <tr id="runs-call-count">
+              <th scope="row"><code>call_count</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td><code>0</code></td>
+              <td>累计模型调用次数。</td>
+              <td class="decision">非负整数；包含未报告 Token 用量的调用。</td>
+            </tr>
+            <tr id="runs-active-duration">
+              <th scope="row"><code>active_duration</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td><code>0</code></td>
+              <td>已累计的有效执行时长。</td>
+              <td class="decision">排除等待回答和审批时间；新任务重新计时。</td>
+            </tr>
+            <tr id="runs-active-since">
+              <th scope="row"><code>active_since</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">是</td>
+              <td><code>NULL</code></td>
+              <td>当前有效计时段的起点。</td>
+              <td class="decision">与累计时长共同驱动计时；停止计时时清空。</td>
+            </tr>
+            <tr id="runs-created-at">
+              <th scope="row"><code>created_at</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>任务的创建时间。</td>
+              <td class="decision">由后端维护。</td>
+            </tr>
+            <tr id="runs-updated-at">
+              <th scope="row"><code>updated_at</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>任务的更新时间。</td>
+              <td class="decision">由后端维护。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+    <!-- messages 统一保存用户、助手、工具消息及压缩摘要；正文与引用不在 runs 重复保存。
+         用户消息 ID 在提交时确定并用于去重；统一请求记录仍校验重复请求的参数，不另存 client_message_id 或 request_hash。
+         同一 Run 内追加输入新增消息，不覆盖首条输入。正常完成后的待处理追加输入交接保留原消息 ID 与 seq，归入新 Run。
+         kind 统一为 instruction / response / thinking / commentary / tool_call / tool_result / summary。
+         不单独保存 role；组装模型请求时由 kind 推导：instruction、summary 为 user，response、thinking、commentary、tool_call 为 assistant，tool_result 为 tool。摘要不能冒充用户输入，系统提示按请求组装。
+         每个 Run 最多一条 response；正常主循环的无工具调用输出作为最终答复，与 done 同事务提交；输入拒绝说明也使用 response，与 rejected 同事务提交。
+         response 只承载当前 Run 的最终答复；闲聊按输入检测进入 rejected，不保留旧实现中先回复闲聊再继续执行任务的路径；并发追加实际任务的处理另待开发时明确。
+         对非空 run_id 且 kind = 'response' 的消息建立 Run 内唯一约束；失败、取消、中断可以没有 response，“最多一条”不要求所有终态都补造回复。
+         输入和答复通过 run_id 归属同一任务；response 可综合回应多条 instruction，不保存逐条回复关联。
+         commentary 保存助手的过程说明；每次工具调用独立保存为 tool_call，content 保存工具名称和参数，tool_result 保存结果，不另建工具调用表。
+         tool_call 和 tool_result 必填 tool_call_id，其他 kind 必须为空；同一 Run 的同一调用至多各有一条调用记录和最终结果，后端校验结果对应同 Run 的调用。
+         本次设计取消独立 interactions 表，替代旧 run_interactions 的持久化职责；tool_call 保留模型原始请求，tool_result 保存最终用户决定、必要的定稿内容及实际执行结果。
+         等待期间的问题、候选方案、可编辑草稿和已接受答复保存在活跃 Run 内存中；页面刷新或重连读取该运行态，后端重启不恢复未完成交互。
+         用户提交的是答复，后端校验其对应调用、当前草稿及 Run 是否仍有效，单次接受后继续执行；批准不等于执行成功，不提前写入最终 tool_result。
+         草稿修改后旧确认不得应用，资源写入前仍校验实际基准；这些运行态校验不要求独立交互表或恢复检查点。
+         不保存逐次编辑、点击或差异历史；最终拒绝、执行失败与成功都由实际工具结果表达，未完成交互随 Run 终止而失效。
+         组装模型请求时还原同一次助手输出中的内容顺序及工具调用组合，不将每条存储记录机械转换为独立协议消息；所需原生协议数据保留在 raw。
+         实时进度不写入消息表。运行上下文按请求组装，不保存 context 类型。
+         content 使用项目自定义 JSON 格式，按 kind 校验实际内容，不统一套内容块数组：instruction 为 {text, references}，references 为有序引用数组。
+         instruction 的 DOM 引用将 type=dom、page_id、提交时的选区 html 与对应 comment 保存在同一对象；必要定位信息随引用保存。图片引用使用 type=image、attachment_id。
+         历史界面展示用户正文、注释及图片附件，不展示 DOM 的 HTML 或内部定位信息；模型请求按需组装正文、DOM 及对应注释，拼接后的文本不重复保存。
+         技能、组件、页面及附件引用保留稳定 ID 与必要信息，附件字节和资源正文由各自存储管理；图片由适配器解析引用后转换为图像输入。
+         response、thinking、commentary、summary 的文字内容直接保存为 JSON 字符串；tool_call 保存 {name, arguments}，tool_result 保存实际结果，图文结果保留必要的内容顺序。
+         raw 仅保存后续模型请求需要的原生协议内容及必要来源信息，不返回前端；同一次原始输出不向拆分后的消息重复复制，不保存完整 HTTP 响应、日志或恢复检查点。
+         instruction_decision 保存 JEV 分类，instruction_status 保存信箱处理状态，两者仅用于 instruction；初始状态为 queued，包含等待 JEV 判定，交给执行器、直接答复或明确拒绝后均为 sent。
+         输入处理结果与状态变化在事务内提交；sent 表示信箱处理完成，不保证已发给模型，也不代表整个任务已完成，不随 Run 失败或取消而回退。
+         任务取消或异常结束时，尚未处理的输入保持 queued；投递必须同时校验 Run 状态，不向已取消或异常结束的 Run 投递。
+         压缩时旧消息退出当前上下文，摘要及保留消息进入当前上下文；聊天历史不因压缩删除。
+         不保留 thread_context_versions；当前上下文成员与顺序以 context_position 为准，更新与摘要写入在同一事务提交。
+         context_position 独立安排模型上下文顺序，使摘要可位于保留消息之前；NULL 表示不参与当前上下文。
+         seq 与旁路命令共用会话内唯一递增分配，同一事务内的新记录也各用不同序号；固定历史顺序与输入判定边界。revision 使用会话提交序号记录最近变更。 -->
+    <article class="database-card" id="messages" aria-labelledby="messages-heading">
+      <header class="card-header">
+        <div>
+          <div class="table-heading">
+            <h2 id="messages-heading"><code>messages</code></h2>
+            <span class="table-label">消息</span>
+          </div>
+          <p class="table-purpose">一行对应一条消息，统一保存正文、引用和用户输入处理状态。</p>
+        </div>
+        <span class="status">已确定</span>
+      </header>
+
+      <div class="table-scroll" role="region" aria-label="messages 字段与设计建议" tabindex="0">
+        <table aria-label="messages 字段设计与讨论结论">
+          <colgroup>
+            <col class="field-col"><col class="type-col"><col class="nullable-col">
+            <col class="default-col"><col class="meaning-col"><col class="decision-col">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">字段</th>
+              <th scope="col">类型</th>
+              <th scope="col" class="nullable">可空</th>
+              <th scope="col">默认值</th>
+              <th scope="col">业务含义</th>
+              <th scope="col">设计建议</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr id="messages-id">
+              <th scope="row"><code>id</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>消息的唯一标识。</td>
+              <td class="decision">用户消息沿用提交时的 ID，重试复用；其他消息由后端生成。</td>
+            </tr>
+            <tr id="messages-session-id">
+              <th scope="row"><code>session_id</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>消息所属的会话。</td>
+              <td class="decision">外键关联 <code>sessions.id</code>，随会话删除。</td>
+            </tr>
+            <tr id="messages-run-id">
+              <th scope="row"><code>run_id</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">是</td>
+              <td><code>NULL</code></td>
+              <td>消息所属的执行任务。</td>
+              <td class="decision">外键关联 <code>runs.id</code>，校验会话一致；会话级手动压缩摘要可为空。</td>
+            </tr>
+            <tr id="messages-revision">
+              <th scope="row"><code>revision</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>消息记录最近一次提交的版本。</td>
+              <td class="decision">使用会话提交序号；处理状态等更新时递增，正文与原始引用不覆盖。</td>
+            </tr>
+            <tr id="messages-seq">
+              <th scope="row"><code>seq</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>消息在会话中的固定顺序。</td>
+              <td class="decision">与旁路命令共用会话序号分配，创建后不变；同事务内不同记录也使用不同序号。</td>
+            </tr>
+            <tr id="messages-kind">
+              <th scope="row"><code>kind</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>消息的业务用途。</td>
+              <td class="decision"><code>instruction / response / thinking / commentary / tool_call / tool_result / summary</code>；每个 Run 最多一条 <code>response</code>。</td>
+            </tr>
+            <tr id="messages-content">
+              <th scope="row"><code>content</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>正文、引用及工具内容。</td>
+              <td class="decision">合法 JSON；<code>instruction</code> 为 <code>{text, references}</code>，引用有序；其余按 <code>kind</code> 保存实际内容。</td>
+            </tr>
+            <tr id="messages-raw">
+              <th scope="row"><code>raw</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">是</td>
+              <td><code>NULL</code></td>
+              <td>后续模型调用要求携带的原生协议数据。</td>
+              <td class="decision">合法 JSON；仅在适配器实际需要时保存，不返回前端。</td>
+            </tr>
+            <tr id="messages-tool-call-id">
+              <th scope="row"><code>tool_call_id</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">是</td>
+              <td><code>NULL</code></td>
+              <td>关联工具调用与结果的调用 ID。</td>
+              <td class="decision"><code>tool_call / tool_result</code> 必填，其他类型为 <code>NULL</code>；同一 Run 的同一调用，两种记录各最多一条。</td>
+            </tr>
+            <tr id="messages-instruction-decision">
+              <th scope="row"><code>instruction_decision</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">是</td>
+              <td><code>NULL</code></td>
+              <td>JEV 对用户输入的分类结果。</td>
+              <td class="decision">仅 <code>instruction</code> 使用：<code>task / chat / disclosure / bypass / irrelevant</code>；未判定或检测失败时为空。</td>
+            </tr>
+            <tr id="messages-instruction-status">
+              <th scope="row"><code>instruction_status</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">是</td>
+              <td><code>NULL</code></td>
+              <td>用户输入的信箱处理状态。</td>
+              <td class="decision">仅 <code>instruction</code> 使用：<code>queued / sent</code>，初始为 <code>queued</code>；其他消息为 <code>NULL</code>。</td>
+            </tr>
+            <tr id="messages-context-position">
+              <th scope="row"><code>context_position</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">是</td>
+              <td><code>NULL</code></td>
+              <td>消息在当前模型上下文中的位置。</td>
+              <td class="decision">非空时同会话唯一；<code>NULL</code> 表示不参与。压缩时重排，聊天历史顺序不变。</td>
+            </tr>
+            <tr id="messages-created-at">
+              <th scope="row"><code>created_at</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>消息创建时间。</td>
+              <td class="decision">由后端写入，用于历史消息时间展示。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+    <!-- commands 一行对应一次辅助命令执行；rename 仅负责调用模型生成标题，手动改名直接更新 sessions.title，不创建命令记录，不需要 mode 参数。
+         command_id 将首次执行、重试与修订归为同一操作；每次新执行有独立 id 和 seq，终态不恢复。同一分组最多有一个非终态执行。
+         messages 与 commands 共用会话内唯一递增的 seq 分配；同一事务内每条新记录分配不同序号，创建后不变。
+         命令卡片按分组最早 seq 定位，展示最新执行状态及最近成功结果；修订失败不丢失上一版成功文稿，执行顺序由 seq 推导，不另存 attempt_no。
+         input 按 kind 仅保存实际参数；无额外参数时为 {}。润色保存用户原文，修订的 base_id 指向同组最近成功执行，feedback 保存修改要求，校验后读取基础结果，不复制文稿。
+         result 是业务结果的唯一存储：handoff 保存 title/content；compact 引用 messages 中的 summary；commit 保存已确认提交的 hash、说明及展示所需结果。
+         交接修订直接引用历史执行结果，删除 briefing_versions；压缩与改名等业务变更和 done 在同一事务提交。
+         删除 context_compactions，手动与自动压缩均由 compact 命令记录，自动压缩关联当前 Run；摘要正文只存 messages，commands.result 保存摘要引用、标题及现有界面需要的压缩前后 Token 数与当时窗口上限，回收量及百分比按需计算。
+         rename/suggest 保留结果但不占可见聊天卡片；polish/handoff/compact/commit 可进入时间线，命令结果不自动进入模型上下文。
+         自动开关只控制后续自动触发，已接受的命令继续执行，不因关闭开关取消；不保存触发来源，手动触发不受自动开关限制。
+         命令通过关联 Run、业务输入及当前会话状态校验结果是否仍适用；关联 Run 不代表自动触发，项目由 session_id 查询，不重复保存 project_id。
+         阶段进度仅在运行中推送；模型配置按旁路路由读取，不保存模型快照、owner_instance_id、execution_revision 或恢复检查点。
+         error 仅保存用户可见错误和重试判定，不保存堆栈或诊断快照；技术中断不自动重复请求模型或执行外部操作。
+         本次重构不设计 Git 提交意图持久化或专用核对流程；中断后记录 interrupted，不自动恢复或重复执行。
+         已确认的 Git 提交不能因晚到的取消变为 cancelled；无法确认的结果保持 interrupted 并禁止盲目重试。
+         revision 负责更新同步，created_at 负责时间展示；暂不另存 updated_at、模型统计或可直接推导的版本号。 -->
+    <article class="database-card" id="commands" aria-labelledby="commands-heading">
+      <header class="card-header">
+        <div>
+          <div class="table-heading">
+            <h2 id="commands-heading"><code>commands</code></h2>
+            <span class="table-label">旁路命令</span>
+          </div>
+          <p class="table-purpose">一行对应一次辅助命令执行；重试与修订归入同一操作。</p>
+        </div>
+        <span class="status">已确定</span>
+      </header>
+
+      <div class="table-scroll" role="region" aria-label="commands 字段与设计建议" tabindex="0">
+        <table aria-label="commands 字段设计与讨论结论">
+          <colgroup>
+            <col class="field-col"><col class="type-col"><col class="nullable-col">
+            <col class="default-col"><col class="meaning-col"><col class="decision-col">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">字段</th>
+              <th scope="col">类型</th>
+              <th scope="col" class="nullable">可空</th>
+              <th scope="col">默认值</th>
+              <th scope="col">业务含义</th>
+              <th scope="col">设计建议</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr id="commands-id">
+              <th scope="row"><code>id</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>本次命令执行的唯一标识。</td>
+              <td class="decision">重试或修订创建新记录；请求去重由统一请求记录处理。</td>
+            </tr>
+            <tr id="commands-command-id">
+              <th scope="row"><code>command_id</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>同一命令及其重试、修订的分组标识。</td>
+              <td class="decision">同组沿用此 ID，校验会话与类型一致；同组最多一条非终态记录。</td>
+            </tr>
+            <tr id="commands-session-id">
+              <th scope="row"><code>session_id</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>命令所属的会话。</td>
+              <td class="decision">外键关联 <code>sessions.id</code>，随会话删除；项目由会话取得。</td>
+            </tr>
+            <tr id="commands-run-id">
+              <th scope="row"><code>run_id</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">是</td>
+              <td><code>NULL</code></td>
+              <td>本次命令关联的 Run。</td>
+              <td class="decision">外键关联 <code>runs.id</code>，校验会话一致；任务派生或结果依赖某 Run 时填写，独立操作为空。</td>
+            </tr>
+            <tr id="commands-revision">
+              <th scope="row"><code>revision</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>执行记录最近一次提交的版本。</td>
+              <td class="decision">使用会话提交序号；状态及结果变化时更新。</td>
+            </tr>
+            <tr id="commands-seq">
+              <th scope="row"><code>seq</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>本次执行在会话中的创建顺序。</td>
+              <td class="decision">与消息共用序号分配；同一 <code>command_id</code> 的卡片使用最早的 <code>seq</code>。</td>
+            </tr>
+            <tr id="commands-kind">
+              <th scope="row"><code>kind</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>辅助命令的业务类型。</td>
+              <td class="decision"><code>rename / polish / handoff / compact / commit / suggest</code>；<code>rename</code> 仅生成标题。</td>
+            </tr>
+            <tr id="commands-status">
+              <th scope="row"><code>status</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'pending'</code></td>
+              <td>本次命令执行的状态。</td>
+              <td class="decision"><code>pending / running / cancelling / done / failed / interrupted / cancelled</code>。</td>
+            </tr>
+            <tr id="commands-input">
+              <th scope="row"><code>input</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>本次命令的业务输入。</td>
+              <td class="decision">合法 JSON，仅保存实际参数，无参数时为 <code>{}</code>；修订保存基础执行 ID 与反馈。</td>
+            </tr>
+            <tr id="commands-result">
+              <th scope="row"><code>result</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">是</td>
+              <td><code>NULL</code></td>
+              <td>本次执行成功后的业务结果。</td>
+              <td class="decision">合法 JSON；压缩引用摘要消息，交接保存文稿，提交保存 Git 结果。</td>
+            </tr>
+            <tr id="commands-error">
+              <th scope="row"><code>error</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">是</td>
+              <td><code>NULL</code></td>
+              <td>异常说明及是否允许重试。</td>
+              <td class="decision">合法 JSON，保存 <code>code / message / retryable</code>；供错误展示与重试操作。</td>
+            </tr>
+            <tr id="commands-created-at">
+              <th scope="row"><code>created_at</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>本次执行的创建时间。</td>
+              <td class="decision">由后端写入；每次重试或修订保留自己的时间。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+    <!-- checkpoints 已按用户确认改为一行一个检查点，snapshot 直接保存 JSON 正文；不再保存检查点数组或引用外部快照文件。
+         session_id 关联 sessions.id 并级联删除，项目由会话取得；run_id 非空表示该 Run 开始前的检查点，空值表示首次回退前的返回快照。
+         每个会话的同一 Run 只保存一份检查点；对 (session_id, run_id) WHERE run_id IS NOT NULL 建立唯一索引，对 session_id WHERE run_id IS NULL 建立唯一索引。
+         run_id 是历史定位标识，不建立到 runs 的外键；回退会移除目标及后续 Run，但其检查点仍需保留以支持返回最新。写入时校验 Run 归属，不能随 Run 删除而级联清理。
+         不另设 id 或 kind：普通检查点按 session_id + run_id 定位，返回快照按 session_id + run_id IS NULL 定位。列表与时间沿用当前 Run/消息记录，不增加顺序和时间列。
+         snapshot 保存本会话 messages/runs/commands、sessions.plan、相关幂等凭据、恢复范围内的文件清单和实际内容；普通检查点另含原始输入正文、引用及初始模式/范围等回填数据，不另设 input 列。
+         文本文件内容为 JSON 字符串，纳入恢复范围的二进制内容使用 Base64；只保存路径或附件 ID 不足以恢复已删除内容。
+         不复制完整模型请求；临时文件事务、其他会话目录、全局资产/设置及历史控制记录不进入回退范围，snapshot 不嵌套备份 checkpoints 表，sessions.revision 不从旧快照恢复。
+         用户明确只回退当前会话并撤销它造成的文件修改，其他会话消息、Run 和命令不跟随回退；禁止以整项目数据库快照覆盖其他会话。
+         普通检查点在创建 Run 前捕获业务与文件基准；新检查点正文、Run/初始消息受理、相应凭据和 sessions.revision 在同一数据库事务提交，失败时不留下有效检查点。
+         首次回退在协调的恢复操作中创建 run_id 为空的返回快照；S0 经 Run1 变为 S1，再经 Run2 变为 S2，普通检查点保存 S0/S1，返回快照保存 S2。连续回退不覆盖该返回行。
+         回退恢复当时的消息身份、seq、instruction_status、instruction_decision、context_position 等业务字段及 sessions.plan，移除之后新增的消息和对应 Run/命令，恢复记录取得当前提交 revision；会话统一版本继续递增。
+         回退目标的原始输入回填输入框，不自动作为新消息入库；再次提交创建新的消息和 Run。未发送草稿和其他前端状态仍由前端管理。
+         普通回退目标须仍对应当前会话中存在的 Run；回退后尚留在表内、对应 Run 已移除的检查点暂不作为当前历史入口，保留它们只为返回最新时恢复原有回退能力。
+         返回最新从空 run_id 行恢复业务数据与文件，成功后删除该返回行，原有普通检查点继续可用；不为此把其他检查点正文重复装入返回快照。
+         在历史位置接受新输入/Run 或改变本会话业务历史时，删除返回行与已不在当前历史中的普通检查点，再建立新分支；不能等首次文件写入才使返回入口失效。
+         任一会话的 Run 实际提交文件变化时，清除同项目其他会话的所有检查点行，含普通检查点和返回快照；只撤销回退能力，不删除其聊天和任务记录，并推进受影响会话提交版本。
+         失效与文件提交凭据及业务写入协调提交；无变化、失败或已回滚的写入尝试不触发失效，后来把内容改回原样也不复活已失效检查点。
+         回退/返回本身修改共享文件时同样使其他会话旧检查点失效；无法归属某个会话的手动文件修改使该项目旧检查点失效，不引入跨会话自动合并。
+         历史切换要求项目空闲并持有项目写锁，在实际写入前校验 sessions.revision、会话存在、目标有效与文件基准；不依赖前端取消撤销已到达后端的操作。
+         checkpoints 不保存 revision/scene_revision/deleted_sessions；每次历史改变推进 sessions.revision，前端废弃旧请求、订阅及缓存并分页重读，events 已确认删除。
+         快照入库解决正文与检查点记录的一致性；恢复磁盘项目文件仍需跨文件/数据库的临时事务收尾，不新增 pending_operation 列，也不恢复原 Run 执行。
+         文件写入前持久化必要的临时事务记录，结合当前/目标 sessions.revision 判断数据库提交；任何后续写入前先处理遗留事务，遇到未知版本不得猜测，具体收尾协议仍待实现时明确。
+         会话删除时通过 session_id 清理快照行；真正删除的文件清理由对应流程收尾，无外部快照文件需要另行清理。
+         一行一检查点、正文入库及 run_id 空值表达返回快照已确认，仅更新文档，不改变运行代码。 -->
+    <article class="database-card" id="checkpoints" aria-labelledby="checkpoints-heading">
+      <header class="card-header">
+        <div>
+          <div class="table-heading">
+            <h2 id="checkpoints-heading"><code>checkpoints</code></h2>
+            <span class="table-label">会话检查点</span>
+          </div>
+          <p class="table-purpose">一行保存一个检查点，快照正文直接存入数据库。</p>
+        </div>
+        <span class="status">已确定</span>
+      </header>
+
+      <div class="table-scroll" role="region" aria-label="checkpoints 字段与设计建议" tabindex="0">
+        <table aria-label="checkpoints 字段设计与讨论结论">
+          <colgroup>
+            <col class="field-col"><col class="type-col"><col class="nullable-col">
+            <col class="default-col"><col class="meaning-col"><col class="decision-col">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">字段</th>
+              <th scope="col">类型</th>
+              <th scope="col" class="nullable">可空</th>
+              <th scope="col">默认值</th>
+              <th scope="col">业务含义</th>
+              <th scope="col">设计建议</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr id="checkpoints-session-id">
+              <th scope="row"><code>session_id</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>检查点所属的会话。</td>
+              <td class="decision">外键关联 <code>sessions.id</code>，随会话删除；同一会话可保存多个检查点。</td>
+            </tr>
+            <tr id="checkpoints-run-id">
+              <th scope="row"><code>run_id</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">是</td>
+              <td><code>NULL</code></td>
+              <td>回退至哪个 Run 开始前。</td>
+              <td class="decision">非空时同会话内唯一；空值表示返回快照，每会话最多一行。不建立 Run 外键。</td>
+            </tr>
+            <tr id="checkpoints-snapshot">
+              <th scope="row"><code>snapshot</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>该检查点的完整恢复数据。</td>
+              <td class="decision">JSON 对象；保存会话业务记录、文件内容及普通检查点的原始输入。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+    <!-- receipts 字段与职责已定稿，仅承接确有重复提交风险且业务实体本身不足以表达的请求处理凭据。
+         用途为 Run/辅助命令受理和项目文件提交确认。
+         kind 使用 create_run、create_command、commit_files 三种，保留独立文件提交凭据。
+         create_run、create_command 的 owner_id 为 sessions.id；commit_files 为发起项目文件写入的 runs.id。
+         追加输入已确定不写本表，使用稳定的 messages.id 和唯一约束防重；只有首次插入成功才入队，重复请求返回已有消息，不重复投递或重置为 queued。
+         追加输入按会话和消息 ID 查找并校验原始消息内容；消息交接到新 Run 后返回当前归属和处理状态，不回放首次投递结果。
+         commit_files 对应 Run 内具体工具操作的项目文件提交确认，request_id 可使用该 Run 内稳定的 tool_call_id；Git 辅助命令受理属于 create_command。
+         示例：create_run/session_01/msg_01 对应受理并创建 run_01。
+         示例：create_command/session_01/req_03 对应一次润色命令受理；commit_files/run_01/call_04 对应一次页面文件写入确认。
+         创建 Run 的 request_id 复用初始消息的稳定提交标识，不再生成另一套消息请求 ID。
+         kind + owner_id + request_id 组合唯一；kind 明确操作类别，owner_id 的所属实体由 kind 确定，不复制 project_id/session_id/run_id 全套字段。
+         规范化提交时的业务参数后计算 request_hash；不对后续可变的 Run 状态、批准后的 scope 或实时加载结果重新计算原请求身份。
+         相同标识且参数一致返回原受理或提交成功结果；参数不一致拒绝。用户主动发起新执行或重试命令时使用新的 request_id。
+         数据库内的业务写入和成功凭据在同一事务提交，并发重复请求由组合唯一约束及事务处理；重放凭据不重新调度已受理任务。
+         已确定删除 status；记录存在即表示请求已成功受理或文件已提交，不表示 Run 或命令执行完成；任务状态仍读取 runs/commands。
+         不保存失败或执行中凭据；参数校验失败不入表，任务执行失败由对应业务实体表达。
+         result 按 kind 固定为：create_run 保存 {"run_id":"run_01"}；create_command 保存 {"execution_id":"exec_01"}，指向 commands.id；commit_files 为 SQL NULL。
+         commands.command_id 可由该执行记录读取，不重复保存命令分组 ID；Run/命令的当前状态与产物读取对应业务记录，不冻结完整响应。
+         result 不复制模型回复、工具结果、命令产物或完整 HTTP 响应；commit_files 由凭据存在且 request_hash 匹配确认提交成功，无需额外结果内容。
+         文件提交凭据在相关数据库提交中一并写入，结合项目文件事务记录判断已提交或应回滚；不据此恢复原 Run，也不承诺任意外部命令的副作用恰好发生一次。
+         历史切换已确定不写本表；按明确会话、目标及预期 sessions.revision 执行，成功后版本变化使原请求不能再次执行，超时或版本冲突后重新读取当前状态。
+         项目文件与本会话数据之间的提交、回滚及异常清理仍须保留，随 checkpoints 的历史切换方案讨论；不因取消历史切换凭据而删除这些职责。
+         过期历史请求不得重新执行，凭据按所属会话与对应快照管理，不通过会话回退覆盖其它会话的凭据。
+         取消 Run 使用状态转换，设置按单窗口串行保存；不机械地为每次内部更新生成凭据，不保留检查点、模型请求与工具执行阶段的去重记录。
+         自动命名与建议的防重复触发仍保留实际业务规则，先利用命令身份及输入分类表达，不能仅因旧实现写过凭据就保留其内部更新记录。
+         已确认五秒撤销由前端处理：先隐藏，倒计时内撤销只恢复界面，到期才发送真实删除请求；后端不保存撤销期限或待撤销状态。
+         后端尚未收到删除请求时，任务不会因界面隐藏而自动停止；前端待发请求丢失时，后端不会自行执行删除。
+         真正接受删除后，后端仍须停止相关写入、完成数据库与文件清理；历史只属于仍存在的会话，删除会话同步清理其历史入口，不继续借用本表保存可变删除任务。
+         凭据随所属业务记录清理；会话历史恢复时只处理本会话相应凭据，先处理遗留文件事务，过期历史请求不得重新执行。 -->
+    <article class="database-card" id="receipts" aria-labelledby="receipts-heading">
+      <header class="card-header">
+        <div>
+          <div class="table-heading">
+            <h2 id="receipts-heading"><code>receipts</code></h2>
+            <span class="table-label">请求处理凭据</span>
+          </div>
+          <p class="table-purpose">一行记录一次成功受理或提交的凭据。</p>
+        </div>
+        <span class="status">已确定</span>
+      </header>
+
+      <div class="table-scroll" role="region" aria-label="receipts 字段与设计建议" tabindex="0">
+        <table aria-label="receipts 字段设计与讨论结论">
+          <colgroup>
+            <col class="field-col"><col class="type-col"><col class="nullable-col">
+            <col class="default-col"><col class="meaning-col"><col class="decision-col">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">字段</th>
+              <th scope="col">类型</th>
+              <th scope="col" class="nullable">可空</th>
+              <th scope="col">默认值</th>
+              <th scope="col">业务含义</th>
+              <th scope="col">设计建议</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr id="receipts-kind">
+              <th scope="row"><code>kind</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>需要识别重复提交的操作类别。</td>
+              <td class="decision"><code>create_run / create_command / commit_files</code>。</td>
+            </tr>
+            <tr id="receipts-owner-id">
+              <th scope="row"><code>owner_id</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>请求所属的会话或 Run。</td>
+              <td class="decision">创建 Run、受理命令用会话 ID；文件提交用 Run ID。</td>
+            </tr>
+            <tr id="receipts-request-id">
+              <th scope="row"><code>request_id</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>一次请求的稳定提交标识。</td>
+              <td class="decision">重复提交复用；与 <code>kind</code>、<code>owner_id</code> 组合唯一。</td>
+            </tr>
+            <tr id="receipts-request-hash">
+              <th scope="row"><code>request_hash</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>原始业务参数的摘要。</td>
+              <td class="decision">对规范化参数计算；同一请求标识携带不同参数时拒绝。</td>
+            </tr>
+            <tr id="receipts-result">
+              <th scope="row"><code>result</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">是</td>
+              <td><code>NULL</code></td>
+              <td>成功受理后关联的业务记录。</td>
+              <td class="decision">创建 Run/命令保存目标记录 ID 的 JSON；文件提交为 <code>NULL</code>。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+    <!-- assets、tags、asset_tags 已确定。
+         资产 ID 在全资产库唯一、类型创建后不可变；不同类型仍可使用相同显示名称。
+         projects.theme 引用 assets.id；外键保证存在，后端在写事务内校验类型为 theme。已被项目引用的主题不得直接删除。
+         四类资产正文统一存入 assets.content，由数据库作为唯一持久化来源，不维护运行时正文文件、路径或文件状态。
+         content 为非空 TEXT，直接保存 CSS、HTML、Markdown 或纯文本原文；由 kind 决定解析与校验，不包装 JSON，不另存格式或扩展名。
+         正文、元数据和标签关系的变更在同一数据库事务内提交；保留现有内容校验与大小限制。
+         查询按用途选择字段；预览、加载和短语正文搜索仍保留，不为展示目录无条件读取所有正文。
+         现有本地应用打开入口需要明确导出及编辑回存方式，交互方案另行讨论；导出文件不作为自动同步的第二份持久化来源。
+         资产启停保留管理界面可见性；禁用影响选择和 Agent 披露/加载，不删除已创建项目或已使用的内容。
+         不保留 normalized_name：写入时对名称去首尾空白并按现有 Unicode 小写规则规范化，在写事务内校验唯一性。
+         snippet 名称不区分大小写唯一；其余类型的显示名称允许重复。标签名称在 kind 内不区分大小写唯一。
+         不保留标签 key：分类筛选、接口提交、资产元数据和数据库关联统一使用 tags.id，显示名称从 tags.name 读取。
+         标签字典当前无用户编辑入口，is_system 未参与权限或行为判断，不保留；本稿不新增标签管理功能。
+         资产和标签的 created_at / updated_at 当前仅写入及透传，无展示、排序、同步或业务判断消费方，暂不保留。
+         asset_tags 仅存 asset_id / tag_id，组合唯一；两侧外键删除级联。类型通过 assets.kind 与 tags.kind 校验，不重复存资产类别。
+         关联变更在写事务内校验同类型、标签存在且不重复，保留单个资产最多两个标签的现有规则。
+         tags.id 与 kind 保持稳定；标签列表按 name、id 排序，不持久化排序字段，不增加关联时间或独立 ID。 -->
+    <article class="database-card" id="assets" aria-labelledby="assets-heading">
+      <header class="card-header">
+        <div>
+          <div class="table-heading">
+            <h2 id="assets-heading"><code>assets</code></h2>
+            <span class="table-label">资产</span>
+          </div>
+          <p class="table-purpose">一行对应一个主题、组件、技能或文本片段，保存身份、管理信息与正文。</p>
+        </div>
+        <span class="status">已确定</span>
+      </header>
+
+      <div class="table-scroll" role="region" aria-label="assets 字段与设计建议" tabindex="0">
+        <table aria-label="assets 字段设计与讨论结论">
+          <colgroup>
+            <col class="field-col"><col class="type-col"><col class="nullable-col">
+            <col class="default-col"><col class="meaning-col"><col class="decision-col">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">字段</th>
+              <th scope="col">类型</th>
+              <th scope="col" class="nullable">可空</th>
+              <th scope="col">默认值</th>
+              <th scope="col">业务含义</th>
+              <th scope="col">设计建议</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr id="assets-id">
+              <th scope="row"><code>id</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>资产的稳定标识。</td>
+              <td class="decision">全资产库唯一；用于引用、查询与更新资产。</td>
+            </tr>
+            <tr id="assets-kind">
+              <th scope="row"><code>kind</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>资产所属类别。</td>
+              <td class="decision"><code>theme / component / skill / snippet</code>；创建后不变。</td>
+            </tr>
+            <tr id="assets-name">
+              <th scope="row"><code>name</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>资产列表、选择器与搜索使用的名称。</td>
+              <td class="decision">非空，最多 80 字符；<code>snippet</code> 名称不区分大小写唯一。</td>
+            </tr>
+            <tr id="assets-description">
+              <th scope="row"><code>description</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>供界面展示、搜索与 Agent 选择的简介。</td>
+              <td class="decision">非空，最多 500 字符。</td>
+            </tr>
+            <tr id="assets-content">
+              <th scope="row"><code>content</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>资产的完整正文。</td>
+              <td class="decision">直接保存原文：主题为 CSS，组件为 HTML，技能为 Markdown，短语为纯文本。</td>
+            </tr>
+            <tr id="assets-disabled">
+              <th scope="row"><code>disabled</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td><code>0</code></td>
+              <td>是否停用该资产。</td>
+              <td class="decision"><code>0 / 1</code>；停用后仍可管理，不再供选择或 Agent 加载。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+
+    <article class="database-card" id="tags" aria-labelledby="tags-heading">
+      <header class="card-header">
+        <div>
+          <div class="table-heading">
+            <h2 id="tags-heading"><code>tags</code></h2>
+            <span class="table-label">标签</span>
+          </div>
+          <p class="table-purpose">一行对应一个标签，保存适用类别与显示名称。</p>
+        </div>
+        <span class="status">已确定</span>
+      </header>
+
+      <div class="table-scroll" role="region" aria-label="tags 字段与设计建议" tabindex="0">
+        <table aria-label="tags 字段设计与讨论结论">
+          <colgroup>
+            <col class="field-col"><col class="type-col"><col class="nullable-col">
+            <col class="default-col"><col class="meaning-col"><col class="decision-col">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">字段</th>
+              <th scope="col">类型</th>
+              <th scope="col" class="nullable">可空</th>
+              <th scope="col">默认值</th>
+              <th scope="col">业务含义</th>
+              <th scope="col">设计建议</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr id="tags-id">
+              <th scope="row"><code>id</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>标签的稳定标识。</td>
+              <td class="decision">全标签库唯一；筛选、接口提交与 <code>asset_tags.tag_id</code> 关联统一使用。</td>
+            </tr>
+            <tr id="tags-kind">
+              <th scope="row"><code>kind</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>允许使用该标签的资产类别。</td>
+              <td class="decision"><code>theme / component / skill / snippet</code>；不得跨类别关联。</td>
+            </tr>
+            <tr id="tags-name">
+              <th scope="row"><code>name</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>标签展示名称，如“极简”。</td>
+              <td class="decision">非空；同一 <code>kind</code> 内不区分大小写唯一。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+
+    <article class="database-card" id="asset-tags" aria-labelledby="asset-tags-heading">
+      <header class="card-header">
+        <div>
+          <div class="table-heading">
+            <h2 id="asset-tags-heading"><code>asset_tags</code></h2>
+            <span class="table-label">资产标签关联</span>
+          </div>
+          <p class="table-purpose">一行表示某个资产使用了某个标签。</p>
+        </div>
+        <span class="status">已确定</span>
+      </header>
+
+      <div class="table-scroll" role="region" aria-label="asset_tags 字段与设计建议" tabindex="0">
+        <table aria-label="asset_tags 字段设计与讨论结论">
+          <colgroup>
+            <col class="field-col"><col class="type-col"><col class="nullable-col">
+            <col class="default-col"><col class="meaning-col"><col class="decision-col">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">字段</th>
+              <th scope="col">类型</th>
+              <th scope="col" class="nullable">可空</th>
+              <th scope="col">默认值</th>
+              <th scope="col">业务含义</th>
+              <th scope="col">设计建议</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr id="asset-tags-asset-id">
+              <th scope="row"><code>asset_id</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>使用标签的资产。</td>
+              <td class="decision">外键关联 <code>assets.id</code>，随资产删除；每个资产最多两个标签。</td>
+            </tr>
+            <tr id="asset-tags-tag-id">
+              <th scope="row"><code>tag_id</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>资产使用的标签。</td>
+              <td class="decision">外键关联 <code>tags.id</code>，随标签删除；组合唯一，两侧 <code>kind</code> 须一致。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+    <!-- fileopen 与 shortcuts 已确定，均属于应用全局设置。
+         两表各保存一行，id 固定为 1；每个设置项目使用独立字段。
+         两表按单窗口和单一写入入口设计，不保存 revision；前端串行保存设置，并忽略过期读取结果。
+         不增加用户、项目、会话关联，不增加创建/更新时间或设置历史。
+         文件设置仍用于项目 JSON、HTML 等实际文件；资产入库不改变项目正文文件的存储方式。
+         文件打开方式保存为普通字符串：system / finder / textedit / vscode，或 app: 后接规范化应用绝对路径。
+         json_open 与 html_open 另允许 inherit，表示使用 default_open；default_open 自身不得使用 inherit。
+         html_open 同时适用于 .html 与 .htm，扩展名匹配不区分大小写，其余文件使用 default_open。
+         自定义应用路径必须出现在 custom_apps；保留已有新增应用检查、重复去除与打开前检查。
+         custom_apps 是按添加顺序保存的 JSON 路径数组；应用名从路径计算，内置应用与平台支持状态由程序提供，不重复入库。
+         自定义应用即使暂未选用仍保留在列表中；已卸载应用仍允许移除。
+         删除自定义应用时，引用它的 default_open 改为 system，json_open / html_open 改为 inherit，与列表删除同事务提交。
+         shortcuts 按具体操作拆成独立列，保存整套当前配置；共 18 个操作字段，不使用 overrides 或 binding JSON。
+         五个输入触发符各存一个标点字符；十三个快捷键各存一个规范化字符串，如 Primary+Shift+KeyP。
+         组合键按 Primary、Alt、Shift、按键代码的固定顺序连接，未启用的修饰键省略；大小写固定，不存空格或平台显示文案。
+         Primary 在 macOS 为 Command，在其他已支持环境为 Ctrl；Alt 在 macOS 为 Option。
+         按键使用 KeyboardEvent.code 对应代码，如 KeyP、Digit1、Equal、Minus，避免字面加号与分隔符歧义。
+         保留现有按键范围、触发符范围、修饰键规则、系统保留组合、重复绑定及 Equal/Shift 规则的校验，不新增快捷键能力。
+         功能名称、分组与默认绑定由程序目录统一定义；表中存当前生效的选择，数据库默认值与恢复默认值使用同一套定义。
+         保存时先校验完整设置，再原子更新；多项交换与全部重置一次提交。
+         全部重置将操作字段恢复为对应默认值，不删除记录。
+         短时撤销快照与撤销标记留在前端；重置后任一设置再次修改则使旧撤销失效，回存沿用串行保存流程。
+         当前功能与列的对应：
+         trigger.command / trigger.summary / trigger.component / trigger.page / trigger.snippet 对应 command_trigger / reference_trigger / component_trigger / page_trigger / snippet_trigger；
+         deck.previous / deck.next / deck.zoom_in / deck.zoom_out / deck.overview 对应 previous_page / next_page / zoom_in / zoom_out / toggle_overview；
+         deck.export / deck.view / deck.form / deck.theme 对应 export_deck / toggle_view / toggle_source / switch_theme；
+         composer.submit / composer.suggestion1 / composer.suggestion2 / composer.suggestion3 对应 submit_request / suggestion_1 / suggestion_2 / suggestion_3。 -->
+    <article class="database-card" id="fileopen" aria-labelledby="fileopen-heading">
+      <header class="card-header">
+        <div>
+          <div class="table-heading">
+            <h2 id="fileopen-heading"><code>fileopen</code></h2>
+            <span class="table-label">文件打开设置</span>
+          </div>
+          <p class="table-purpose">保存应用全局的文件打开方式与自定义应用列表。</p>
+        </div>
+        <span class="status">已确定</span>
+      </header>
+
+      <div class="table-scroll" role="region" aria-label="fileopen 字段与设计建议" tabindex="0">
+        <table aria-label="fileopen 字段设计与讨论结论">
+          <colgroup>
+            <col class="field-col"><col class="type-col"><col class="nullable-col">
+            <col class="default-col"><col class="meaning-col"><col class="decision-col">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">字段</th>
+              <th scope="col">类型</th>
+              <th scope="col" class="nullable">可空</th>
+              <th scope="col">默认值</th>
+              <th scope="col">业务含义</th>
+              <th scope="col">设计建议</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr id="fileopen-id">
+              <th scope="row"><code>id</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td><code>1</code></td>
+              <td>唯一的文件设置记录。</td>
+              <td class="decision">固定为 <code>1</code>，全表一行。</td>
+            </tr>
+            <tr id="fileopen-default-open">
+              <th scope="row"><code>default_open</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'system'</code></td>
+              <td>文件的默认打开方式。</td>
+              <td class="decision"><code>system / finder / textedit / vscode</code>，或 <code>app:绝对路径</code>。</td>
+            </tr>
+            <tr id="fileopen-json-open">
+              <th scope="row"><code>json_open</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'inherit'</code></td>
+              <td>JSON 文件的打开方式。</td>
+              <td class="decision">可指定打开方式；<code>inherit</code> 表示使用 <code>default_open</code>。</td>
+            </tr>
+            <tr id="fileopen-html-open">
+              <th scope="row"><code>html_open</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'inherit'</code></td>
+              <td>HTML 文件的打开方式。</td>
+              <td class="decision">适用于 <code>.html / .htm</code>；<code>inherit</code> 表示使用 <code>default_open</code>。</td>
+            </tr>
+            <tr id="fileopen-custom-apps">
+              <th scope="row"><code>custom_apps</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'[]'</code></td>
+              <td>用户添加到选项中的应用。</td>
+              <td class="decision">JSON 数组，仅存应用绝对路径；未选用的应用也保留。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+
+    <article class="database-card" id="shortcuts" aria-labelledby="shortcuts-heading">
+      <header class="card-header">
+        <div>
+          <div class="table-heading">
+            <h2 id="shortcuts-heading"><code>shortcuts</code></h2>
+            <span class="table-label">快捷键设置</span>
+          </div>
+          <p class="table-purpose">保存应用全局的快捷键与输入触发符，每个操作对应一个独立字段。</p>
+        </div>
+        <span class="status">已确定</span>
+      </header>
+
+      <div class="table-scroll" role="region" aria-label="shortcuts 字段与设计建议" tabindex="0">
+        <table aria-label="shortcuts 字段设计与讨论结论">
+          <colgroup>
+            <col class="field-col"><col class="type-col"><col class="nullable-col">
+            <col class="default-col"><col class="meaning-col"><col class="decision-col">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">字段</th>
+              <th scope="col">类型</th>
+              <th scope="col" class="nullable">可空</th>
+              <th scope="col">默认值</th>
+              <th scope="col">业务含义</th>
+              <th scope="col">设计建议</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr id="shortcuts-id">
+              <th scope="row"><code>id</code></th>
+              <td><code>INTEGER</code></td>
+              <td class="nullable">否</td>
+              <td><code>1</code></td>
+              <td>唯一的快捷键设置记录。</td>
+              <td class="decision">固定为 <code>1</code>，全表一行。</td>
+            </tr>
+            <tr id="shortcuts-command-trigger">
+              <th scope="row"><code>command_trigger</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'/'</code></td>
+              <td>打开命令菜单的输入触发符。</td>
+              <td class="decision">单个支持的标点符号；五种触发符不得重复。</td>
+            </tr>
+            <tr id="shortcuts-reference-trigger">
+              <th scope="row"><code>reference_trigger</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'@'</code></td>
+              <td>打开综合引用菜单的输入触发符。</td>
+              <td class="decision">单个支持的标点符号。</td>
+            </tr>
+            <tr id="shortcuts-component-trigger">
+              <th scope="row"><code>component_trigger</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'$'</code></td>
+              <td>引用组件的输入触发符。</td>
+              <td class="decision">单个支持的标点符号。</td>
+            </tr>
+            <tr id="shortcuts-page-trigger">
+              <th scope="row"><code>page_trigger</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'#'</code></td>
+              <td>引用页面的输入触发符。</td>
+              <td class="decision">单个支持的标点符号。</td>
+            </tr>
+            <tr id="shortcuts-snippet-trigger">
+              <th scope="row"><code>snippet_trigger</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'%'</code></td>
+              <td>插入短语的输入触发符。</td>
+              <td class="decision">单个支持的标点符号。</td>
+            </tr>
+            <tr id="shortcuts-previous-page">
+              <th scope="row"><code>previous_page</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'Primary+ArrowLeft'</code></td>
+              <td>切换到上一页的快捷键。</td>
+              <td class="decision">普通字符串；<code>Primary</code> 对应 Command／Ctrl。</td>
+            </tr>
+            <tr id="shortcuts-next-page">
+              <th scope="row"><code>next_page</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'Primary+ArrowRight'</code></td>
+              <td>切换到下一页的快捷键。</td>
+              <td class="decision">修饰键与按键代码用 <code>+</code> 连接。</td>
+            </tr>
+            <tr id="shortcuts-zoom-in">
+              <th scope="row"><code>zoom_in</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'Primary+Equal'</code></td>
+              <td>放大演示文稿的快捷键。</td>
+              <td class="decision">按键保存 <code>Equal</code> 等代码。</td>
+            </tr>
+            <tr id="shortcuts-zoom-out">
+              <th scope="row"><code>zoom_out</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'Primary+Minus'</code></td>
+              <td>缩小演示文稿的快捷键。</td>
+              <td class="decision">按键保存 <code>Minus</code> 等代码。</td>
+            </tr>
+            <tr id="shortcuts-toggle-overview">
+              <th scope="row"><code>toggle_overview</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'Primary+KeyO'</code></td>
+              <td>切换总览的快捷键。</td>
+              <td class="decision">组合键须通过按键与冲突校验。</td>
+            </tr>
+            <tr id="shortcuts-export-deck">
+              <th scope="row"><code>export_deck</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'Primary+KeyP'</code></td>
+              <td>导出演示文稿的快捷键。</td>
+              <td class="decision">组合键须通过按键与冲突校验。</td>
+            </tr>
+            <tr id="shortcuts-toggle-view">
+              <th scope="row"><code>toggle_view</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'Primary+KeyU'</code></td>
+              <td>切换视图的快捷键。</td>
+              <td class="decision">组合键须通过按键与冲突校验。</td>
+            </tr>
+            <tr id="shortcuts-toggle-source">
+              <th scope="row"><code>toggle_source</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'Primary+KeyI'</code></td>
+              <td>切换 HTML 预览与源码的快捷键。</td>
+              <td class="decision">组合键须通过按键与冲突校验。</td>
+            </tr>
+            <tr id="shortcuts-switch-theme">
+              <th scope="row"><code>switch_theme</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'Primary+KeyT'</code></td>
+              <td>切换主题的快捷键。</td>
+              <td class="decision">组合键须通过按键与冲突校验。</td>
+            </tr>
+            <tr id="shortcuts-submit-request">
+              <th scope="row"><code>submit_request</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'Primary+Enter'</code></td>
+              <td>提交输入框请求的快捷键。</td>
+              <td class="decision">组合键须通过按键与冲突校验。</td>
+            </tr>
+            <tr id="shortcuts-suggestion-1">
+              <th scope="row"><code>suggestion_1</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'Alt+Digit1'</code></td>
+              <td>填入第 1 条建议的快捷键。</td>
+              <td class="decision"><code>Alt</code> 对应 Option／Alt。</td>
+            </tr>
+            <tr id="shortcuts-suggestion-2">
+              <th scope="row"><code>suggestion_2</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'Alt+Digit2'</code></td>
+              <td>填入第 2 条建议的快捷键。</td>
+              <td class="decision">组合键须通过按键与冲突校验。</td>
+            </tr>
+            <tr id="shortcuts-suggestion-3">
+              <th scope="row"><code>suggestion_3</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td><code>'Alt+Digit3'</code></td>
+              <td>填入第 3 条建议的快捷键。</td>
+              <td class="decision">组合键须通过按键与冲突校验。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+
+
+    <!-- events/thread_changes/session_changes 已确认取消，不持久化每次提交的变更清单。
+         正常运行只在事务提交成功后推送内存通知；记录最新状态从业务表读取，大正文和差异按需加载。瞬时进度仍由活跃 Run 内存提供。
+         重连、历史回退或无法可靠补齐删除时废弃旧请求、订阅、分页游标和会话缓存，再分页加载当前状态；不能用 revision 过滤现存记录推断物理删除。
+         在线删除与回退发送刷新通知；通知无法送达时关闭订阅，使客户端重连重读，不以持久事件补发保证恢复。
+         初始视图和 sessions.revision 在同一读事务读取；先建立订阅再读取当前视图，加载期间的更高版本通知触发补读，避免读取与订阅之间遗漏更新。
+         seq 仍用于 messages/commands 的创建顺序；回退后的旧分页游标随视图重置废弃，revision 始终从 sessions 单独持久分配。
+         会话实际删除后客户端按删除通知或不存在结果关闭会话，无额外事件清理或保留期限。 -->
+  </main>
+</body>
+</html>
