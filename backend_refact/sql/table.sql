@@ -1,7 +1,14 @@
 -- 执行方须在事务开始前启用 PRAGMA foreign_keys = ON；事务由执行方管理。
 -- 跨表归属、共享 seq 分配、Unicode 名称唯一性及业务 JSON 由后端事务校验。
--- 资产标签须同类且最多两个；receipts 的多态归属与清理由后端事务校验。
+-- 资产标签须同类；receipts 的多态归属与清理由后端事务校验。
 -- checkpoints.run_id 不设外键，避免回退删除 Run 时丢失返回最新所需的检查点。
+-- 非终态 Run 按会话唯一；同项目的不同会话可并行，文件提交由后端协调。
+-- 仅 sessions 保存 revision；会话业务变更与版本递增同事务提交，读取响应使用同次读取的会话版本。
+-- updated_at 使用毫秒时间戳，由应用在对应写入成功时维护；同值保存不更新时间。
+-- 资产创建时初始化 updated_at；名称、描述、正文、标签集合或启停状态实际变化时更新。
+-- 项目创建时初始化 updated_at；名称、资料、大纲、幻灯片、主题、装饰或 Logo 实际变化时更新。
+-- 项目和会话不保存 created_at；列表按 updated_at DESC、id ASC 排序。
+-- 短语候选按匹配优先级、updated_at DESC、name ASC、id ASC 排序。
 
 CREATE TABLE assets (
     id TEXT NOT NULL PRIMARY KEY,
@@ -10,6 +17,7 @@ CREATE TABLE assets (
     description TEXT NOT NULL,
     content TEXT NOT NULL,
     disabled INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
     CHECK (kind IN ('theme', 'component', 'skill', 'snippet')),
     CHECK (length(trim(name)) BETWEEN 1 AND 80),
     CHECK (length(trim(description)) BETWEEN 1 AND 500),
@@ -25,7 +33,6 @@ CREATE TABLE projects (
     deck_title_position TEXT NOT NULL DEFAULT 'none',
     section_title_position TEXT NOT NULL DEFAULT 'top-left',
     project_logo_position TEXT NOT NULL DEFAULT 'none',
-    created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     CHECK (slide_pagination_position IN ('none', 'top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right')),
     CHECK (deck_title_position IN ('none', 'top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right')),
@@ -45,7 +52,6 @@ CREATE TABLE sessions (
     revision INTEGER NOT NULL DEFAULT 0,
     title TEXT NOT NULL DEFAULT '新会话',
     plan TEXT DEFAULT NULL,
-    created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     CHECK (revision >= 0),
     CHECK (plan IS NULL OR (json_valid(plan) AND json_type(plan) = 'object'))
@@ -55,7 +61,6 @@ CREATE TABLE runs (
     id TEXT NOT NULL PRIMARY KEY,
     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    revision INTEGER NOT NULL,
     mode TEXT NOT NULL,
     model TEXT NOT NULL,
     scope TEXT DEFAULT NULL,
@@ -72,7 +77,6 @@ CREATE TABLE runs (
     updated_at INTEGER NOT NULL,
     CHECK (mode IN ('chat', 'ask', 'plan', 'create')),
     CHECK (status IN ('pending', 'running', 'waiting', 'cancelling', 'done', 'rejected', 'failed', 'interrupted', 'cancelled')),
-    CHECK (revision >= 0),
     CHECK (input_tokens >= 0),
     CHECK (output_tokens >= 0),
     CHECK (total_tokens >= 0),
@@ -87,7 +91,6 @@ CREATE TABLE messages (
     id TEXT NOT NULL PRIMARY KEY,
     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     run_id TEXT DEFAULT NULL REFERENCES runs(id),
-    revision INTEGER NOT NULL,
     seq INTEGER NOT NULL,
     kind TEXT NOT NULL,
     content TEXT NOT NULL,
@@ -102,7 +105,6 @@ CREATE TABLE messages (
     CHECK (instruction_status IN ('queued', 'sent')),
     CHECK ((kind IN ('tool_call', 'tool_result') AND tool_call_id IS NOT NULL AND run_id IS NOT NULL) OR (kind NOT IN ('tool_call', 'tool_result') AND tool_call_id IS NULL)),
     CHECK ((kind = 'instruction' AND instruction_status IS NOT NULL) OR (kind <> 'instruction' AND instruction_status IS NULL AND instruction_decision IS NULL)),
-    CHECK (revision >= 0),
     UNIQUE (session_id, seq),
     CHECK (json_valid(content)),
     CHECK (raw IS NULL OR (json_valid(raw)))
@@ -110,10 +112,9 @@ CREATE TABLE messages (
 
 CREATE TABLE commands (
     id TEXT NOT NULL PRIMARY KEY,
-    command_id TEXT NOT NULL,
+    operation_id TEXT NOT NULL,
     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     run_id TEXT DEFAULT NULL REFERENCES runs(id),
-    revision INTEGER NOT NULL,
     seq INTEGER NOT NULL,
     kind TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',
@@ -123,7 +124,6 @@ CREATE TABLE commands (
     created_at INTEGER NOT NULL,
     CHECK (kind IN ('rename', 'polish', 'handoff', 'compact', 'commit', 'suggest')),
     CHECK (status IN ('pending', 'running', 'cancelling', 'done', 'failed', 'interrupted', 'cancelled')),
-    CHECK (revision >= 0),
     UNIQUE (session_id, seq),
     CHECK (json_valid(input)),
     CHECK (result IS NULL OR (json_valid(result))),
@@ -150,7 +150,7 @@ CREATE TABLE receipts (
         ELSE CASE WHEN json_valid(result) THEN
             json_type(result) = 'object' AND CASE kind
                 WHEN 'create_run' THEN COALESCE(json_type(result, '$.run_id') = 'text', 0)
-                WHEN 'create_command' THEN COALESCE(json_type(result, '$.execution_id') = 'text', 0)
+                WHEN 'create_command' THEN COALESCE(json_type(result, '$.id') = 'text', 0)
             END
         ELSE 0 END
     END)
@@ -188,10 +188,10 @@ CREATE TABLE settings_shortcut (
     command_trigger TEXT NOT NULL DEFAULT '/',
     reference_trigger TEXT NOT NULL DEFAULT '@',
     component_trigger TEXT NOT NULL DEFAULT '$',
-    page_trigger TEXT NOT NULL DEFAULT '#',
+    slide_trigger TEXT NOT NULL DEFAULT '#',
     snippet_trigger TEXT NOT NULL DEFAULT '%',
-    previous_page TEXT NOT NULL DEFAULT 'Primary+ArrowLeft',
-    next_page TEXT NOT NULL DEFAULT 'Primary+ArrowRight',
+    previous_slide TEXT NOT NULL DEFAULT 'Primary+ArrowLeft',
+    next_slide TEXT NOT NULL DEFAULT 'Primary+ArrowRight',
     zoom_in TEXT NOT NULL DEFAULT 'Primary+Equal',
     zoom_out TEXT NOT NULL DEFAULT 'Primary+Minus',
     toggle_overview TEXT NOT NULL DEFAULT 'Primary+KeyO',
@@ -207,18 +207,18 @@ CREATE TABLE settings_shortcut (
     CHECK (length(command_trigger) = 1),
     CHECK (length(reference_trigger) = 1),
     CHECK (length(component_trigger) = 1),
-    CHECK (length(page_trigger) = 1),
+    CHECK (length(slide_trigger) = 1),
     CHECK (length(snippet_trigger) = 1),
     CHECK (command_trigger <> reference_trigger),
     CHECK (command_trigger <> component_trigger),
-    CHECK (command_trigger <> page_trigger),
+    CHECK (command_trigger <> slide_trigger),
     CHECK (command_trigger <> snippet_trigger),
     CHECK (reference_trigger <> component_trigger),
-    CHECK (reference_trigger <> page_trigger),
+    CHECK (reference_trigger <> slide_trigger),
     CHECK (reference_trigger <> snippet_trigger),
-    CHECK (component_trigger <> page_trigger),
+    CHECK (component_trigger <> slide_trigger),
     CHECK (component_trigger <> snippet_trigger),
-    CHECK (page_trigger <> snippet_trigger)
+    CHECK (slide_trigger <> snippet_trigger)
 );
 
 CREATE TABLE settings_llm (
@@ -268,7 +268,7 @@ CREATE INDEX idx_projects_theme ON projects(theme);
 CREATE INDEX idx_sessions_project ON sessions(project_id);
 CREATE INDEX idx_runs_session ON runs(session_id);
 CREATE INDEX idx_runs_project ON runs(project_id);
-CREATE UNIQUE INDEX idx_runs_active_project ON runs(project_id)
+CREATE UNIQUE INDEX idx_runs_active_session ON runs(session_id)
     WHERE status IN ('pending', 'running', 'waiting', 'cancelling');
 CREATE INDEX idx_messages_run ON messages(run_id, seq);
 CREATE UNIQUE INDEX idx_messages_response ON messages(run_id)
@@ -278,8 +278,8 @@ CREATE UNIQUE INDEX idx_messages_tool ON messages(run_id, tool_call_id, kind)
 CREATE UNIQUE INDEX idx_messages_context ON messages(session_id, context_position)
     WHERE context_position IS NOT NULL;
 CREATE INDEX idx_commands_run ON commands(run_id);
-CREATE INDEX idx_commands_group ON commands(command_id, seq);
-CREATE UNIQUE INDEX idx_commands_active_group ON commands(command_id)
+CREATE INDEX idx_commands_operation ON commands(operation_id, seq);
+CREATE UNIQUE INDEX idx_commands_active_operation ON commands(operation_id)
     WHERE status IN ('pending', 'running', 'cancelling');
 CREATE UNIQUE INDEX idx_checkpoints_run ON checkpoints(session_id, run_id)
     WHERE run_id IS NOT NULL;
