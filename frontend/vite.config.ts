@@ -10,7 +10,7 @@ export default defineConfig(({ command, mode }) => ({
     proxy: command === "serve" && mode !== "test" ? {
       "/api": {
         target: `http://${execFileSync("go", ["run", "./cmd/server", "--print-address"], {
-          cwd: fileURLToPath(new URL("../backend", import.meta.url)),
+          cwd: fileURLToPath(new URL("../backend_go", import.meta.url)),
           encoding: "utf8",
         }).trim()}`,
         // Preserve the browser-facing Host so native file actions can validate Origin.

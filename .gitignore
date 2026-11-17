@@ -1,11 +1,19 @@
 # 依赖与构建产物
 **/node_modules/
 **/dist/
+.pnpm-store/
 
 # Go 本地编译产物
-/backend/server
-/backend/init-resources
+/backend_go/server
+/backend_go/init-resources
 *.test
+
+# Java 构建产物与缓存
+/backend_java/**/target/
+/backend_java/**/build/
+/backend_java/**/.gradle/
+/backend_java/**/out/
+*.class
 
 # 本地临时数据与运行时缓存
 /tmp/
@@ -20,14 +28,14 @@
 .env
 .env.*
 !.env.example
-!**/.env.example
 
-# 本地 LLM Profile（可能包含明文 Key）
+# 本地配置与初始化数据
 config.yaml
-/backend_refact/sql/init.sql
+/backend_java/sql/init.sql
 
 # 编辑器/系统
 .idea/
+*.iml
 .obsidian/
 .DS_Store
 *.swp

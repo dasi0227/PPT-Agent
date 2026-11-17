@@ -134,28 +134,18 @@
       <h1>API 设计</h1>
     </header>
 
-    <!-- 已确认的跨模块约定：
+    <!-- 接口通用约定：
          后端接口统一使用 /api 前缀，无版本段。仅使用 GET 与 POST；GET 通过路径定位对象、查询参数承载读取选项，不使用请求体。
-         POST 的业务参数（含目标 ID、版本校验与幂等标识）全部放请求体，不使用路径参数或业务查询参数。
-         普通 POST 使用 JSON；上传使用 multipart/form-data。
-         统一使用 sessions、slides、assets；页面定位为 project_id + slide_id。
-         JSON 字段使用 snake_case，ID 使用 string，时间为毫秒时间戳；revision、seq 使用十进制字符串。
-         数据库仅 sessions 保存 revision。会话相关读取响应中的 revision 均取自与业务数据相同读事务的 sessions.revision，表示本次读取版本，不表示某条记录最近修改的版本；不向其他响应机械增加版本字段。
-         写操作已有的 revision 响应取本次事务成功提交后的会话版本。会话 SSE 的 changed 使用对应事务的提交版本。业务变更和会话版本递增同事务提交，不在写入成功后另查可能更高的版本。
-         普通 JSON 接口的成功与错误响应统一使用 HTTP 200。成功直接返回业务对象，列表使用 items。
-         错误返回 {"error":{"code":"…","message":"…"}}。前端检查 error.code 决定处理方式，使用 message 展示原因。
+         POST 的业务参数（含目标 ID、版本校验与幂等标识）全部放请求体，不使用路径参数或业务查询参数。普通 POST 使用 JSON；上传使用 multipart/form-data。
+         统一使用 sessions、slides、assets；页面定位为 project_id + slide_id。JSON 字段使用 snake_case，ID 使用 string，时间为毫秒时间戳；revision、seq 使用十进制字符串。
+         会话相关读取响应的 revision 表示本次返回数据对应的会话版本，不表示单条记录最近修改的版本。写操作返回的 revision 与 changed 事件版本对应本次成功提交，不包含稍后发生的其他变更。
+         普通 JSON 接口的成功与错误响应统一使用 HTTP 200。成功直接返回业务对象，列表使用 items；错误返回 {"error":{"code":"…","message":"…"}}，code 用于识别错误，message 为可展示原因。
          文件下载、图片、静态资源、SSE 建连和健康检查按各自的 HTTP 语义返回状态码。
-         模块规则及业务错误码记录在 HTML 注释中，页面供审批接口与字段。
          路径占位符必填，其他 GET 字段为查询参数。字段除标注可选、按类型适用或有省略默认值外均必填。枚举和哈希为字符串。
-         无响应字段的成功请求返回 HTTP 200 和空响应体，二进制、HTML、CSS 与 JS 原文直接作为响应体，SSE 的事件名对应 event，data 为 UTF-8 JSON。
-         错误附加数据仅在表单修复、重试或定位失败幻灯片需要时返回 error.details、error.retryable。成功对象中的执行失败使用 failure，导出任务改用 error_message。
-         update 默认局部更新：省略不修改；null 只允许明确可空的字段；[] 表示空集合。
-         仅实际需要的列表分页；会话版本、稳定排序、文件基准及幂等规则遵循 DATABASE.html。
-         实时订阅采用 SSE，不恢复持久事件补放；全局设置按单窗口串行保存，不增加 revision。
-         每个模块一张四列主表：操作、方法、请求字段、响应字段；方法列展示 HTTP 方法、路径及已有查询参数模板，可选参数按请求字段说明省略。
-         字段使用无序列表，格式为 字段名：简要说明；不折叠。
-         表格保留足够列宽，只在卡片内部水平滚动。
-         各模块未获确认的接口保持“讨论稿”，不得视为已经定稿。 -->
+         无响应字段的成功请求返回 HTTP 200 和空响应体；二进制、HTML、CSS 与 JS 原文直接作为响应体；SSE 的事件名对应 event，data 为 UTF-8 JSON。
+         错误附加数据仅在表单修复、重试或定位失败幻灯片需要时返回 error.details、error.retryable。成功对象中的执行失败使用 failure，导出任务使用 error_message。
+         update 默认局部更新：省略不修改；null 只允许明确可空的字段；[] 表示空集合。设置保存提交完整配置，具体必填项以对应接口为准。
+         实时订阅采用 SSE，不补放历史事件；全局设置接口不使用 revision。 -->
 
     <article class="api-card" id="projects" aria-labelledby="projects-heading">
       <header class="card-header">
@@ -403,65 +393,43 @@
 
     </article>
 
-    <!-- 项目管理模块的边界与旧接口去向：
-         项目管理三个接口已确认；项目名称上限为 60 字符。默认主题 editorial-serif 为创建时的实现建议。
-         列表按 updated_at 降序、id 升序排列，前端在完整列表中搜索名称。列表使用 Cache-Control: no-store。
-         项目不保存 created_at。updated_at 创建时初始化；项目名称、资料、大纲、幻灯片 spec/HTML、主题、装饰或 Logo 实际变化时更新，同值保存不更新。人工保存和 Agent 写入使用同一规则，更新时间随对应写入成功提交。
-         save 中 project_id 可省略，省略时创建，传入时修改已有项目；其余请求字段必填。拒绝 null、空 ID 及类型不符的值，传入不存在的项目 ID 返回 PROJECT_NOT_FOUND。项目允许同名，创建和改名时先去除名称首尾空白。
-         创建时校验默认主题存在、已启用且正文有效。Logo 初始未上传，装饰沿用数据库默认值，初始化项目文件和 Git。
-         管理写入在同一项目内串行。改名只更新项目管理名称，同值提交保留 updated_at。创建不自动重发，改名失败后重读项目。
-         五秒内撤销由前端处理。收到真实删除请求时停止项目全部会话的 Run 与相关执行，完成清理后返回成功。项目已经不存在时也返回成功。
-         创建和改名成功仅返回 id；前端结合本次提交且已去首尾空白的名称更新项目名称与标签。项目列表每次打开时重新读取 GET /api/projects，取得更新时间用于显示和排序，不由前端推算。删除成功后关闭该项目所有会话的订阅并清空缓存。项目标签打开、关闭与切换由前端管理。
-         本模块 JSON 错误响应均使用 HTTP 200。INVALID_ARGUMENT 用于参数或名称校验失败，PROJECT_NOT_FOUND 用于改名时项目已不存在，
-         PROJECT_BUSY 表示改名时项目被占用，DEFAULT_THEME_UNAVAILABLE 表示创建所需的默认主题不可用，INTERNAL_ERROR 表示内部操作失败。
-         不返回旧 work_dir、Logo 文件名或二进制，不引入项目 revision、创建凭据或后台删除撤销状态。
-         GET /api/projects 返回 {items}；工作区从列表取得项目名称和更新时间并确认项目存在。旧的单项目摘要读取已删除，GET /api/projects/{project_id} 用于读取完整项目内容。
-         旧 POST /projects 和 PATCH /projects/:id 统一由 POST /api/projects/save 承接，topic 改为 title。
-         旧 DELETE /projects/:id 替换为 POST /api/projects/delete。
-         GET /deletions、POST /deletions/:kind/:id/undo 删除，五秒撤销由前端延迟真实删除请求承接。
-         真正接受删除后仍须停止相关写入、清理关联会话及业务记录、凭据和项目文件；清理失败不得提前返回成功。
-         项目级写锁及业务占用由各模块校验；调用方遇到 PROJECT_BUSY 刷新占用状态。
-         具体调用链参考 frontend/src/features/workspace/ProjectPickerModal.tsx、OpenExistingProjectModal.tsx、
-         ProjectMenu.tsx、WorkspaceRoute.tsx 与 frontend/src/stores/projectStore.ts。 -->
+    <!-- 项目管理接口约定：
+         列表按 updated_at 降序、id 升序排列，使用 Cache-Control: no-store。
+         updated_at 创建时初始化；项目名称、资料、大纲、幻灯片 spec/HTML、主题、装饰或 Logo 实际变化时更新，同值保存不更新；人工保存和 Agent 写入使用同一规则。
+         save 省略 project_id 时创建，传入时修改已有项目；拒绝 null、空 ID 及类型不符的值，不存在的项目返回 PROJECT_NOT_FOUND。名称去首尾空白后为 1–60 个字符，允许同名；改名只修改项目管理名称。
+         创建要求默认主题存在、已启用且正文有效；Logo 初始未上传，装饰使用默认位置。创建请求不自动重发；改名失败后重新读取项目状态。
+         删除成功表示项目相关执行已停止、关联数据与文件已清理；清理失败不得返回成功。项目已经不存在时也成功。
+         INVALID_ARGUMENT 用于参数或名称校验失败，PROJECT_NOT_FOUND 用于改名时项目已不存在，PROJECT_BUSY 表示改名时项目被占用，DEFAULT_THEME_UNAVAILABLE 表示创建所需的默认主题不可用，INTERNAL_ERROR 表示内部操作失败。 -->
 
-    <!-- 调用方：deckStore、工作区资料表单、大纲编辑、概览拖动、工作区规格编辑、源码面板。
-         GET /api/projects/{project_id} 承接旧 GET /projects/:id/content；旧 POST /projects/:id/mutations 按基本信息、约束、大纲和幻灯片规格拆分。
-         一次返回项目资料和大纲内全部幻灯片的规格、HTML 原文。正文与对应哈希从同一次一致读取产生；前端直接用该批正文打开编辑器和预览框。
-         slides 与 hashes.slides 的键集合相同，无幻灯片时均为 {}。各字段必返；缺失文件的正文和哈希均为 null。格式错误的规格正文为 null，保留原始文件哈希供修复；已存在的空 HTML 返回空串和对应字节哈希。
-         附件、Logo 和缩略图的图片按各自地址加载。
-         旧局部 patch 由表单据原值生成完整对象后带基准提交。大纲创建、初始化和节点增删改移统一由 POST /api/projects/outline/save 承接。
-         规格编辑器、源码面板和预览框从 GET /api/projects/{project_id} 读取正文，承接旧 GET source 和 GET /slides/:id/render。旧 slide.spec.write/patch 归入规格保存，HTML 源码单独保存。
-         规格直接读写项目根目录的 {slide_id}.json，沿用现有文件结构及校验；接口不另定义一套规格结构，不将规格正文存入数据库。
-         规格和 HTML 保存时的 base_hash 分别取自打开编辑器时的 hashes.slides[id].spec 和 .html。有效规格按规范化 JSON 计算，损坏规格和 HTML 按原始字节计算，缺失为 null。两个保存接口使用普通 JSON 业务错误。
-         手动保存项目文件成功后，发起方刷新项目内容、当前预览和受影响的可见缩略图。Run 提交实际文件改动时，由所属会话的 content 通知触发同样的刷新。
-         在项目写锁内校验 base_hash；null 仅匹配文件缺失。每个节点必传 id，前端为新节点生成正式 ID，已有节点沿用原 ID。校验节点种类、ID 格式、整棵树内的 ID 唯一性和父子关系。原大纲中不存在的合法 ID 按新增处理，按提交的 ID 保存。
-         根据稳定 ID 比较新旧大纲；改名、重排和跨父节点移动均保留 slide 文件。直接删除非空章须拒绝。删除含幻灯片的节，仅允许移除章内唯一的节且其幻灯片全部保留为章直属节点。
-         校验通过后，仅清理从整棵树中移除的 slide 对应的规格及 HTML 文件，与大纲写入原子提交。基准冲突或校验失败时保留原大纲及文件。
-         项目内文件提交短暂串行，在同一项目写锁内校验目标哈希、必要关联基准及项目级互斥状态，原子落盘后重新读取内容；Run 不在整个执行期间持有项目写锁。
-         实际外部修改使哈希失效，冲突保留草稿；人工直接变更共享文件清除项目下受影响的检查点并通知会话。
+    <!-- 项目内容接口约定：
+         GET /api/projects/{project_id} 一次返回项目资料和大纲内全部幻灯片的规格、HTML 原文；正文与对应哈希反映同一份内容。
+         slides 与 hashes.slides 的键集合相同，无幻灯片时均为 {}。各字段必返；缺失文件的正文和哈希均为 null。格式错误的规格正文为 null，保留原始文件哈希；已存在的空 HTML 返回空串和对应字节哈希。
+         资料、大纲和规格保存提交完整对象；大纲创建、初始化和节点增删改移均使用 outline/save。spec 沿用现有 {slide_id}.json 文件格式及校验，HTML 源码单独保存。
+         规格和 HTML 保存时的 base_hash 分别取自 hashes.slides[id].spec 和 .html。有效规格按规范化 JSON 计算，损坏规格和 HTML 按原始字节计算，缺失为 null；base_hash 为 null 仅匹配文件缺失。
+         大纲每个节点必传 id；新节点由客户端生成正式 ID，已有节点沿用原 ID。节点种类、ID 格式、整棵树内的 ID 唯一性和父子关系须有效；原大纲中不存在的合法 ID 按新增处理。
+         大纲改名、重排和跨父节点移动保留 slide 文件。直接删除非空章须拒绝；删除含幻灯片的节，仅允许移除章内唯一的节且其幻灯片全部保留为章直属节点。
+         仅删除从整棵树中移除的 slide 对应的规格及 HTML；大纲更新与相关文件删除全部成功或全部失败，基准冲突或校验失败不改变原大纲及文件。
+         实际外部修改会使旧内容哈希失效；人工实际修改共享文件使该项目受影响的检查点失效，并通知对应会话。Run 实际提交项目文件改动后发送所属会话的 content 通知。
          INVALID_ARGUMENT、PROJECT_BUSY、RESOURCE_NOT_FOUND、CONTENT_CONFLICT。 -->
 
-    <!-- 调用方：projectStore、主题选择器、装饰设置、预览 iframe。
-         将旧 GET decorations/logo 及 GET content 里的外观合并为 GET /api/projects/{project_id}/appearance；主题与装饰 PATCH 统一由 POST /api/projects/appearance/save 承接。
-         外观保存使用 JSON 请求体，project_id 必填，theme_id、positions 至少提交一个；省略不修改，不接受 null。positions 为对象，提交时包含完整四项，每项使用读取外观接口定义的位置枚举，none 表示隐藏。
-         启用位置不能重叠，多个位置可在同一次保存中交换；关闭 Logo 位置不删除图片。在项目写锁内校验并通过同一事务保存本次提交的主题和位置，全部成功或全部失败。
-         新选择的主题须为已启用的主题资产；只要原项目仍引用，已停用的主题仍能渲染。
-         保存成功返回空响应体，不增加外观 hash 或 base_hash。前端使用本次提交字段更新外观缓存，刷新当前预览和受影响的可见缩略图，无需重新读取全部项目内容。
+    <!-- 项目外观接口约定：
+         保存时 theme_id、positions 至少提交一个；省略不修改，不接受 null。positions 提交时须包含完整四项，none 表示隐藏。
+         启用位置不能重叠，多个位置可以在同一次保存中交换；关闭 Logo 位置不删除图片。一次保存中的主题和位置全部成功或全部失败。
+         新选择的主题须为已启用的主题资产；原项目已引用的停用主题仍能渲染。
+         保存成功为空响应体，不使用外观 hash 或 base_hash。
          INVALID_ARGUMENT、POSITION_CONFLICT、ASSET_NOT_FOUND、ASSET_DISABLED、PROJECT_BUSY。 -->
 
-    <!-- 调用方：projectStore、装饰设置、预览 iframe。
-         旧 Logo PUT、DELETE 分别由 POST /api/projects/logo/save、POST /api/projects/logo/delete 承接。
-         Logo 保存使用 multipart/form-data，project_id、file 均必填；file 为一张图片的二进制文件，空文件拒绝，校验失败保留原图。校验通过后上传或替换数据库中的图片。
-         Logo 删除使用 JSON 请求体，仅提交 project_id；图片已不存在时也成功。上传、替换和删除均不改变位置。
-         Logo 成功写入后更新本地状态、刷新预览并按原地址重新请求可见缩略图。
-         外观响应的 logo 仅表示是否已上传图片，与 Logo 位置是否启用无关。上传或替换成功后前端设置 logo 为 true，并主动重新请求图片、更新显示；不能仅依赖布尔值或固定 URL 的变化触发刷新。删除成功后设置 logo 为 false 并清除图片显示。
-         标志图统一通过 GET /api/projects/{project_id}/logo 读取，不接收 version，不在业务响应中返回图片 hash。图片使用 Cache-Control: private, no-cache 与 ETag 进行 HTTP 缓存校验，上传或删除后后端使对应缓存失效。
-         INVALID_ARGUMENT、PROJECT_BUSY、INVALID_IMAGE、FILE_TOO_LARGE；读取图片不存在时返回 404。 -->
+    <!-- Logo 接口约定：
+         上传使用 multipart/form-data，project_id、file 均必填；空文件拒绝，校验失败保留原图，成功时上传或替换图片。
+         删除使用 JSON 请求体；图片已不存在时也成功。上传、替换和删除均不改变 Logo 位置。
+         外观响应的 logo 仅表示是否已上传图片，与位置是否启用无关；替换图片不改变读取地址，logo 仍为 true。
+         图片使用 Cache-Control: private, no-cache 与 ETag，上传、替换或删除后反映最新图片状态；不接收 version，不在业务响应中返回图片 hash。
+         INVALID_ARGUMENT、PROJECT_BUSY、INVALID_IMAGE、FILE_TOO_LARGE；图片不存在返回 HTTP 404。 -->
 
-    <!-- 调用方：幻灯片导航和预览工作区的 SlideThumbnail。
-         前端按项目和幻灯片 ID 取图。后端按当前源码、外观和渲染依赖校验缓存。有效缓存命中时直接返回，否则由 render-worker 渲染截图，后端缩放、编码为 WebP 并缓存后返回。
-         图片接口使用 Cache-Control: private, no-cache 和 ETag；当前图片匹配 If-None-Match 时返回 304。
-         幻灯片或 HTML 缺失返回 404，渲染服务不可用返回 503。 -->
+    <!-- 缩略图接口约定：
+         返回当前源码、外观和渲染依赖对应的 WebP 缩略图。
+         使用 Cache-Control: private, no-cache 与 ETag；当前图片匹配 If-None-Match 时返回 HTTP 304。
+         幻灯片或 HTML 缺失返回 HTTP 404，渲染服务不可用返回 HTTP 503。 -->
 
     <article class="api-card" id="assets" aria-labelledby="assets-heading">
       <header class="card-header">
@@ -569,26 +537,15 @@
         </table>
       </div>
     </article>
-    <!-- 调用方：四类 RepositoryPage、预览画廊、主题/技能/组件选择器、短语搜索和插入、消息另存为短语。
-         资产模块已确认。
-         列表包含符合筛选条件的启用和停用资产，前端选择器按 disabled 过滤停用项，标签筛选由前端按 tag_ids 完成。
-         进入工作区后，后台按四种 kind 并行预加载完整资产摘要列表，不传 query，统一存入共享状态。资产管理、选择器和会话卡片按资产 ID 获取 name、kind、description 等摘要字段。
-         摘要中的名称、描述和标签名可由前端搜索，短语正文搜索通过 query 交后端完成。
-         所有资产列表、选择器及短语候选统一按 updated_at 降序、name 升序、id 升序排列；搜索仅筛选匹配项，不另设匹配优先级或搜索排序，前后端使用同一规则。
-         创建、导入、修改、启停或删除成功后更新对应摘要，手动刷新时重新获取列表。筛选查询结果仅用于当前视图，不覆盖完整摘要缓存。
-         旧 themes/components/skills/snippets 列表与详情合并为 assets；资源 PATCH、短语创建及正文写入统一由 POST /api/assets/save 承接，资源 DELETE 由 delete 承接。旧 resources/register 删除，文件导入由前端读取正文后调用 save 新建；原标签 scope 改为 kind。
-         save 通过 asset_id 是否省略区分创建和更新，拒绝 null、空 ID 及类型不符的字段。创建时由后端生成 ID，默认启用。更新时校验资产存在，可修改 name、description、tag_ids、disabled、content，至少提交一项；省略字段不修改，kind 创建后固定。
-         更新并提交 content 时必须提供 base_hash，在写入事务内与当前正文哈希比较。摘要和正文在同一事务中保存，基准冲突返回 CONTENT_CONFLICT，整次保存失败。创建或仅修改摘要时省略 base_hash。
-         updated_at 创建时初始化；名称、描述、正文、标签集合或启停状态实际变化时更新，同值保存不更新。由后端在同一写事务内维护，不接收前端指定的时间，不保存 created_at。
-         hash 仅根据正文 content 计算，名称、描述、标签或启停状态变化不影响该哈希。save 在同一事务中提交写入并取得对应正文 hash、updated_at，响应为 id、hash、updated_at。前端按提交成功且已去首尾空白的名称、描述及其他字段，结合返回的 updated_at 更新共享摘要及资产列表、选择器和短语候选的排序；创建时结合响应 id 和默认值补齐摘要。
-         正文保存成功后，用返回的 hash 作为下次保存的 base_hash。仅修改摘要时，已打开正文草稿保留读取正文时的 base_hash。
-         正文在预览、编辑或插入时按需读取，仅返回 content 和 hash，二者从同一次一致读取产生。预览缓存使用 hash，刷新资产时重新读取当前预览的正文。
-         项目预览和主题样例统一通过 GET /api/assets/{asset_id} 取得主题 CSS，旧 GET /themes/:id/css 由该正文读取接口承接。前端按需缓存 content 和 hash，并将 CSS 应用到预览 iframe 的 style 节点；切换主题时替换对应样式节点，保留页面执行状态。
-         主题样例预览从主题 CSS 获取外层装饰需要的颜色和字体。组件在隔离 iframe、技能按 Markdown、短语按纯文本展示。
-         导入时前端按 UTF-8 读取所选 CSS、HTML、Markdown 或纯文本文件，将原文放入 content，连同名称、描述和标签以 JSON 提交 POST /api/assets/save，省略 asset_id。后端校验并新建资产，生成新 ID，默认启用。
-         初始化资源 CLI 无需 HTTP。各类正文均为非空 UTF-8，主题 CSS 最多 64 KiB 且须通过主题样式校验，短语最多 16 KiB。新建默认启用。
-         写入事务校验标签存在、同类且不重复，snippet 名称大小写不敏感唯一；已用主题不可删、禁用不破坏现有项目渲染。资产库沿用现有删除确认操作。
-         正文改动刷新资产、引用主题的外观与缩略图。
+    <!-- 资产接口约定：
+         列表包含符合筛选条件的启用和停用资产；disabled 表示该资产是否可供选择或 Agent 加载。query 匹配名称、描述或标签名，短语同时匹配正文。
+         所有资产列表及搜索结果统一按 updated_at 降序、name 升序、id 升序排列；搜索仅筛选匹配项，不另设匹配优先级。
+         save 通过 asset_id 是否省略区分创建和更新，拒绝 null、空 ID 及类型不符的字段。新建由后端生成 ID，默认启用；更新目标须存在，kind 创建后固定。
+         更新可提交 name、description、tag_ids、disabled、content，至少一项；省略不修改。更新正文须提供读取时的 base_hash，冲突返回 CONTENT_CONFLICT，整次保存失败；创建或仅修改摘要时省略 base_hash。
+         updated_at 创建时初始化；名称、描述、正文、标签集合或启停状态实际变化时更新，同值保存不更新，不接受客户端指定时间。
+         hash 仅根据 content 计算，摘要字段变化不影响正文哈希；保存响应的 id、hash、updated_at 对应本次保存结果，正文读取的 content 与 hash 对应同一份内容。保存正文后使用返回的 hash 作为下次 base_hash。
+         导入使用 save 创建资产，content 提交 UTF-8 原文字符串。各类正文非空，主题 CSS 最多 64 KiB 且须通过主题样式校验，短语最多 16 KiB。
+         标签须存在、同类且不重复；snippet 名称大小写不敏感唯一。已被项目引用的主题不可删除；停用不破坏已有项目渲染。主题正文变更会影响引用它的项目外观与缩略图。
          ASSET_NOT_FOUND、ASSET_IN_USE、DUPLICATE_NAME、INVALID_TAG、INVALID_CONTENT、CONTENT_CONFLICT。 -->
 
     <article class="api-card" id="settings" aria-labelledby="settings-heading">
@@ -781,24 +738,16 @@
         </table>
       </div>
     </article>
-    <!-- 调用方：SettingsPage、FileSettingsPanel、ShortcutSettingsPanel、Agent 设置、ModelSelector、会话菜单。
-         五类设置按文件、快捷键、模型与路由、行为分为四组；进入应用时并行预加载四组 GET，保存到共享状态供设置页与业务入口使用。
-         所有 save 提交对应组的完整集合，不允许省略必填字段；不接收 null，明确可空的路由除外。数据库默认值用于初始化，不代表保存时可以省略字段。
-         四个 save 成功均返回 HTTP 200 和空响应体。文件、模型保存后重读对应 GET；快捷键、行为保存后直接以提交值更新共享状态。
-         保存与后续重读串行处理，废弃保存前的读取结果；保存成功后的重读失败仅重试 GET，不重复提交保存。设置页刷新仍调用对应 GET。
-         文件打开设置的 supported 由后端平台能力计算，只读，不作为保存参数。
-         fileopen/pick 只选择并校验应用，返回规范化绝对路径；取消返回 path: null，不写数据库。应用名由前端从路径计算。
-         文件设置保存时检查路径、去重并过滤内置应用；移除被引用应用时，同事务将默认改为 system，扩展名覆盖改为 inherit。custom_apps: [] 表示清空自定义应用。
-         快捷键的 18 个字段均为字符串，完整保存、恢复默认与撤销使用同一 save，不增加重置接口；五个行为字段均为布尔值。
-         模型与路由联合读取与整表原子保存。models 不允许 []；每项的 name、protocol、base_url、model 必填，routes 的十个字段全部必填，可空字段必须显式传 null。
-         已有模型通过 previous_name 对应原配置以支持改名及密钥保留，新增项省略 previous_name；原条目未列入即删除，不增设创建或删除接口。
-         key 新增时必填；修改时省略保留，提供非空字符串则替换；不接收 null、空字符串或仅空白字符串。密钥只写不回传，已保存配置必有密钥，不返回 has_key。
-         路由引用保存后的配置名；改名同步外键，删除前改配全部引用，完整校验后同事务提交。provider 由后端推导，供模型卡片和选择器显示图标，不入库。
-         对话模型选择器复用 models 与 routes.main_default，不再单设模型选项接口；当前模型读图能力统一开启，不返回固定的 vision 字段。
-         模型保存成功并刷新共享状态后，选择器同步改名与删除结果；活动任务继续使用已加载配置，行为开关的生效时机遵循 DATABASE.html。
-         读取直接取库；原 settings/files 的 GET/PUT 与 pick-application 分别由 fileopen 的 GET/save/pick 承接；原 shortcuts、models、agent 的 GET/PUT 由对应 GET/save 承接，agent 改为 behavior。
-         原 llm/profiles 与草案 models/options 合并至 settings/models；删除 reload 写接口，刷新调用 GET；会话独立自动开关合并至行为设置。
-         单窗口串行保存，不增加设置 hash、时间戳、revision 或历史；不增加独立路由保存接口。
+    <!-- 设置接口约定：
+         四组 save 均提交对应组的完整配置，不允许省略必填字段；不接收 null，明确可空的路由除外。默认值不表示保存时可以省略字段。
+         保存成功返回 HTTP 200 和空响应体；保存后的读取失败只重试 GET，不重复提交保存。
+         supported 为只读平台能力，不作为保存参数。fileopen/pick 返回规范化应用绝对路径，取消返回 path: null；选择应用不修改文件打开设置。
+         文件设置保存会校验路径、去重并过滤内置应用；移除被引用的自定义应用时，default_open 改为 system，json_open / html_open 改为 inherit，与应用列表修改一并生效。custom_apps: [] 清空列表。
+         快捷键的 18 个字段均为字符串，完整保存、恢复默认与撤销共用 save；五个行为字段均为布尔值。
+         模型与路由整组保存，全部成功或全部失败；models 至少一项，每项 name、protocol、base_url、model 必填，routes 的十个字段全部必填，可空项显式传 null。
+         已有模型通过 previous_name 定位原配置，新增项省略；原条目未列入即删除。路由引用保存后的配置名，删除配置前须改配全部引用。
+         key 新增必填，修改时省略保留、提供非空字符串则替换；不接受 null、空串或仅空白字符串。密钥只写不回传，查询不返回 has_key；provider 为只读品牌名。
+         当前模型读图能力统一开启，查询不返回固定的 vision 字段。新模型配置不改变已运行任务使用的配置；行为开关的生效时机遵循 DATABASE.html。
          INVALID_BINDING、DUPLICATE_BINDING、INVALID_APPLICATION、OPEN_UNSUPPORTED、INVALID_ROUTE、DUPLICATE_NAME、KEY_REQUIRED。 -->
 
     <article class="api-card" id="exports" aria-labelledby="exports-heading">
@@ -880,36 +829,25 @@
         </table>
       </div>
     </article>
-    <!-- 调用方：exportStore、ExportProgressDialog、导出按钮和下载请求。
-         保留创建、状态读取、取消、下载四个接口；旧创建路由由 exports/create 承接，DELETE 改为 exports/cancel；移除导出 SSE 与心跳接口，进度统一轮询。
-         导出已保存的完整演示文稿，固定幻灯片顺序、HTML、主题 CSS、装饰和 Logo 的一致输入，程序内置运行时资源使用固定版本；后续生成只使用这些输入，不新增检查点、恢复机制或数据库表。
-         HTML 成品为单个 .html 文件，内嵌全部 slide 内容、播放器、基础与主题样式、字体、装饰脚本和 Logo；保留 slide 的 iframe 隔离、翻页和缩放，不生成 ZIP 或 work/ 播放目录。
-         暂不支持幻灯片 HTML 引用会话附件或其他用户本地文件；导出不解析、复制或打包这些文件，发现不支持的本地引用时按既有资源校验失败处理。应用提供的主题样式、字体和装饰资源继续使用。
-         Logo 的 PNG 字节固定在任务内存，PNG／PDF 渲染与 HTML 导出均以内嵌 Data URL 使用；PNG／PDF 的 work/ 只保存逐张 slide 的 PNG，不保存临时 Logo 或本地依赖文件。
-         新建任务时读取并校验大纲，固定本次导出的幻灯片 ID 与顺序，确定 total_slides 后再返回任务 id；大纲无效或没有幻灯片则创建失败。后续准备与生成使用同一份清单，任务期间总数不变，不重新读取最新大纲计算数量；completed_slides 初始为 0。
-         项目内只允许一个活动导出，保留现有前端编辑与项目切换限制；项目任一会话存在非终态 Run，或正在 Git 提交、历史恢复时，禁止固定导出输入；长时间渲染与打包不持有项目写锁。
-         创建返回 id 后立即读取状态；snapshotting、rendering、packaging 时约每 1 秒串行读取一次，ready、failed 或 canceled 时停止轮询。旧任务、取消前及较早请求的响应不覆盖当前交互状态。
-         status 统一表达任务状态与生成阶段：snapshotting 准备导出输入，rendering 渲染幻灯片，packaging 生成最终文件，ready 可下载，failed 失败，canceled 已取消；packaging 对 PNG 为打包 ZIP，对 PDF 为合成，对 HTML 为组装单文件；HTML 可从 snapshotting 直接进入 packaging。
-         completed_slides 与 total_slides 供进度显示，HTML 组装同样更新处理数量；不重复返回前端已知的 id、project_id、format，不返回未消费的当前幻灯片定位字段。
-         filename、filesize 平铺在进度响应顶层，ready 时提供，其他状态均为 null；下载地址由 export_id 按固定路径构造，媒体类型与文件名同时通过下载响应头提供。
-         生成失败保留 error_message，工作文件清理后可读取失败原因；不返回结构化幻灯片列表或可重试标志，不增加任务错误码字段。PNG/PDF 的外部资源限制和现有完整性校验继续保留。HTML 仍允许保留外部资源，不再收集、返回或展示联网依赖警告。
-         创建、读取、取消等请求本身失败仍使用统一的 error.code 与 error.message，不附幻灯片列表或可重试标志；任务执行失败则在成功读取的进度对象中返回 status: failed 与 error_message。前端展示原因并允许用户重新导出，不按任务错误码分支。
-         创建时优先按 project_id + request_id 查找存活任务；同参重发返回原 id，同一标识更换 format 拒绝，不触发旧任务替换；主动重新导出使用新 request_id。
-         新 request_id 通过新建校验后，若同项目旧任务已 ready 且未在下载，先清理旧成品、任务记录及去重映射，再创建新任务；旧任务处于 snapshotting、rendering、packaging 或正在下载时，返回 EXPORT_ACTIVE。failed、canceled 不阻止新建。
-         创建去重、检查旧任务状态与下载占用、替换旧任务及登记新任务按项目串行处理，并与开始下载互斥，避免并发请求重复创建或误删正在下载的文件。
-         生成阶段保留 30 分钟运行超时，超时停止工作、清理中间文件并标记失败；该上限不适用于 ready 文件或下载，不设置成品有效期、过期时间字段或续租机制。
-         ready 时仅保留下载需要的成品，释放输入内存并清理中间文件；等待下载期间不因时间流逝清理成品。
-         同一任务同时只允许一个下载请求，下载占用为后端内部状态，不增加 delivering 或 consumed 对外状态；状态读取仍为 ready。
-         前端下载期间防止重复点击，以完整接收二进制响应结束下载交互；该本地状态与生成进度分开，不通过额外轮询或推送确认下载完成。
-         后端完整发送文件后，释放文件句柄并清理成品、临时目录、任务记录及去重映射；后续不能再次下载。这里的完成只指服务端传输完成，不保证用户已经保存到磁盘。
-         传输失败或中断时解除下载占用，仍有完整成品则保留 ready 供重试；成品不可用则转 failed。若服务端已完成传输并清理，客户端重试只能得到已失效，需要重新导出。
-         取消停止生成并清理临时数据，清理前须等待工作退出；ready 时取消清理成品。已经清理或不存在时同样成功，返回 HTTP 200 空响应体；正在下载时拒绝清理，避免删除正在传输的文件。
-         关闭导出窗口调用 cancel；创建尚未返回 id 时记录取消意图，得到 id 后取消实际任务。页面卸载尽力发送取消请求；下载期间关闭窗口不主动删除传输中的成品。
-         项目删除与后端正常退出停止关联任务后清理；后端启动清理上次遗留临时目录，不恢复导出任务。浏览器异常退出且取消未送达时，未领取成品可能保留至同项目新导出替换、显式取消、项目删除或后端退出/重启。
-         下载未就绪或正在传输返回 HTTP 409，任务不存在或已清理返回 HTTP 410；下载响应使用 Cache-Control: no-store、Content-Type、Content-Length、Content-Disposition。
-         HTML 下载使用 Content-Type: text/html; charset=utf-8，Content-Disposition: attachment 的文件名以 .html 结尾；下载完整发送后的清理规则与其他格式一致。
-         状态读取不命中时按普通 JSON 约定返回 HTTP 200 与 EXPORT_GONE；读取结果不代表文件已保存到客户端，不以任务消失证明下载成功。
-         请求错误码：EXPORT_ACTIVE、EXPORT_GONE、EXPORT_NOT_READY、EXPORT_DOWNLOADING、REQUEST_CONFLICT、PROJECT_BUSY。 -->
+    <!-- 导出接口约定：
+         导出通过创建、状态读取、取消、下载四个接口完成，进度通过状态接口轮询读取。
+         导出使用本次固定的已保存文稿，包含一致的幻灯片顺序、HTML、主题、装饰和 Logo；后续项目变化不影响本次导出内容。
+         HTML 成品为单个 .html 文件，包含全部 slide、播放器、基础与主题样式、字体、装饰和 Logo，保留翻页和缩放；PNG 成品为图片 ZIP，PDF 成品为 PDF 文件。
+         不支持幻灯片 HTML 引用会话附件或其他用户本地文件，发现此类引用时校验失败。PNG/PDF 沿用现有外部资源限制和完整性校验；HTML 允许保留外部资源，不返回联网依赖警告。
+         创建要求大纲有效且至少有一张幻灯片；返回 id 时已确定本次幻灯片清单、顺序和 total_slides，任务期间总数不变，completed_slides 初始为 0。
+         同项目只允许一个活动导出；采集导出内容时，项目任一会话存在非终态 Run，或正在 Git 提交、历史恢复，返回 PROJECT_BUSY。
+         status 中 snapshotting 表示准备输入，rendering 表示渲染，packaging 表示生成成品，ready 表示可下载，failed 表示失败，canceled 表示已取消。packaging 对 PNG 为打包 ZIP，对 PDF 为合成，对 HTML 为组装单文件；HTML 可从 snapshotting 直接进入 packaging，组装时同样更新 completed_slides。
+         filename、filesize 仅 ready 时非 null。请求本身失败使用 error.code、error.message；任务执行失败通过成功读取的 status: failed 与 error_message 表达。两类失败均不附幻灯片列表或可重试标志，任务不另返错误码。
+         创建按 project_id + request_id 识别存活任务；同参重发返回原 id，不替换旧任务；同一标识更换 format 拒绝，主动重新导出使用新 request_id。
+         新 request_id 通过新建校验后替换同项目已 ready 且未下载中的旧任务，旧任务随之失效；旧任务处于 snapshotting、rendering、packaging 或正在下载时返回 EXPORT_ACTIVE。failed、canceled 不阻止新建。
+         生成阶段超时为 30 分钟，超时后标记 failed；ready 文件与下载不受此上限约束，等待下载的成品不因时间流逝失效。
+         同一任务同时只允许一个下载请求；下载期间状态仍为 ready。服务端完整发送文件后任务失效，不能再次下载；完整发送不保证用户已经保存到磁盘。
+         传输失败或中断时，完整成品仍在则保留 ready 供重试，否则转 failed；服务端已完整发送并使任务失效时，重试只能得到已失效结果，需重新导出。
+         取消会停止生成或使 ready 成品失效；已经清理或不存在时也成功，返回 HTTP 200 空响应体。下载期间拒绝取消清理。
+         项目删除、后端退出或重启使相关导出任务失效，重启后不恢复任务。客户端未成功取消时，未领取成品可保留至新导出替换、显式取消、项目删除或后端退出/重启。
+         下载未就绪或正在传输返回 HTTP 409；任务不存在或已清理返回 HTTP 410。响应使用 Cache-Control: no-store、Content-Type、Content-Length、Content-Disposition；HTML 为 text/html; charset=utf-8，附件文件名以 .html 结尾。
+         状态读取不命中返回 HTTP 200 与 EXPORT_GONE；任务消失不表示客户端已成功接收文件。
+         EXPORT_ACTIVE、EXPORT_GONE、EXPORT_NOT_READY、EXPORT_DOWNLOADING、REQUEST_CONFLICT、PROJECT_BUSY。 -->
 
     <article class="api-card" id="files" aria-labelledby="files-heading">
       <header class="card-header">
@@ -977,14 +915,11 @@
         </table>
       </div>
     </article>
-    <!-- 调用方：输入框、历史图片查看器、render_slide/read_image 卡片。
-         旧附件元信息 GET 无实际前端调用，删除；上传结果用于输入框展示，历史消息按项目 ID 和附件 ID 直接加载图片。上传的项目 ID 移入表单；图片读取保留缩略图与原图，缩略图最长边 512，按项目校验文件归属。
-         上传成功仅返回 id；输入框显示名称与文件大小使用本次上传的 File.name、File.size，名称清理与兜底由前端处理，原图按原始字节保存。格式与尺寸由后端校验，不作为上传响应字段返回。
-         发送消息时，图片引用携带 attachment_id 与 original_name，名称随消息保存供历史展示，不依赖附件元信息接口或独立元信息文件。
-         附件保存在项目的 .runtime/attachments/，供会话消息和 Agent 读取；暂不支持幻灯片 HTML 引用会话附件或其他用户本地文件。
-         工具截图按 project_id 与 screenshot_id 直接读取项目内的 .runtime/screenshots/{screenshot_id}.png，不依赖 Run 记录或最新截图索引；替换原按 Run 读取的接口，不保留旧路由。
-         过期或丢失图片 404，不能用当前幻灯片重渲染冒充历史截图。
-         移除未发送输入引用为前端操作。
+    <!-- 附件与截图接口约定：
+         上传成功仅返回 id，文件格式和尺寸须通过校验；读取附件时按项目校验归属。thumbnail 的最长边为 512，original 返回上传的原始 PNG 字节。
+         发送消息时，图片引用携带 attachment_id 与 original_name；original_name 为历史展示名称，不用于定位图片路径。
+         附件供会话消息和 Agent 读取；幻灯片 HTML 暂不支持引用会话附件或其他用户本地文件。
+         工具截图按 project_id 与 screenshot_id 定位，返回调用当时的截图，不依赖 Run 是否仍存在或当前幻灯片内容。过期或丢失图片返回 HTTP 404，不以当前页面重新渲染替代历史截图。
          INVALID_IMAGE、FILE_TOO_LARGE、FILE_NOT_FOUND。 -->
     <article class="api-card" id="sessions" aria-labelledby="sessions-heading">
       <header class="card-header">
@@ -1085,30 +1020,21 @@
         </table>
       </div>
     </article>
-    <!-- 调用方：WorkspaceRoute、threadStore、sessionStore、PlanCard、ContextWindowPanel、CommandComposer。
-         会话不保存 created_at，创建时初始化 updated_at；列表按 updated_at 降序、id 升序排列。
-         旧 threads 列表/创建/详情/删除分别由会话列表、save、会话状态、delete 承接。旧项目 thread-events 中的后台会话列表变化由执行该操作的会话通知。新建会话与手动改名统一由 sessions/save 承接。
+    <!-- 会话接口约定：
+         updated_at 创建时初始化；列表按 updated_at 降序、id 升序排列。
          save 省略 session_id 时创建，project_id 必填；提供 session_id 时仅修改已有会话名称，title 必填且不接收 project_id，不允许更换所属项目。拒绝 null、空 ID、空白标题及类型不符的值；会话不存在返回 SESSION_NOT_FOUND，不转为新建。
-         创建时 title 省略使用「新会话」，提供时同样去除首尾空白并校验非空。保存成功只返回 id，随后重读会话列表取得标题、更新时间和排序；重读失败只重试 GET，不重复创建。
-         手动改名直接更新会话，不创建旁路命令记录；模型自动命名仍使用 rename 命令。旧 naming/suggest 的自动开关改用全局 behavior。
-         GET /api/sessions/{session_id} 读取会话状态；会话 ID 取自请求路径，标题统一从共享会话列表获取。手动改名成功后由发起方重读列表，自动改名由所属会话通知刷新。
-         can_return 统一从 GET /api/sessions/{session_id}/checkpoints 获取；打开会话时先建立订阅，再并行读取会话状态与检查点列表，返回最新按钮和新分支确认共用检查点状态。
-         旧 view 里的历史拆为 history；active-run 由会话状态中的 active_run_id 命中 runs/{run_id}。
-         列表每项的 run_status 用于会话运行标识；任一项非 null 即表示项目存在活动 Run，供项目级操作判断可用性，不因其他会话有 Run 而禁用当前会话发起 Run。Run ID 从读取会话状态的 active_run_id 获取。has_active_commands 在同次读取中由该会话是否存在 pending / running / cancelling 的命令推导，不单独存储。
-         Git 提交进度与取消使用命令接口；其他会话发起冲突操作时由后端返回 PROJECT_BUSY，不通过会话列表预先获取 Git 占用状态。
-         当前会话的 active_run_id 仍为单值；前端按 session_id 与 run_id 管理执行状态、实时输出和取消目标，切换会话不取消其他会话的 Run。
-         删除倒计时在前端，到期后才 POST；确认后的清理由服务端停止该会话活动并完成，不停止同项目其他会话的 Run，重复删除成功。删除成功后发起方关闭该会话的订阅并重读会话列表。
-         计划随会话状态读取，不从历史消息复活；当前会话存在非终态 Run 时拒绝清除并返回 SESSION_BUSY，其他会话的 Run 不影响此操作。
-         删除计划先校验 expected_revision，过期请求不执行。在同一事务清空 plan 并推进会话版本；若处于回退位置，同时删除返回快照与已脱离历史的检查点，直接放弃返回最新，不再额外确认。事务失败时不改变计划或返回能力。
-         删除计划成功后刷新会话状态与检查点列表；通过会话级 changed 按实际变化通知 plan、context、checkpoints，can_return 以重新读取的检查点状态为准。
-         原 context-window 读取与独立上下文读取草案合并到会话状态的 context，不接收 model、details 查询参数；分类明细每次随统计一起返回，展开分类只读取前端已有数据。
-         context 按会话当前上下文组装后估算，不累加历史 Run 用量；current 为当前使用量的非负整数，total 为产品采用的容量上限正整数，当前固定为 200000，单位均为 Token。统计输入与其余会话持久状态取自同一次一致读取，共用顶层 revision，不增加 context.revision 或持久窗口版本。
-         context 的 current、total、threshold_min、threshold_max、details 始终返回且不为 null；details 为对象，包含 system_prompt、runtime、chat_history、read_file、other 五个键，每类为有序 {name, tokens} 数组，name 为字符串、tokens 为非负整数，无明细为 []。各分类总量由前端对该类明细的 tokens 求和，供统计图表使用；current 等于全部明细 tokens 之和。
-         压缩执行状态与取消目标统一从 active_command_ids 对应的命令详情获取，通过 kind=compact 与 status 识别，context 不重复返回命令 id。
-         threshold_min、threshold_max 均为固定的 Token 数正整数，当前分别为 12000、170000；两个阈值都与 current 比较。current 达到 threshold_min 时满足手动压缩的用量条件，达到 threshold_max 时触发自动压缩；threshold_max 当前对应容量的 85%。
-         手动压缩的前端用量判断与后端受理校验统一使用 current >= threshold_min，未达用量门槛返回 CONTEXT_TOO_SMALL；同会话的压缩占用按「执行」模块规则处理。
-         收到会话级 changed 且 areas 含 context 时重新读取 GET /api/sessions/{session_id}，更新共享会话状态中的统计；压缩仍使用命令接口，完成后的上下文变化按同一规则刷新。
-         打开或重新进入项目时读取会话列表，依据选中会话、run_status、has_active_commands 建立需要的会话订阅，再读取项目内容和外观。有新连接时重读会话列表，以补齐首次读取与建连之间的变化。手动修改外观、Logo 和项目内容由发起方在保存成功后更新。主题资产改动继续按资产保存规则刷新引用它的预览。
+         创建时 title 省略使用「新会话」，提供时去首尾空白并校验非空。保存成功只返回 id，标题、更新时间和排序通过会话列表读取；后续读取失败只重试 GET，不重复创建。
+         手动改名使用 sessions/save，模型命名使用 rename 命令。会话状态不返回标题，标题由会话列表提供；can_return 由检查点列表提供，active_run_id 用于读取 Run 详情。
+         run_status 为当前非终态 Run 的状态，无活动 Run 时为 null；has_active_commands 表示是否存在 pending / running / cancelling 的命令。同项目其他会话的活动 Run 不阻止当前会话发起 Run。
+         Git 提交的进度与取消使用命令接口，项目级冲突返回 PROJECT_BUSY；会话列表不提供 Git 占用状态。
+         会话删除成功表示该会话活动已停止且清理完成，不停止同项目其他会话的 Run；重复删除成功。
+         删除计划要求 expected_revision 有效；版本过期不执行。当前会话有非终态 Run 时返回 SESSION_BUSY，其他会话的 Run 不影响此操作。
+         删除计划成功后 plan 为 null；若处于回退位置，同时放弃返回最新及已脱离当前历史的回退入口，无需另传 branch_revision。操作失败不改变计划或返回能力；成功按实际变化发送 plan、context、checkpoints 通知。
+         context 不接收 model、details 查询参数，分类明细始终随统计返回；表示当前上下文估算量，不是历史 Run 用量之和，与其余会话持久状态对应同一 revision。
+         context 的 current、total、threshold_min、threshold_max、details 必返且非 null。current 为非负整数，total 为正整数，当前固定为 200000，单位均为 Token。
+         details 包含 system_prompt、runtime、chat_history、read_file、other 五个键，每类为有序 {name, tokens} 数组，name 为字符串、tokens 为非负整数，无明细为 []；current 等于全部明细 tokens 之和。
+         threshold_min、threshold_max 为固定 Token 数正整数，当前分别为 12000、170000；current >= threshold_min 满足手动压缩用量条件，否则返回 CONTEXT_TOO_SMALL；current >= threshold_max 触发自动压缩。
+         压缩状态与取消目标由 active_command_ids 对应的 compact 命令详情提供，context 不重复返回命令 ID；压缩占用规则见命令接口。
          INVALID_ARGUMENT、PROJECT_NOT_FOUND、SESSION_NOT_FOUND、SESSION_BUSY、PROJECT_BUSY、STALE_REVISION。 -->
 
     <article class="api-card" id="history" aria-labelledby="history-heading">
@@ -1288,54 +1214,44 @@
         </table>
       </div>
     </article>
-    <!-- 调用方：sessionStore、聊天时间线、ActivityRows、ChangeDiffCard、命令文稿卡。
-         旧 timeline/groups/items/detail/preview 由历史列表、Run 详情中的 messages、命令详情、工具详情和净差异承接；旧工具评分为 tool_result 的可读数据，scores 三项 content_coverage、expression_clarity、requirement_adherence 均为数值，judges 包含 mismatch 与 issue 枚举。
-         相对路径交 files/open；前端可按文件约定定位 .meta.json、.constraints.json、.outline.json、{slide_id}.json 与 {slide_id}.html。
-         工具历史只展示授权的公开业务字段，DOM 原始 HTML/内部定位、供应商 raw 和内部提示均不返回。
-         rename/suggest 不占可见分组；压缩摘要在命令卡引用正文时不另造重复卡。
-         历史列表每项在外层保留 seq、created_at；run、command 必须且只能返回一个非 null 对象，另一对象省略，不返回外层 id、kind 或 summary。
-         run.id 直接使用原始 run_id。command.id 对应 commands.id，指向最新一次执行。command.operation_id 对应 commands.operation_id，修订时沿用，作为稳定的命令卡片键。
-         Run 与命令详情统一在本模块定义，分别由路径 run_id、command_id 定位；command_id 对应 commands.id，表示单次执行，不是 operation_id。两个详情请求只传路径 ID，不接收 before、limit、revision，也不返回 next_before；不再提供独立过程消息或命令执行历史列表接口。
-         两个详情响应均返回十进制字符串 revision，取自同一次一致读取的 sessions.revision；Run 持久状态与 messages、命令记录与 last_success_id 均在该版本下读取。runs、messages、commands 不保存逐行版本。
-         前端按所属会话与具体对象 ID 管理详情缓存，丢弃低于该对象已接受版本的响应；收到相关 changed 通知后重读详情。revision 只标识持久状态，activity、commentary、pending 与 phase 等内存状态沿用订阅、快照和缓冲事件的合并规则，不因相同 revision 忽略实时更新。历史切换、删除及 reset 时废弃旧请求和缓存。
-         执行详情在顶层始终返回 activity、commentary、pending；前两项为字符串或 null，pending 为数组，无待答项为 []，每项 tool_call_id、kind、version 均为字符串。Run 结束后前两项为 null，pending 为 []。
-         历史列表直接返回默认聊天界面所需内容，不逐条请求已结束 Run 的状态、首屏消息正文或命令详情；正在执行的 Run 通过读取执行详情取得当前进度、计时段与待答项快照，每次读取同时返回完整过程消息。
-         历史列表 run 对象的所有列出字段均返回。id、status 为字符串，status 与 Run 详情一致；scope 为当前授权的幻灯片 ID 字符串数组或 null，null 表示全部，[] 表示未授权幻灯片。active_duration_ms、total_tokens 为非负整数，分别取已累计执行毫秒数和已记录总 Token 数；failure 为 {code, message} 或 null，字段均为字符串。
-         run.instructions 从 messages 读取该 Run 的全部 instruction，按 seq 升序返回，无则 []；每项 id、text 为字符串，created_at 为毫秒时间戳，instruction_status 为 queued / sent，references 为有序公开引用数组，无引用为 []。图片引用含 type=image、attachment_id、original_name；DOM 引用含 type=dom、slide_id、comment、marker_no，其余引用保留 type 与稳定 ID；不返回 DOM 原始 HTML 或内部定位数据。
-         run.response 为该 Run 的 response 消息，含字符串 id、text 及毫秒时间戳 created_at；尚无最终回复或失败、取消、中断时未生成回复则为 null，不补造消息。instructions 与 response 都返回完整正文，引用已有消息 ID，不新增消息副本或 input_preview。
-         净修改概况统一从历史响应的 run.changes 取得，刷新时重读历史，不再提供独立净修改概况列表接口。run.changes 为数组或 null；每项含 target、status，可选 insertions、deletions，后两项为已知新增和删除行数；target 的 part、slide_id、path 与工具目标一致，status 为 added / modified / deleted。
-         run.changes 不含具体差异正文，null 表示尚未生成或不可得，[] 表示确认无变化。用户展开变更时读取 GET /api/runs/{run_id}/changes，一次返回全部差异，不分页、不逐项请求；历史概况与详情均不返回 index，前端按 target 对应目标，在本地展开、折叠各项。
-         变更差异的 items 按同一份 run.changes 的顺序返回；每项自带 target、status、kind 及对应差异字段，不适用字段省略。清单已知但某项目标的具体差异不可得时，该项 kind=unavailable 并返回 reason，不影响其余项；只有清单整体尚未生成或不可得时 items=null，确认无变化才返回 []。
-         变更差异按 run_id 缓存整份结果，不随每次执行状态读取重复请求；尚未生成时等待后续变更通知再读取，历史切换、删除或 reset 时废弃旧请求与缓存。工具详情 result.targets[].diff 复用 kind、fields、groups、hunks、reason 的差异结构，不包含 items 包装。
-         历史列表 command 对象的所有列出字段均返回。id、operation_id、kind、status 为字符串。kind 仅 polish / handoff / compact / commit，status 与命令详情一致。phase 为当前内存阶段的非负整数或 null，终态或无活动阶段时为 null。failure 为最新执行的 {code, message} 或 null，两项均为字符串。
-         command.id、status、phase、failure 对应按 seq 确定的最新执行；last_success_id 为同一 operation_id 下按 seq 确定的最近成功执行 ID，result 为该次成功产物的首屏字段。两者同时为 null 或同时有值；最新执行失败、取消或正在修订时仍保留已有成功产物，不把该产物标作失败执行的结果。
-         command.result 的 polish / handoff 仅返回字符串 title；compact 返回字符串 title 及非负整数 before_tokens、after_tokens、max_tokens；commit 的 empty 为布尔值，true 时仅返回 {empty: true}，false 时另返回字符串 title、hash、branch 和非负整数 files_changed、insertions、deletions。不返回文稿、摘要正文或 Git 说明条目，不增加独立摘要存储。
-         展开命令正文时，将 last_success_id 作为 command_id 读取 GET /api/commands/{command_id}；polish / handoff / compact 使用 result.content，commit 使用 result.items。compact 的 content 由服务端根据该次命令已保存的 summary_id 读取对应 summary 消息，在同一次一致读取中返回完整字符串；不向前端返回 summary_id，不复制存储摘要。读取最新执行状态或错误时使用历史列表 command.id；修订使用成功执行 ID 作为 base_id，取消仍指向最新执行 command.id，不增加执行历史浏览入口。
-         展开 Run 工具过程时读取 GET /api/runs/{run_id}，messages 一次返回该 Run 已持久化的全部 thinking、commentary、tool_call、tool_result，按 seq 升序，无记录为 []，不分页。messages 不重复包含已随历史列表提供的 instruction、response，summary 由压缩命令卡承接。
-         messages 每项的 id、kind 为字符串，seq 为十进制字符串，created_at 为毫秒时间戳。thinking / commentary 直接返回完整 text，不返回 preview 或 has_detail；工具消息返回字符串 name、tool_call_id 及布尔值 has_detail，tool_result 另返回 status。tool_call 有明确且可展示的主要目标时返回 target，供折叠态卡片展示，配对后的卡片沿用该目标。其余不适用字段省略，不用 null 占位。重读时按 revision 接受整份持久消息数组，不累加重复记录。
-         tool_result 的 name 从对应 tool_call 取得，不新增存储字段。has_detail 按同次调用实际可公开的参数或结果统一判断；点击展开时使用对应 tool_call 消息的 messages[].id 读取 GET /api/tools/{message_id}，一次返回调用参数和对应结果，不传 tool_result 消息的 ID，也不分别请求两条消息或自动逐条加载。
-         前端按 run_id + tool_call_id 配对工具调用和结果，不重复渲染调用卡；缺少持久结果不表示仍在执行或从未执行，活跃状态以 Run 实时快照为准。
-         Run 不存在返回 RUN_NOT_FOUND，command_id 无对应执行记录返回 COMMAND_NOT_FOUND；已由回退移除的记录同样返回不存在，不通过 operation_id 自动改查其他执行。命令详情 result 只属于请求指定的执行，未成功为 null，不用最近成功产物替换该字段；执行记录继续用于现有业务，不提供分页浏览接口。
-         每组最新状态与最近成功产物分开；Run 末条回复最多一条。
-         Run 净差异只归属本 Run 成功提交的修改，按提交时的实际前后版本计算并抵消自身重复修改，不直接比较整个项目在 Run 开始与结束时的内容；其他 Run 或人工写入不得混入。
-         并发交错时不得把含外部修改的首尾版本当作本 Run 的净差异；可靠性与差异不可用的表达沿用 DATABASE.html。
-         会话历史仅按 before、limit 分页，分页状态按 session_id 管理。Run 与命令详情均按 ID 一次读取。
-         历史列表 before 省略时读取最新一批；提供时读取分组首条 seq 严格小于 before 的最近 limit 组。批内均按 seq 升序返回；仍有更早分组时 next_before 为本批最小分组 seq 的十进制字符串，否则为 null，空批次也为 null。
-         分页数据、更早记录判断和响应 revision 取自同一次一致读取。前端按 revision 保留同一分组的较新数据，各页可来自不同会话版本。before 提供时必须是有效的十进制字符串，空值或 null 返回 INVALID_ARGUMENT。
-         收到 history 变更时合并重复刷新，从首批重读到此前已加载的范围，替换该范围内的分组并保留滚动位置。Run 按 run.id、命令按 operation_id 对应原卡片，旧命令修订的状态和结果随原页更新。重连、历史切换、删除或 reset 时废弃旧请求、游标及缓存，从首批重新加载可用历史。
-         工具详情通过全局唯一的 message_id 定位 tool_call 消息，不接收额外 run_id、session_id 或 tool_call_id。后端读取该消息的 run_id 与 tool_call_id 配对对应 tool_result，在同一次一致读取中返回 arguments 与 result；两者只返回可公开的业务字段，不返回 raw、内部提示或 DOM 原始 HTML。工具名称由执行详情中的 name 取得，不重复返回请求 ID 或名称。
-         arguments 始终为对象，无可展示参数为 {}；result 始终返回，缺少结果记录为 null，不推断仍在执行或补造失败结果。result 非 null 时 status 必返，其余字段按实际内容返回，不适用时省略，不用 null 占位；适用但无条目的数组为 []，空输出字符串可为 ""。当前待答表单从人工交互接口读取，工具详情仅展示已保存的调用与结果。
-         历史交互的 request 复用「读取待答事项」中对应种类的表单字段，去掉 kind 和 version。answer 的题目答案、决定及反馈字段与对应提交请求一致。范围由追加指令满足且无人工答复时，返回 answer=null，并通过 applied_scope 返回实际范围。资料的处理结果看 result.status，实际文件变更读取 result.targets。
-         前端按 tool_call 消息的 message_id 缓存工具详情。重读执行详情发现对应 tool_result 新增时，使该调用的旧缓存和在途请求失效，已展开项重读，未展开项延后读取。切换会话或历史时废弃旧请求和缓存；消息不存在返回 TOOL_CALL_NOT_FOUND，消息 kind 不是 tool_call 返回 INVALID_ARGUMENT，调用存在但暂无结果仍成功返回 result=null。
-         通用消息读取接口删除；用户指令与最终回复由历史列表返回，思考与过程说明由执行详情返回，压缩摘要由命令详情返回。
-         会话订阅承接旧 threads/:id/events。前端按 session_id 复用一条连接，保持当前查看的会话及仍有活动 Run 或旁路命令的后台会话在线。发起 Run 或命令时确保所属会话有订阅。切出后继续接收该会话的通知，确认全部活动结束且完成必要的刷新后关闭连接。订阅先于会话状态与 Run 快照读取，期间缓冲事件。
-         Run 收尾决定交接待处理指令或触发自动命令时，将后续任务的 pending 记录与当前 Run 终态一并提交。后续任务在提交后执行，确保会话列表和状态能持续识别还有任务的后台会话。
-         changed 在事务提交后通知变化范围。revision 属于订阅所指的会话。areas 必填、非空、无重复，顺序无业务含义。各区域按通知重读，分别按区域或对象的读取版本丢弃过期响应。相关通知到达时仍在途的读取须废弃或完成后补读。
-         LLM 使用非流式调用。完整消息保存后按实际变化合并发送一次 changed。同次提交只新增工具过程且历史卡片未变时，通知 run。保存最终回复、变更概况并结束 Run 时，同时通知 history、run。其他区域有实际变化时一起加入 areas。
-         history 对应历史列表。run 对应执行详情，按前端已知的活动 Run ID 读取，活动 ID 未知或原 Run 已结束时，重读会话状态定位当前 Run。commands 对应会话状态的活动命令 ID 与相关命令详情。命令修订或结果变化影响历史卡片时，同时通知 history，更新原分组。
-         content 用于该会话实际提交的项目文件改动，重读所属项目内容并刷新预览和相关缩略图。sessions 用于该会话自动改名、run_status、has_active_commands 或列表排序发生变化，重读所属项目的会话列表。共享通知由产生变更的会话发出。前端按 project_id 合并共享数据刷新，各连接的会话 revision 独立比较。
-         重连或收到 reset 时重读所属项目的会话列表与内容。已经删除的会话关闭订阅并清除缓存。仍存在的会话按订阅流程重读会话状态与所需活动详情，当前查看的会话重新加载历史和检查点。待答 version 独立于会话 revision。
-         订阅无持久游标，进度与待答项只在执行器存活时可重读。activity 沿用运行时活动目录：run.preparing、run.analyzing、run.retrying、run.canceling、model.fallback、plan.preparing、presentation.meta.reading/updating、presentation.structure.reading/updating、presentation.constraint.reading/updating、slide.content.reading、reference.inspecting、slide.updating、slide.layout.checking、resource.preparing、command.executing、presentation.reviewing。斜线两侧各为独立后缀。
+    <!-- 历史与详情接口约定：
+         历史列表不返回 rename/suggest 分组，压缩摘要只通过 compact 命令结果提供。每项外层保留 seq、created_at；run、command 仅返回一个非 null 对象，另一对象省略，不增加外层 id、kind 或 summary。
+         run.id 为原 Run ID；command.id 为同一操作最新一次执行的 ID，operation_id 为修订期间不变的操作标识。command_id 定位单次执行，不接受 operation_id 代替。
+         Run 与命令详情只接收路径 ID，不接收 before、limit、revision，不分页；revision 表示本次持久数据对应的会话版本。activity、commentary、pending、phase 为实时状态，相同 revision 不表示这些字段没有变化。
+         Run 详情始终返回 activity、commentary、pending；终态时前两项为 null，pending 为 []。活动 Run 的进度、计时段、待答项及完整过程消息由详情提供。
+         历史 run 的所有列出字段均返回。id、status 为字符串；scope 为幻灯片 ID 数组或 null，null 表示全部，[] 表示未授权。active_duration_ms、total_tokens 为非负整数，failure 为 {code, message} 或 null。
+         run.instructions 为该 Run 全部 instruction，按 seq 升序，无则 []；每项 id、text 为字符串，created_at 为毫秒时间戳，instruction_status 为 queued / sent，references 为有序公开引用数组，无则 []。
+         历史图片引用含 type=image、attachment_id、original_name；DOM 引用含 type=dom、slide_id、comment、marker_no；其余引用保留 type 与稳定 ID。历史与工具详情不返回 DOM 原始 HTML、内部定位、供应商 raw 或内部提示。
+         run.response 至多一条，含字符串 id、text 及毫秒时间戳 created_at；尚无最终回复或失败、取消、中断时未生成回复则为 null。instructions 与 response 均返回完整正文和原消息 ID。
+         历史 run.changes 仅返回净修改概况：每项含 target、status，可选 insertions、deletions；后两项为已知增删行数，status 为 added / modified / deleted，target 的 part、slide_id、path 与工具目标一致。
+         changes 只表示本 Run 成功提交的自身净修改，不含其他 Run 或人工写入；null 表示尚未生成或不可得，[] 表示确认无变化。具体差异通过 runs/{run_id}/changes 一次读取，不分页。
+         差异 items 与历史 run.changes 顺序相同，通过 target 对应目标，不返回 index。单个目标差异不可得时 kind=unavailable 并提供 reason；整体不可得时 items=null，无变化时为 []。
+         工具 result.targets[].diff 复用 kind、fields、groups、hunks、reason 的差异结构，不含 items 包装；target.path 为交给 files/open 的项目内相对路径。
+         历史 command 的所有列出字段均返回。kind 仅 polish / handoff / compact / commit，status 与命令详情一致；phase 为非负整数或 null，终态或无活动阶段时为 null；failure 为最新执行的 {code, message} 或 null。
+         command.id、status、phase、failure 对应按 seq 确定的最新执行；last_success_id 为同组最近成功执行的 ID，result 为该次成功产物的首屏字段，两者同时为空或同时有值。最新执行失败、取消或修订中时仍返回已有成功产物。
+         历史 command.result 中，polish / handoff 仅返回字符串 title；compact 返回 title 及非负整数 before_tokens、after_tokens、max_tokens；commit 在 empty=true 时仅返回 {empty: true}，否则另返回字符串 title、hash、branch 和非负整数 files_changed、insertions、deletions。
+         成功产物通过 last_success_id 读取命令详情，polish / handoff / compact 的完整正文使用 result.content，commit 的说明使用 result.items。读取最新状态和取消使用 command.id，修订使用最近成功执行 ID 作为 base_id。
+         命令详情的 result 仅属于指定执行，未成功为 null，不以最近成功产物替代。不存在或已由回退移除的 Run/命令分别返回 RUN_NOT_FOUND、COMMAND_NOT_FOUND，不自动改查同组其他执行。
+         Run 详情的 messages 包含已保存的全部 thinking、commentary、tool_call、tool_result，按 seq 升序，无则 []，不分页；不重复包含 instruction、response 或 summary。
+         messages 中 id、kind 为字符串，seq 为十进制字符串，created_at 为毫秒时间戳；thinking / commentary 返回完整 text。工具消息返回 name、tool_call_id、has_detail，tool_result 另返回 status；tool_call 有可公开主要目标时返回 target，不适用字段省略。
+         同一工具调用与结果按 run_id + tool_call_id 对应，name 相同；has_detail 表示该调用是否有可公开参数或结果。工具详情使用 tool_call 消息的 messages[].id，一次返回参数和结果，不接受 tool_result 消息 ID。
+         工具详情 arguments 必为对象，无可展示参数时为 {}；result 必返，尚无已保存结果时为 null。缺少结果不能说明仍在执行、未执行或执行失败，活动状态以 Run 当前状态为准。
+         非 null 的 result 必返 status；其他字段按实际内容返回，不适用时省略，适用但无条目的数组为 []，空输出可为 ""。工具详情不返回 raw、内部提示或 DOM 原始 HTML，不重复返回请求 ID 或工具名称。
+         历史 interaction.request 使用相应待答表单字段，去掉 kind 和 version；answer 使用对应答复字段。范围由追加指令满足且无人工答复时 answer=null，applied_scope 表示实际范围；资料执行结果见 result.status、result.targets。
+         preview.scores 的 content_coverage、expression_clarity、requirement_adherence 均为数值；judges 包含 mismatch 与 issue 枚举。当前待答表单通过人工接口读取，工具详情仅提供已保存的调用与结果。
+         工具消息不存在返回 TOOL_CALL_NOT_FOUND，kind 不是 tool_call 返回 INVALID_ARGUMENT；调用存在但尚无结果仍成功返回 result=null，后续结果通过 run 变化通知后重读取得。
+         历史 before 省略时取最新 limit 组；提供时取分组首条 seq 严格小于 before 的最近 limit 组，批内按 seq 升序。仍有更早记录时 next_before 为本批最小分组 seq，否则及空批次为 null。
+         before 必须是有效十进制字符串，空值或 null 返回 INVALID_ARGUMENT。分页数据、是否有更早记录与 revision 对应同一次读取；各页可来自不同会话版本。history 通知可能更新已加载的旧分组，不能只追加新分组。
+         实时订阅约定：
+         订阅以会话为单位，活动后台会话通过自身订阅提供通知；先建立订阅再读取会话状态与 Run 快照，读取期间接收的通知仍须处理。建立连接后重读项目会话列表，以补齐建连前后的变化。
+         Run 收尾时已受理的后续 Run 或命令须能从会话列表和状态中读到。changed 在变更生效且可读取后发送；revision 属于订阅对应的会话，areas 必填、非空、无重复，顺序无业务含义。
+         各变化区域均须同步，分别按区域或对象识别过期读取；不能因其他区域已收到更高版本而忽略通知，读取期间相关通知到达时须重新同步。不同会话的 revision 独立，不能相互比较。
+         完整消息可读取后按实际变化通知；仅新增工具过程且历史分组未变时通知 run，最终回复、变更概况及 Run 终态更新时同时通知 history、run，其他变化区域一并列入 areas。
+         history 对应历史列表；run 对应 Run 详情，活动 ID 未知或原 Run 已结束时先通过会话状态定位当前 Run；commands 对应活动命令 ID 与相关详情，修订或结果影响历史分组时同时通知 history。
+         plan、suggestions、context 对应会话状态，checkpoints 对应检查点列表；content 对应项目内容变化，sessions 对应会话标题、活动状态或排序变化并读取项目会话列表。项目共享变更通知由产生变更的会话发出。
+         重连或 reset 后，旧读取结果和分页游标失效；重新同步项目会话列表与内容、会话状态及所需活动详情，当前查看会话的历史和检查点重新读取。会话已删除时结束订阅。
+         订阅不提供持久游标或历史事件补放；进度与待答项仅在任务执行期间可读取，待答 version 独立于会话 revision。
+         activity 的值为 run.preparing、run.analyzing、run.retrying、run.canceling、model.fallback、plan.preparing、presentation.meta.reading/updating、presentation.structure.reading/updating、presentation.constraint.reading/updating、slide.content.reading、reference.inspecting、slide.updating、slide.layout.checking、resource.preparing、command.executing、presentation.reviewing；斜线两侧各为独立后缀。
          INVALID_ARGUMENT、SESSION_NOT_FOUND、RUN_NOT_FOUND、COMMAND_NOT_FOUND、TOOL_CALL_NOT_FOUND。 -->
 
     <article class="api-card" id="runs" aria-labelledby="runs-heading">
@@ -1430,44 +1346,33 @@
         </table>
       </div>
     </article>
-    <!-- 调用方：CommandComposer、runStore、sessionStore、Run 计时和工具进度。
-         承接旧 threads/:id/runs、steer、DELETE runs、GET run/active-run；删除 resume、持久 changes、scene_revision、旧事件补放。会话订阅见「消息」模块。
-         同一会话最多一个非终态 Run，pending、running、waiting、cancelling 均占用该会话；同项目不同会话允许并行，思考、生成与等待审批不独占项目。
-         新开和追加共用 runs/append。session_id 与 run_id 必须且只能提供一个非空字符串。新开时提交 mode、model、scope，回退位置按 branch_revision 确认规则受理。追加由 run_id 确定所属会话，沿用该 Run 的 mode 和 model，省略 mode、model、branch_revision。
-         新开先按会话和 message_id 查受理凭据，再校验分支和占用状态。相同 ID 与规范化参数返回原 Run ID，若原 Run 已被回退移除则返回 RUN_NOT_FOUND；异参返回 IDEMPOTENCY_CONFLICT。已有非终态 Run 或手动压缩的会话收到新开请求时返回 SESSION_BUSY。其他会话的活动 Run 和手动压缩不阻止新开。
-         text 必须提供字符串。正文去掉首尾空白后为空时，无 DOM 选区则须有图片，有 DOM 选区则至少一条注释非空。新开时 model 必须显式提交非空配置名。输入框可预选 routes.main_default，发送时仍提交实际选中的配置名。
-         scope 的 null 表示全项目。对象只允许一个选择字段。current_slide_id 为字符串，slide_ids 和 section_ids 为字符串数组。后端按受理时的大纲展开 section_ids，并校验所选章节和幻灯片。新开时缺少 scope、形状或所选 ID 无效返回 INVALID_SCOPE。slide_ids=[] 在新开时不授权任何幻灯片，在追加时不增加范围。
-         创建在项目短临界区内捕获一致文件基准，并在同一数据库事务受理首条消息、Run、检查点、凭据；释放临界区前将执行所需基准载入该 Run 内存。
-         各 Run 的工作状态和暂存修改按 run_id 独立管理。文件提交通过统一入口短暂持有项目写锁，校验涉及文件及必要关联基准，原子提交文件、业务结果和检查点失效；冲突拒绝本次提交，重新读取后再生成，不覆盖其他 Run 的修改。
-         回退、返回最新及 Git 提交仍要求项目内所有会话均无非终态 Run；检查占用与启动互斥操作须协调，避免检查后又受理新 Run。
-         无法约束写入范围的外部命令仍需项目级排他执行；其他会话有活动 Run 时拒绝本次工具执行，排他执行期间拒绝新 Run，不让两个 Run 相互等待退出。
-         任一 Run 实际提交文件变化仍清除其他会话的全部检查点和返回快照；失效不停止其他活动 Run，不重建已失效检查点，运行所需基准保留在各自内存。
-         追加先由目标 Run 取得所属会话并按消息 ID 查重。重放时核对原文、引用及显式选择的范围，返回消息当前归属的 Run ID。只有首次受理才入队并更新授权范围，不另建受理凭据。相同消息 ID 不得跨新开和追加复用，提交内容不一致返回 IDEMPOTENCY_CONFLICT。
-         新的追加仅在目标 Run 为 running 或 waiting 且仍开放输入时入队。目标存在但已关闭输入时返回 INPUT_CLOSED，前端保留草稿。收到重发时先查重，再检查是否仍开放输入。
-         前端只在用户为本次追加明确选定范围时携带 scope。提交即授权，后端在受理同一事务中将所选范围与 Run 当前范围取并集，并保存追加消息。省略则沿用，显式 null 放开本项目全部幻灯片。范围实际扩大时随消息提交通知刷新 run 和 history。追加输入交接到新 Run 时继承已受理的授权范围、原模式和模型。
-         图片引用的 attachment_id 与 original_name 均为必填非空字符串；名称由前端从 File.name 清理、兜底后提交，作为显示名称随消息保存，不用于文件路径定位。后端按所属项目校验附件存在。
-         输入检测未判定仍 queued；sent 表示已处理，不承诺进入模型。
-         首条输入被判为闲聊时，关闭该 Run 的输入并提交 rejected。追加受理与关闭输入串行。关闭前已受理且尚未处理的追加指令保留消息 ID 和 seq，交给同一事务创建的后续 Run，提交后按正常流程处理。关闭后首次提交的追加返回 INPUT_CLOSED，前端保留草稿。
-         取消可重复。取消请求已受理或 Run 已处于终态时，返回 HTTP 200 和空响应体。前端通过会话 SSE 的 run 变更通知重读执行详情，必要时主动重读。重启只收尾，不续跑。
-         取消只作用于指定 Run，不停止同项目其他 Run。PROJECT_BUSY 表示项目级互斥操作阻止本次请求。
-         范围不因引用而增加。首条指令点名的幻灯片已删除时返回 REFERENCE_NOT_FOUND，不受理该请求，前端保留草稿供修正。失效授权范围、必需附件和 DOM 基准另行校验。
+    <!-- Run 接口约定：
+         同一会话最多一个非终态 Run，pending / running / waiting / cancelling 均占用会话；同项目不同会话允许并行。
+         新开和追加共用 runs/append。session_id 与 run_id 必须且只能提供一个非空字符串；新开须提交 mode、model、scope，回退位置按 branch_revision 规则确认。追加沿用目标 Run 的 mode、model，省略 mode、model、branch_revision。
+         新开按会话和 message_id 识别重复请求；相同标识与规范化参数返回原 Run ID，不受后续分支或占用变化影响；原 Run 已被回退移除时返回 RUN_NOT_FOUND，异参返回 IDEMPOTENCY_CONFLICT。
+         新开请求所在会话已有非终态 Run 或手动 compact 时返回 SESSION_BUSY；其他会话的活动 Run 和手动 compact 不阻止新开。项目正在历史切换、Git 提交或排他命令执行时，新开受项目占用限制，返回 PROJECT_BUSY。
+         text 必须为字符串；去首尾空白后为空时，无 DOM 选区则须有图片，有 DOM 选区则至少一条注释非空。新开时 model 必须显式提交非空配置名。
+         scope 为 null 表示全项目；对象只允许 current_slide_id、slide_ids、section_ids 之一，分别为字符串、字符串数组、字符串数组。section_ids 按受理时的大纲展开，所选 ID 须有效；新开时 scope 缺失、形状或 ID 无效返回 INVALID_SCOPE。
+         slide_ids=[] 在新开时不授权任何幻灯片，在追加时不增加范围。引用不会扩大授权；首条指令点名的幻灯片已删除时返回 REFERENCE_NOT_FOUND，不受理请求。授权范围、必需附件与 DOM 基准仍须有效。
+         追加按所属会话和 message_id 识别重复请求，核对原文、引用及显式 scope，重放返回消息当前归属的 Run ID，不重复接收输入或扩大授权。相同消息 ID 不得跨新开和追加复用，异参返回 IDEMPOTENCY_CONFLICT。
+         新的追加仅接受 running / waiting 且仍开放输入的目标 Run，已关闭输入返回 INPUT_CLOSED；已受理消息的同参重放不受输入关闭影响。
+         追加仅在用户明确选定范围时提交 scope；提交即授权，与当前范围取并集。省略沿用，显式 null 放开本项目全部幻灯片；实际扩大时通知 run、history。追加交接到新 Run 时继承已受理授权范围、原模式和模型。
+         图片引用的 attachment_id、original_name 均为必填非空字符串；original_name 仅为显示名称，不用于路径定位，附件须存在且属于当前项目。
+         instruction_status 为 queued 表示尚未处理，sent 表示已处理，不承诺输入已进入模型。
+         首条输入被判为闲聊时 Run 进入 rejected 并关闭输入；关闭前已受理但未处理的追加输入保留消息 ID 和 seq，转交后续 Run。关闭后的首次追加返回 INPUT_CLOSED。
+         取消可重复；请求已受理或 Run 已终态时返回 HTTP 200 空响应体，实际状态通过详情或 SSE 的 run 通知读取。取消只作用于指定 Run，不停止同项目其他 Run；后端重启不续跑原 Run。
          INVALID_ARGUMENT、SESSION_BUSY、PROJECT_BUSY、CONTENT_CONFLICT、INVALID_SCOPE、REFERENCE_NOT_FOUND、MODEL_UNAVAILABLE、VISION_REQUIRED、INPUT_CLOSED、RUN_NOT_FOUND、IDEMPOTENCY_CONFLICT、BRANCH_CONFIRMATION_REQUIRED、STALE_REVISION。 -->
-    <!-- 调用方：CommandComposer、textCommandStore、briefingStore、commandRuntime、gitCommitStore、contextWindowStore。
-         承接旧 threads/:id/commands、GET commands/:id、commands/:id/cancel。首次发起与修订共用 commands/append，每次执行有独立 ID，取消精确指向该次执行。
-         命令详情的 command_id、active_command_ids、进度事件、base_id、last_success_id 及取消目标均指向 commands.id。operation_id 首次由后端生成，修订沿用，通过历史或详情读取。
-         首次请求使用 session_id 与 kind，只有 polish 提交 text。修订使用 base_id 与 feedback，由基础执行推导 session_id、kind 和 operation_id。两种形式互斥，共用 request_id。polish 省略 branch_revision，其余命令按历史切换规则提交。首次提交的 text 保存到 commands.input。
-         base_id 必须指向 polish 或 handoff 操作最近成功的执行，使用该次产物和新 feedback。目标不存在返回 COMMAND_NOT_FOUND，修订基础已非最近成功时返回 STALE_BASE，当前有活动执行时返回 COMMAND_BUSY。
-         命令详情统一在「消息」模块定义；状态与错误按最新执行 id 读取，成功产物按 last_success_id 读取，不另设执行历史列表或旧版本浏览入口。
-         手动输入会话名走 sessions/save。用户主动生成或后台自动生成会话名和建议，分别使用 rename 和 suggest。
-         rename 在结果仍适用时更新标题；suggest 更新当前建议，均不占历史卡；polish 由用户将文稿填回，handoff 支持查看、复制、新建会话并回填，compact 写入摘要并重算上下文，commit 展示已确认 Git 结果。
-         模型路由按 kind；后台自动触发不需第二套前端 API。
-         定位所属会话后先查 request_id 对应的凭据，再校验修订基础、分支和占用状态。相同 request_id 与规范化参数只返回原 id，若原执行已被回退移除则返回 COMMAND_NOT_FOUND；异参返回 IDEMPOTENCY_CONFLICT。同一 operation_id 最多一个活动执行。
-         取消可重复，取消请求已受理或该次执行已结束时返回 HTTP 200 和空响应体。前端收到 commands 通知后刷新命令详情，必要时主动重读。取消只作用于 id 所指的执行。
-         同一会话的手动 compact 与新开 Run 互斥，也只允许一个非终态手动 compact。检查占用与受理在同一事务内完成，遇到占用返回 SESSION_BUSY。其他会话可继续运行，自动压缩由所属 Run 内部协调。
-         commit 仍要求项目所有会话均无非终态 Run，执行期间持有项目写锁，并与新 Run 受理、历史恢复及导出输入采集互斥。
-         检查结果属于当前会话和适用的 Run 再应用。
-         命令阶段仅在内存和会话 SSE；断线读详情。
-         Git 阶段 0/1/2 分别表示暂存、分析和提交，其他命令沿用命令卡各自阶段顺序。对已确认的 Git 提交保留成功结果，结果无法确认时标记 interrupted。
+    <!-- 命令接口约定：
+         首次发起与修订共用 commands/append，每次执行有独立 ID。详情的 command_id、active_command_ids、进度事件 id、base_id、last_success_id 和取消目标均指向单次执行；operation_id 首次生成，修订沿用。
+         首次提交 session_id、kind，只有 polish 提交 text；修订提交 base_id、feedback，由基础执行确定会话、类型和操作。两种形式互斥，均须 request_id；polish 省略 branch_revision，其余命令按检查点接口的确认规则提交。
+         base_id 必须指向 polish 或 handoff 操作最近成功的执行；不存在返回 COMMAND_NOT_FOUND，已非最近成功返回 STALE_BASE，同一操作有活动执行返回 COMMAND_BUSY。
+         重复请求按会话和 request_id 识别；相同标识及规范化参数返回原 id，不因修订基础、分支或占用随后变化而重新执行；原执行已被回退移除返回 COMMAND_NOT_FOUND，异参返回 IDEMPOTENCY_CONFLICT。
+         同一 operation_id 最多一个非终态执行；最新状态通过最新执行 ID 读取，成功产物通过 last_success_id 读取，取消只作用于指定执行。
+         手动改名使用 sessions/save；rename 更新仍适用的会话标题，suggest 更新当前建议，均不进入历史分组。polish / handoff 返回文稿，compact 更新摘要和上下文，commit 返回已确认的 Git 提交结果。
+         取消可重复，请求已受理或执行已结束时返回 HTTP 200 空响应体，实际状态通过详情或 commands 通知读取。
+         同一会话的手动 compact 与新开 Run 互斥，且最多一个非终态手动 compact，占用返回 SESSION_BUSY；不阻止其他会话运行。
+         commit 要求项目所有会话均无非终态 Run；Git 提交期间与项目新 Run、历史切换、导出输入采集互斥，冲突返回 PROJECT_BUSY。
+         运行阶段通过命令详情和 command_progress 事件提供；Git 的 phase 0/1/2 分别表示暂存、分析、提交。已确认的 Git 提交保持 done，无法确认执行结果时标记 interrupted。
          INVALID_ARGUMENT、SESSION_NOT_FOUND、COMMAND_NOT_FOUND、COMMAND_BUSY、SESSION_BUSY、STALE_BASE、IDEMPOTENCY_CONFLICT、CONTEXT_TOO_SMALL、PROJECT_BUSY、BRANCH_CONFIRMATION_REQUIRED、STALE_REVISION。 -->
 
     <article class="api-card" id="interactions" aria-labelledby="interactions-heading">
@@ -1588,15 +1493,14 @@
         </table>
       </div>
     </article>
-    <!-- 调用方：HumanIntervention、问题表单、PlanApproval、CommandPermission、ScopeExpansionCard、ResourceEditApproval 和 resourceApprovalStore。
-         旧 input、plan-approval、command-permission、scope-expansion 由各类人工答复承接。原资源审批读取使用统一待答接口，原草稿保存与最终决定合为一次提交。以 Run 与 tool_call_id 定位，不保存交互表。
-         version 绑定执行器中的本次待答内容；答复只接受一次，受理时校验 Run、工具调用、表单种类与当前版本。事项关闭或已受理返回 INTERACTION_CLOSED，仍待答但版本已变更返回 STALE_INTERACTION。
-         计划批准生效时，在同一事务将当前 Run 从 plan 切换到 create、保存生效的会话计划、写入对应 tool_result 并推进会话版本。提交后通过 changed 通知 run 和 plan。拒绝时保留 plan 模式及已有生效计划，将反馈交给同一 Run 继续规划。
-         命令审批的 version 绑定展示的命令和候选变更，command_hash 仅供后端内部校验。allow_once 仅允许应用该候选变更；提交前在项目写锁内再次校验文件基准与权限策略，变化时拒绝应用并将实际失败写入工具结果。
-         资料编辑从 proposal 初始化，未提交的 draft 由前端维护，完整刷新后重新读取 proposal。批准时校验 version 和资料结构，绑定原提案或提交的完整 draft；实际写入前在项目写锁内校验申请时的文件基准。draft 为 null 或拒绝时携带 draft 返回 INVALID_ANSWER。
-         范围审批用于 Agent 提出的扩展。追加指令的授权与审批受理串行。追加授权满足提议时关闭待答项并使用最新授权；仍有未授权部分时，按更新后的范围生成提议与 version。审批生效时与当前授权合并，不覆盖其间接受的授权。
-         创建待答项、受理答复、取消、范围已满足或提议更新时发送 interaction，前端重读执行详情的 pending。受理时移出待答项并唤醒同一 Run。事项消失即关闭旧表单，版本变化即重读对应表单。
-         空响应体表示已受理答复。提交超时先重读 Run 与待答状态，最终结果按已提交的 tool_result 展示。工具结果提交后通过 changed 通知 run，有其他业务变化时同时通知相应区域。
+    <!-- 人工交互接口约定：
+         以 run_id、tool_call_id 定位待答事项；version 绑定当前待答内容，提交时须与 Run、调用、表单种类及当前版本一致。答复只受理一次，已关闭或已受理返回 INTERACTION_CLOSED，仍待答但版本变化返回 STALE_INTERACTION。
+         计划批准生效后，当前 Run 从 plan 切换为 create，更新会话计划及对应工具结果，并发送 run、plan 的 changed 通知；这些结果与本次会话版本一致。拒绝时保留 plan 模式和已有生效计划，同一 Run 继续规划。
+         命令权限的 version 绑定展示的命令和候选变更；allow_once 仅批准该候选变更。实际应用时文件基准或权限策略变化则拒绝应用，最终结果通过工具结果读取。
+         资料批准使用原 proposal 或答复中提交的完整 draft，须符合资料结构；实际应用仍须匹配申请时的文件基准。省略 draft 使用原提案，draft=null 或拒绝时携带 draft 返回 INVALID_ANSWER。未提交的编辑不改变 proposal。
+         范围审批生效时与当前授权合并，不覆盖期间接受的追加授权；追加授权已满足提议时事项关闭并采用最新范围，仍有未授权部分时更新提议与 version。
+         待答项创建、答复受理、取消、范围已满足或提议更新时发送 interaction，通过 Run 详情读取最新 pending。受理后事项移出待答列表，同一 Run 继续执行。
+         空响应体表示答复已受理，不表示实际工具执行成功；提交超时先读取 Run 和待答状态，最终结果通过工具详情读取。结果可读取后发送 run 的 changed 通知，其他业务变化一并通知。
          审批拒绝或失败不覆盖已有资料。
          INTERACTION_CLOSED、STALE_INTERACTION、CONTENT_CONFLICT、INVALID_ANSWER、RUN_NOT_FOUND。 -->
 
@@ -1686,21 +1590,19 @@
         </table>
       </div>
     </article>
-    <!-- 调用方：projectHistoryStore、historyConfirmationStore、输入框、历史回退按钮。
-         旧项目 history/state、preview、switch 由会话级 list、preview、rollback/return 替换，不传 UI scene、操作 ID 或持久恢复游标。
-         检查点列表统一提供可回退位置与 can_return。run_ids 仅列出对应 Run 仍在当前会话历史中的普通检查点。收到会话级 changed 且 areas 含 checkpoints、完成历史切换、重连或 reset 后重新读取，删除会话时清空对应状态。按 session_id 与该响应的 revision 管理检查点缓存，丢弃过期响应。
-         回退预览的 timestamp 取目标 Run 的 created_at，返回最新预览的 timestamp 取返回快照内最后一次活动时间。执行时提交对应预览的 revision，版本不匹配返回 STALE_REVISION，前端重读预览再确认。
-         回退通过全局唯一的 run_id 找到所属会话及检查点，并返回原始输入供回填。返回最新成功后返回 HTTP 200 空响应体。两种操作完成后通过检查点列表获取 can_return。
-         回退与返回前在同一项目锁下校验会话版本、目标和文件基准。项目仍有非终态 Run、目标会话仍有非终态旁路命令或存在项目级互斥操作时，返回 PROJECT_BUSY。校验至切换完成期间，禁止受理该项目的新 Run 和目标会话的新旁路命令。切换只恢复目标会话及其可撤销的文件。
-         快照中的非终态旁路命令恢复为 interrupted，保留原记录，执行不重启。
-         第一次回退建立返回行，连续回退不覆盖它；返回后删除返回行。
-         共有文件实际变化时，其他会话检查点和返回行一并失效并推进其版本，其他会话消息保留。
-         可返回最新时，新开 Run、发起 rename / handoff / compact / commit / suggest 或修订 handoff，须由用户确认并提交检查点列表的 revision 作为 branch_revision。首次受理时缺确认返回 BRANCH_CONFIRMATION_REQUIRED，确认版本过期返回 STALE_REVISION。受理与删除返回行和已脱离历史的检查点在同一事务提交，提交后通知 checkpoints 变更。
-         回退位置发起或修订 polish 保留返回入口。后台自动发起的旁路命令在可返回最新时暂停触发，由用户主动发起需确认的命令。其他会话改名与纯读取无须分支确认。
-         历史位置删除计划只校验 expected_revision，不要求用户二次确认；清空计划、删除返回行与已脱离历史的检查点在同一事务提交，成功后直接放弃返回最新。
-         成功后前端取消在途请求、关闭旧订阅、清会话状态及历史游标、正文/源码/缩略图缓存；重新订阅后读取会话状态、历史首批、检查点、项目内容/外观与活跃状态，按需补页；其他受影响会话收到 reset。
-         回退只回填，不自动提交或续跑。
-         超时先读当前状态，不自动重试。
+    <!-- 检查点接口约定：
+         run_ids 只列出仍在当前会话历史中的可回退 Run；can_return 表示能否返回首次回退前的最新状态。
+         回退预览的 timestamp 为目标 Run 的 created_at，返回最新预览为返回目标的最后一次活动时间。执行使用相应预览的 revision，过期返回 STALE_REVISION，须重新读取预览。
+         rollback 通过 run_id 确定所属会话并返回原始输入；return 通过 session_id 定位，成功返回 HTTP 200 空响应体。完成后的 can_return 通过检查点列表读取。
+         回退和返回要求目标、版本与文件基准有效；项目有非终态 Run、目标会话有非终态旁路命令或存在项目级互斥操作时返回 PROJECT_BUSY。切换期间不受理该项目的新 Run 和目标会话的新旁路命令。
+         切换只恢复目标会话及其可撤销文件，其他会话消息保留；恢复后的非终态旁路命令为 interrupted，保留身份，不重新执行。
+         连续回退仍以首次回退前的最新状态为返回目标；返回成功后 can_return 为 false。
+         任一会话实际改变共享文件（含回退或返回）会使同项目其他会话的回退位置和返回最新能力失效，并推进其会话版本；不停止其活动 Run，也不自动恢复已失效入口。人工修改的检查点影响见项目内容接口。
+         可返回最新时，新开 Run、发起 rename / handoff / compact / commit / suggest 或修订 handoff，须确认并提交检查点列表的 revision 作为 branch_revision；缺少确认返回 BRANCH_CONFIRMATION_REQUIRED，版本过期返回 STALE_REVISION。
+         上述操作受理成功即放弃返回最新及已脱离当前历史的回退入口，并通知 checkpoints；受理失败不改变这些能力。发起或修订 polish 保留返回入口；可返回最新期间不自动发起旁路命令，其他会话改名和纯读取无需分支确认。
+         历史位置删除计划只校验 expected_revision，不要求另行分支确认；成功后直接放弃返回最新，具体规则见会话接口。
+         历史切换后须按 SSE 的 reset 约定重新同步，项目内容与外观需重新读取，其他受影响会话收到 reset。
+         回退返回原始输入但不自动提交或续跑；请求超时先读取当前状态，不自动重试。
          CHECKPOINT_NOT_FOUND、RETURN_UNAVAILABLE、PROJECT_BUSY、STALE_REVISION、CONTENT_CONFLICT。 -->
 
     <article class="api-card" id="runtime" aria-labelledby="runtime-heading">
@@ -1785,12 +1687,10 @@
         </table>
       </div>
     </article>
-    <!-- 调用方：frontend/public/slide-runtime/index.html、IsolatedSlidePreview、ComponentPreview、ThemePreview。
-         原 themes/:id/css 见资产主题样式。
-         资源文件和样例名称按白名单解析。未知资源返回 HTTP 404。fonts.css 引用固定的字体地址。
-         预览资源统一使用 Cache-Control: no-cache 和按响应内容生成的 ETag。If-None-Match 匹配时返回 HTTP 304，否则返回当前资源原文或二进制。
-         两个 /slide-runtime/ 地址由前端静态服务发布，/api/runtime/ 资源由后端提供。
-         ASSEMBLE 的模型提示拼装、JEV 判定及内部工具由服务端使用，无独立 HTTP 入口。 -->
+    <!-- 预览资源接口约定：
+         资源文件和样例名称仅接受表中允许的值，未知资源返回 HTTP 404；fonts.css 引用固定的字体地址。
+         资源使用 Cache-Control: no-cache 与按响应内容生成的 ETag；If-None-Match 匹配返回 HTTP 304，否则返回当前资源原文或二进制。
+         两个 /slide-runtime/ 地址由前端静态服务提供，/api/runtime/ 地址由后端提供。 -->
     <article class="api-card" id="other" aria-labelledby="other-heading">
       <header class="card-header">
         <h2 id="other-heading">其它</h2>
@@ -1828,9 +1728,9 @@
         </table>
       </div>
     </article>
-    <!-- 健康检查由桌面端启动流程和服务就绪探针调用。就绪返回 HTTP 200，未就绪返回 HTTP 503，两者均为空响应体。 -->
-    <!-- 调用方：FileOpenButton。
-         旧 files/open?path 改 JSON；仅允许同源的本地调用，规范化并限制在该项目允许打开的真实文件，拒绝绝对路径、越界和符号链接逃逸。
+    <!-- 健康检查约定：就绪返回 HTTP 200，未就绪返回 HTTP 503，两者均为空响应体。 -->
+    <!-- 文件打开接口约定：
+         仅接受同源的本地调用；path 限于该项目允许打开的真实文件，拒绝绝对路径、越界路径和符号链接逃逸。
          FILE_NOT_FOUND、INVALID_PATH、OPEN_UNSUPPORTED、OPEN_FAILED。 -->
   </main>
   <script>

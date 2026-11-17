@@ -25,6 +25,7 @@
       background: rgb(var(--ui-surface));
     }
     .card-header { padding: 22px 24px 20px; }
+    .structure-card + .structure-card { margin-top: 24px; }
     h2 { margin: 0; font-size: 20px; font-weight: 600; line-height: 1.4; }
     .tree-scroll {
       width: 100%;
@@ -56,8 +57,23 @@
       font-size: 13px;
     }
     .tree-branch { color: rgb(var(--ui-text-500)); }
-    .tree-directory { font-weight: 600; }
     .tree-description { color: rgb(var(--ui-text-700)); line-height: 1.6; }
+    .backend-tree { width: max(100%, 1000px); }
+    .backend-tree .tree-row { grid-template-columns: minmax(600px, 1fr) minmax(290px, .8fr); }
+    .dependency-card > summary { cursor: pointer; }
+    .dependency-card > summary h2 { display: inline; }
+    .dependency-card > summary:focus-visible { outline: 2px solid rgb(var(--ui-border-strong)); outline-offset: -4px; }
+    .dependency-scroll { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-color: rgb(var(--ui-border-strong)) rgb(var(--ui-surface)); }
+    .dependency-scroll:focus-visible { outline: none; box-shadow: inset 0 0 0 2px rgb(var(--ui-border-strong)); }
+    .dependency-table { width: 100%; min-width: 1080px; border-collapse: collapse; table-layout: fixed; }
+    .dependency-table th, .dependency-table td { padding: 14px 16px; border-top: 1px solid rgb(var(--ui-border)); text-align: left; vertical-align: top; font-size: 14px; line-height: 1.7; }
+    .dependency-table thead th { background: rgb(var(--ui-panel-muted)); font-weight: 500; text-align: center; }
+    .dependency-table .dependency-group th { padding-block: 10px; background: rgb(var(--ui-panel-muted)); font-weight: 600; }
+    .dependency-table td { color: rgb(var(--ui-text-700)); }
+    .dependency-table td:nth-child(2) { text-align: center; }
+    .dependency-table code { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 13px; overflow-wrap: anywhere; }
+    .dependency-table a { color: inherit; text-decoration-color: rgb(var(--ui-border-strong)); text-underline-offset: 3px; }
+    .version-source { display: block; margin-top: 2px; color: rgb(var(--ui-text-500)); font-size: 12px; }
     ::selection { background: rgb(var(--ui-selected)); color: rgb(var(--ui-foreground)); }
     .tree-scroll:focus-visible { outline: none; box-shadow: inset 0 0 0 2px rgb(var(--ui-border-strong)); }
     @media (max-width: 680px) {
@@ -74,6 +90,292 @@
     <header class="page-header">
       <h1>目录设计</h1>
     </header>
+    <!-- 已确认的 Java 后端组织：
+         backend_java 采用 bootstrap、interfaces、domain、infrastructure 四个 Maven 模块，不设置 application 模块。
+         interfaces 与 infrastructure 依赖 domain；bootstrap 负责启动与装配。
+         Web、JSON 序列化、数据源、事务、线程池及外部客户端等框架装配配置统一归 bootstrap 的 configuration 包，按实际需要创建配置类。
+         当前确定 WebMvcConfiguration、JacksonConfiguration、PersistenceConfiguration、ExecutorConfiguration、LlmClientConfiguration 五个配置类，分别负责 Web 接入、接口 JSON、持久化组件、后台执行器及模型通信客户端配置。
+         LlmClientConfiguration 负责模型通信客户端的创建、连接超时等技术参数与依赖装配；模型选择、路由和密钥来源仍遵循 setting 与 DATABASE.html 的约定。
+         configuration 仅负责技术组件配置与依赖装配；工具选择、自动触发条件及业务执行流程仍归所属领域服务。
+         模型、路由、行为等用户设置的业务规则仍归 domain/setting，持久化来源仍遵循 DATABASE.html。
+         project、agent、asset、setting 是 domain 内的业务领域包；interfaces 独立按 API.html 的功能分组组织接口。
+         domain/shared 与各业务领域包平级，按 exception、constant、util 组织共享业务定义，不新增独立 Maven 模块。
+         exception 保存 BusinessException 与 ErrorCode，分别表示统一业务异常与业务错误码枚举；公开类型可由依赖 domain 的 interfaces、infrastructure 引用。
+         HTTP 错误响应与异常映射仍归 interfaces/handler，shared 不依赖 HTTP、数据库或外部客户端类型。
+         constant 保存跨领域共用的业务常量，util 保存跨领域共用的业务辅助类；领域独有的常量与辅助逻辑仍就近放置，用户可修改的设置仍归 setting。
+         接口包映射：项目 project、资产 asset、设置 setting、导出 export、附件 file、会话 session、消息 history、执行 execution、人工 interaction、检查点 checkpoint、预览 runtime。
+         API 接口包统一放在 interfaces/controller 下，各包包含 Controller 及就近组织的 dto、vo。
+         API 的“其它”按职责归位：GET /api/healthz 由 interfaces/controller 下的 HealthController 提供，POST /api/files/open 归 controller/file 包。
+         history 承接 API 消息分组中的历史、Run／命令／工具详情及会话订阅；execution 承接 Run 和辅助命令的受理与取消。
+         runtime 仅承接后端 /api/runtime/ 资源；API 预览分组中的 /slide-runtime/ 地址仍由前端静态服务发布。
+         controller、handler、sse 在 interfaces 下平级；handler 负责统一异常处理，sse 提供连接与事件适配，业务订阅入口归 controller/history。
+         handler/GlobalExceptionHandler.java 统一处理业务异常、请求参数异常及未处理异常，按 API.html 约定转换为错误响应。
+         handler/ErrorResponse.java 表示统一错误响应，结构为 {"error":{"code":"…","message":"…"}}，可选附加字段及 HTTP 状态遵循 API.html。
+         不设置通用 Result 包装类；普通 JSON 接口成功时直接返回业务 VO，发生异常时由全局异常处理器返回 ErrorResponse，无响应字段的成功请求仍返回空响应体。
+         HTTP DTO、VO 归 interfaces；Entity、值对象及业务输入与结果归 domain；数据库 PO 归 infrastructure。
+         领域 model 下按 entity、enumeration 分包，分别存放业务实体与枚举；enum 是 Java 关键字，不能作为包名。
+         值对象及业务输入与结果按需放在 model 下，暂不增加其他分包。
+         仓储接口位于 domain，仓储实现位于 infrastructure/repository，可组合数据库与文件系统。
+         domain 不依赖 interfaces 或 infrastructure；interfaces 不引用 PO，infrastructure 不引用 HTTP DTO、VO。
+         infrastructure 至少保留 properties、repository、persistence、filesystem、llm、jev、git、platform、worker。
+         properties 当前只设置 JevProperties 与 SandboxProperties，不设置 LlmClientProperties；配置绑定的启用与组件装配仍归 bootstrap/configuration。
+         JevProperties 保存 JEV 连接地址、模型与密钥；SandboxProperties 保存命令沙箱的目录、网络、执行超时与输出上限等参数。
+         infrastructure 实现可直接使用这些 Properties，domain 不引用 infrastructure 的配置绑定类型。
+         agent/service 按 run、input、context、tool、interaction、command、session、history 八个职责包组织；其余领域的 service 暂不细分子包。
+         run 负责 Run 生命周期与 Harness 主循环，协调输入受理、取消、等待、收尾及循环保护；input 负责输入判定、追加输入处理与授权范围处理。
+         context 负责提示词与上下文组装、Token 估算及压缩内容处理；tool 负责工具注册与选择、执行前检查、调用去重、执行分发及结果处理。
+         interaction 负责提问、审批、答复与候选版本校验、等待唤醒；session 负责会话管理与会话级业务状态；history 负责历史查询、检查点、回退与返回最新。
+         command 负责改名、建议、润色、交接、压缩、提交等旁路命令的受理、执行、修订与取消，以及自动命名、自动建议的触发条件。
+         自动压缩由 run 协调，复用 command 的执行记录和 context 的压缩能力；context 不反向调用 command。
+         command 指产品旁路命令；模型的 run_command 工具仍归 tool，通过 gateway 使用外部 worker。
+         Hook 按需由 run、tool 等提供入口的包管理，具体业务处理归所属服务，装配归 bootstrap/configuration，暂不独立设置 hook 包。
+         service 子包不强制配套 Service 接口与 Impl，仅在存在实际多实现或替换需求时引入接口。
+         persistence 按 po、mapper 分包：po 保存数据库持久化对象，mapper 负责 SQL 查询与写入。
+         Entity 与 PO 的转换归 infrastructure/repository，persistence 不重复设置仓储实现层。
+         建表与初始化脚本统一放在 backend_java/sql，由外部执行，不放入应用 resources，也不随应用打包。
+         schema.sql 保存当前建表结构；init.sql 统一保存预置资产正文、标签及初始设置，初始化后从数据库读取，不再维护独立 seed 目录。
+         init.sql 含本地实际模型配置和密钥，按 DATABASE.html 约定由 Git 忽略；初始化与 reset 对已有设置的保留规则仍遵循 DATABASE.html。
+         infrastructure 的 resources/mapper 保存 Mapper XML，与 Java persistence/mapper 中的 Mapper 接口对应；加载配置归 bootstrap。
+         resources/render 保存预览、渲染及导出使用的程序内置静态资源，如基础 CSS、字体、装饰脚本和预览样例，随应用打包。
+         包与文件按实际需要创建；本次只记录目录约定，不创建 Java 脚手架。 -->
+    <article class="structure-card" aria-labelledby="backend-heading">
+      <header class="card-header">
+        <h2 id="backend-heading">后端目录</h2>
+      </header>
+      <div class="tree-scroll" role="region" aria-label="后端目录树" tabindex="0">
+        <ul class="tree backend-tree">
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch"></span><span class="tree-name tree-directory">backend_java/</span></code><span class="tree-description">Java 后端源码</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">├── </span><span class="tree-name">pom.xml</span></code><span class="tree-description">父工程与模块聚合</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">├── </span><span class="tree-name tree-directory">sql/</span></code><span class="tree-description">外部执行的数据库脚本</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│   ├── </span><span class="tree-name">schema.sql</span></code><span class="tree-description">当前建表结构</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│   └── </span><span class="tree-name">init.sql</span></code><span class="tree-description">预置资产、标签与初始设置，Git 忽略</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">├── </span><span class="tree-name tree-directory">ppt-agent-bootstrap/</span></code><span class="tree-description">启动与装配</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│   ├── </span><span class="tree-name">pom.xml</span></code><span class="tree-description">启动模块</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│   └── </span><span class="tree-name tree-directory">src/main/</span></code><span class="tree-description"></span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       ├── </span><span class="tree-name tree-directory">java/com/dasi/ppt/agent/</span></code><span class="tree-description"></span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   ├── </span><span class="tree-name">PptAgentApplication.java</span></code><span class="tree-description">唯一启动入口</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   └── </span><span class="tree-name tree-directory">configuration/</span></code><span class="tree-description">统一框架配置与模块装配</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │       ├── </span><span class="tree-name">WebMvcConfiguration.java</span></code><span class="tree-description">Web 接入、跨域与异步响应配置</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │       ├── </span><span class="tree-name">JacksonConfiguration.java</span></code><span class="tree-description">接口 JSON 序列化与反序列化配置</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │       ├── </span><span class="tree-name">PersistenceConfiguration.java</span></code><span class="tree-description">数据源、Mapper 扫描、XML 映射与事务组件装配</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │       ├── </span><span class="tree-name">ExecutorConfiguration.java</span></code><span class="tree-description">后台执行器、调度器与关闭策略配置</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │       └── </span><span class="tree-name">LlmClientConfiguration.java</span></code><span class="tree-description">模型通信客户端创建与连接参数配置</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       └── </span><span class="tree-name tree-directory">resources/</span></code><span class="tree-description"></span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│           └── </span><span class="tree-name">application.yml</span></code><span class="tree-description">启动与基础运行配置</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">├── </span><span class="tree-name tree-directory">ppt-agent-interfaces/</span></code><span class="tree-description">接口适配</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│   ├── </span><span class="tree-name">pom.xml</span></code><span class="tree-description">接口模块</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│   └── </span><span class="tree-name tree-directory">src/main/java/com/dasi/ppt/agent/interfaces/</span></code><span class="tree-description"></span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       ├── </span><span class="tree-name tree-directory">controller/</span></code><span class="tree-description">按 API 分组的 HTTP 接口</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   ├── </span><span class="tree-name tree-directory">project/</span></code><span class="tree-description">项目接口</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   ├── </span><span class="tree-name tree-directory">asset/</span></code><span class="tree-description">资产接口</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   ├── </span><span class="tree-name tree-directory">setting/</span></code><span class="tree-description">设置接口</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   ├── </span><span class="tree-name tree-directory">export/</span></code><span class="tree-description">导出接口</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   ├── </span><span class="tree-name tree-directory">file/</span></code><span class="tree-description">附件、截图与项目文件打开</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   ├── </span><span class="tree-name tree-directory">session/</span></code><span class="tree-description">会话接口</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   ├── </span><span class="tree-name tree-directory">history/</span></code><span class="tree-description">消息、执行详情与会话订阅</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   ├── </span><span class="tree-name tree-directory">execution/</span></code><span class="tree-description">Run 与辅助命令受理、取消</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   ├── </span><span class="tree-name tree-directory">interaction/</span></code><span class="tree-description">人工问答与审批</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   ├── </span><span class="tree-name tree-directory">checkpoint/</span></code><span class="tree-description">检查点、回退与返回最新</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   ├── </span><span class="tree-name tree-directory">runtime/</span></code><span class="tree-description">预览运行资源</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   └── </span><span class="tree-name">HealthController.java</span></code><span class="tree-description">健康检查</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       ├── </span><span class="tree-name tree-directory">handler/</span></code><span class="tree-description">异常与错误响应处理</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   ├── </span><span class="tree-name">GlobalExceptionHandler.java</span></code><span class="tree-description">全局异常处理与错误响应映射</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   └── </span><span class="tree-name">ErrorResponse.java</span></code><span class="tree-description">统一错误响应对象</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       └── </span><span class="tree-name tree-directory">sse/</span></code><span class="tree-description">SSE 连接与事件适配</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">├── </span><span class="tree-name tree-directory">ppt-agent-domain/</span></code><span class="tree-description">业务规则与用例编排</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│   ├── </span><span class="tree-name">pom.xml</span></code><span class="tree-description">领域模块</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│   └── </span><span class="tree-name tree-directory">src/main/</span></code><span class="tree-description"></span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       ├── </span><span class="tree-name tree-directory">java/com/dasi/ppt/agent/domain/</span></code><span class="tree-description"></span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   ├── </span><span class="tree-name tree-directory">project/</span></code><span class="tree-description">文稿内容、外观、附件、预览与导出</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   ├── </span><span class="tree-name tree-directory">agent/</span></code><span class="tree-description">会话、Run、消息、工具、上下文与历史</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │   └── </span><span class="tree-name tree-directory">service/</span></code><span class="tree-description">Agent 业务规则与执行编排</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       ├── </span><span class="tree-name tree-directory">run/</span></code><span class="tree-description">Run 生命周期、Harness 主循环、取消与循环保护</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       ├── </span><span class="tree-name tree-directory">input/</span></code><span class="tree-description">输入判定、追加输入处理与授权范围处理</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       ├── </span><span class="tree-name tree-directory">context/</span></code><span class="tree-description">提示词与上下文组装、Token 估算及压缩内容处理</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       ├── </span><span class="tree-name tree-directory">tool/</span></code><span class="tree-description">工具注册与选择、检查、去重、分发及结果处理</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       ├── </span><span class="tree-name tree-directory">interaction/</span></code><span class="tree-description">提问、审批、答复校验与等待唤醒</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       ├── </span><span class="tree-name tree-directory">command/</span></code><span class="tree-description">改名、建议、润色、交接、压缩、提交等旁路命令及自动触发条件</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       ├── </span><span class="tree-name tree-directory">session/</span></code><span class="tree-description">会话管理与会话级业务状态</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       └── </span><span class="tree-name tree-directory">history/</span></code><span class="tree-description">历史查询、检查点、回退与返回最新</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   ├── </span><span class="tree-name tree-directory">asset/</span></code><span class="tree-description">主题、组件、技能、文本片段与标签</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   ├── </span><span class="tree-name tree-directory">setting/</span></code><span class="tree-description">模型与路由、行为、快捷键、文件打开方式</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   └── </span><span class="tree-name tree-directory">shared/</span></code><span class="tree-description">共享业务异常、常量与辅助类</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │       ├── </span><span class="tree-name tree-directory">exception/</span></code><span class="tree-description">统一业务异常与错误码</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │       │   ├── </span><span class="tree-name">BusinessException.java</span></code><span class="tree-description">携带业务错误码与错误信息</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │       │   └── </span><span class="tree-name">ErrorCode.java</span></code><span class="tree-description">业务错误码枚举</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │       ├── </span><span class="tree-name tree-directory">constant/</span></code><span class="tree-description">跨领域共用的业务常量</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │       └── </span><span class="tree-name tree-directory">util/</span></code><span class="tree-description">跨领域共用的业务辅助类</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       └── </span><span class="tree-name tree-directory">resources/</span></code><span class="tree-description"></span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│           ├── </span><span class="tree-name tree-directory">prompts/</span></code><span class="tree-description">Agent 提示词与工具定义</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│           └── </span><span class="tree-name tree-directory">schemas/</span></code><span class="tree-description">项目文档 JSON Schema</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">└── </span><span class="tree-name tree-directory">ppt-agent-infrastructure/</span></code><span class="tree-description">外部能力与持久化实现</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">    ├── </span><span class="tree-name">pom.xml</span></code><span class="tree-description">基础设施模块</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">    └── </span><span class="tree-name tree-directory">src/main/</span></code><span class="tree-description"></span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">        ├── </span><span class="tree-name tree-directory">java/com/dasi/ppt/agent/infrastructure/</span></code><span class="tree-description"></span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">        │   ├── </span><span class="tree-name tree-directory">properties/</span></code><span class="tree-description">基础设施配置参数</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">        │   │   ├── </span><span class="tree-name">JevProperties.java</span></code><span class="tree-description">JEV 连接地址、模型与密钥配置</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">        │   │   └── </span><span class="tree-name">SandboxProperties.java</span></code><span class="tree-description">沙箱目录、网络、执行超时与输出上限配置</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">        │   ├── </span><span class="tree-name tree-directory">repository/</span></code><span class="tree-description">仓储实现与 Entity／PO 转换</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">        │   ├── </span><span class="tree-name tree-directory">persistence/</span></code><span class="tree-description">数据库 PO 与 SQL 访问</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">        │   │   ├── </span><span class="tree-name tree-directory">po/</span></code><span class="tree-description">数据库持久化对象</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">        │   │   └── </span><span class="tree-name tree-directory">mapper/</span></code><span class="tree-description">SQL 查询与写入</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">        │   ├── </span><span class="tree-name tree-directory">filesystem/</span></code><span class="tree-description">项目文件读写与文件提交</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">        │   ├── </span><span class="tree-name tree-directory">llm/</span></code><span class="tree-description">模型调用与协议适配</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">        │   ├── </span><span class="tree-name tree-directory">jev/</span></code><span class="tree-description">JEV 调用与结果解析</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">        │   ├── </span><span class="tree-name tree-directory">git/</span></code><span class="tree-description">Git 操作实现</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">        │   ├── </span><span class="tree-name tree-directory">platform/</span></code><span class="tree-description">本地应用选择与文件打开</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">        │   └── </span><span class="tree-name tree-directory">worker/</span></code><span class="tree-description">render-worker 与 command-worker 通信</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">        └── </span><span class="tree-name tree-directory">resources/</span></code><span class="tree-description"></span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">            ├── </span><span class="tree-name tree-directory">mapper/</span></code><span class="tree-description">Mapper XML：SQL 与结果映射</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">            └── </span><span class="tree-name tree-directory">render/</span></code><span class="tree-description">预览、渲染与导出的内置静态资源</span></li>
+        </ul>
+      </div>
+    </article>
+    <!-- Java 重写不采用 RFC 6902 JSON Patch；前后端接口与 Agent 工具均不引入该协议。 -->
+    <details class="structure-card dependency-card" id="backend-dependencies" open>
+      <summary class="card-header"><h2 id="dependencies-heading">后端依赖</h2></summary>
+      <div class="dependency-scroll" id="dependencies-scroll" role="region" aria-labelledby="dependencies-heading" tabindex="0">
+        <table class="dependency-table">
+          <colgroup><col style="width: 49%"><col style="width: 15%"><col style="width: 36%"></colgroup>
+          <thead><tr><th scope="col">依赖</th><th scope="col">版本</th><th scope="col">功能</th></tr></thead>
+          <tbody>
+            <tr class="dependency-group"><th colspan="3" scope="rowgroup">Spring 官方</th></tr>
+            <tr>
+              <td><a href="https://docs.spring.io/spring-boot/maven-plugin/using.html"><code>org.springframework.boot:<wbr>spring-boot-starter-parent</code></a></td>
+              <td><code>4.1.2</code><span class="version-source">父 POM</span></td>
+              <td>父工程继承；统一 Spring、Jackson、日志、数据库驱动及构建插件版本。</td>
+            </tr>
+            <tr>
+              <td><a href="https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter/4.1.2/spring-boot-starter-4.1.2.pom"><code>org.springframework.boot:<wbr>spring-boot-starter</code></a></td>
+              <td><code>4.1.2</code><span class="version-source">Boot 管理</span></td>
+              <td>启动模块的基础依赖：应用启动、自动装配与默认日志实现。</td>
+            </tr>
+            <tr>
+              <td><a href="https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-webmvc/4.1.2/spring-boot-starter-webmvc-4.1.2.pom"><code>org.springframework.boot:<wbr>spring-boot-starter-webmvc</code></a></td>
+              <td><code>4.1.2</code><span class="version-source">Boot 管理</span></td>
+              <td>Spring MVC、REST Controller、SSE、文件上传与嵌入式 Tomcat。</td>
+            </tr>
+            <tr>
+              <td><a href="https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-validation/4.1.2/spring-boot-starter-validation-4.1.2.pom"><code>org.springframework.boot:<wbr>spring-boot-starter-validation</code></a></td>
+              <td><code>4.1.2</code><span class="version-source">Boot 管理</span></td>
+              <td>DTO 字段校验及 Jakarta Bean Validation。</td>
+            </tr>
+            <tr>
+              <td><a href="https://repo.maven.apache.org/maven2/org/springframework/spring-context/7.0.10/spring-context-7.0.10.pom"><code>org.springframework:<wbr>spring-context</code></a></td>
+              <td><code>7.0.10</code><span class="version-source">Boot 管理</span></td>
+              <td>服务注册、依赖注入与配置装配；各使用模块直接声明。</td>
+            </tr>
+            <tr>
+              <td><a href="https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-configuration-processor/4.1.2/spring-boot-configuration-processor-4.1.2.pom"><code>org.springframework.boot:<wbr>spring-boot-configuration-processor</code></a></td>
+              <td><code>4.1.2</code><span class="version-source">Boot 管理</span></td>
+              <td>为 JevProperties、SandboxProperties 生成 IDE 配置元数据；仅编译期使用。</td>
+            </tr>
+            <tr>
+              <td><a href="https://docs.spring.io/spring-ai/reference/getting-started.html"><code>org.springframework.ai:<wbr>spring-ai-bom</code></a></td>
+              <td><code>2.0.2</code><span class="version-source">BOM</span></td>
+              <td>父工程导入 BOM；统一 Spring AI 模块版本，与 Boot 4.1.x 对齐。</td>
+            </tr>
+            <tr>
+              <td><a href="https://docs.spring.io/spring-ai/reference/api/chat/openai-chat.html"><code>org.springframework.ai:<wbr>spring-ai-openai</code></a></td>
+              <td><code>2.0.2</code><span class="version-source">AI BOM 管理</span></td>
+              <td>OpenAI 及兼容 Chat Completions 接口；底层使用官方 SDK。</td>
+            </tr>
+            <tr>
+              <td><a href="https://docs.spring.io/spring-ai/reference/api/chat/anthropic-chat.html"><code>org.springframework.ai:<wbr>spring-ai-anthropic</code></a></td>
+              <td><code>2.0.2</code><span class="version-source">AI BOM 管理</span></td>
+              <td>Anthropic Messages 接口；底层使用官方 SDK。</td>
+            </tr>
+            <tr>
+              <td><a href="https://docs.spring.io/spring-ai/reference/api/chatclient.html"><code>org.springframework.ai:<wbr>spring-ai-client-chat</code></a></td>
+              <td><code>2.0.2</code><span class="version-source">AI BOM 管理</span></td>
+              <td>统一 ChatClient 调用入口；自研 Harness 保留工具执行与循环控制。</td>
+            </tr>
+            <tr>
+              <td><a href="https://mybatis.org/spring-boot-starter/mybatis-spring-boot-autoconfigure/"><code>org.mybatis.spring.boot:<wbr>mybatis-spring-boot-starter</code></a></td>
+              <td><code>4.0.0</code><span class="version-source">父工程锁定</span></td>
+              <td>Mapper 接口、XML SQL 与事务接入；传递引入 JDBC Starter 和连接池。</td>
+            </tr>
+          </tbody>
+          <tbody>
+            <tr class="dependency-group"><th colspan="3" scope="rowgroup">工具</th></tr>
+            <tr>
+              <td><a href="https://github.com/knuddelsgmbh/jtokkit"><code>com.knuddels:<wbr>jtokkit</code></a></td>
+              <td><code>1.1.0</code><span class="version-source">父工程锁定</span></td>
+              <td>上下文 Token 估算与压缩阈值计算。</td>
+            </tr>
+            <tr>
+              <td><a href="https://repo.maven.apache.org/maven2/org/xerial/sqlite-jdbc/3.53.4.0/sqlite-jdbc-3.53.4.0.pom"><code>org.xerial:<wbr>sqlite-jdbc</code></a></td>
+              <td><code>3.53.4.0</code><span class="version-source">Boot 管理</span></td>
+              <td>现有 SQLite 数据库的 JDBC 驱动，runtime 依赖。</td>
+            </tr>
+            <tr>
+              <td><a href="https://repo.maven.apache.org/maven2/org/slf4j/slf4j-api/2.0.20/slf4j-api-2.0.20.pom"><code>org.slf4j:<wbr>slf4j-api</code></a></td>
+              <td><code>2.0.20</code><span class="version-source">Boot 管理</span></td>
+              <td>业务与基础设施的日志接口；日志实现由 Boot Starter 提供。</td>
+            </tr>
+            <tr>
+              <td><a href="https://repo.maven.apache.org/maven2/tools/jackson/core/jackson-databind/3.1.7/jackson-databind-3.1.7.pom"><code>tools.jackson.core:<wbr>jackson-databind</code></a></td>
+              <td><code>3.1.7</code><span class="version-source">Boot 管理</span></td>
+              <td>业务 JSON 序列化、反序列化与 JSON 树处理。</td>
+            </tr>
+            <tr>
+              <td><a href="https://github.com/networknt/json-schema-validator/tree/3.0.1"><code>com.networknt:<wbr>json-schema-validator</code></a></td>
+              <td><code>3.0.1</code><span class="version-source">父工程锁定</span></td>
+              <td>项目 JSON 文档与工具参数的 Schema 校验；使用 Jackson 3 API。</td>
+            </tr>
+            <tr>
+              <td><a href="https://jsoup.org/news/release-1.22.2"><code>org.jsoup:<wbr>jsoup</code></a></td>
+              <td><code>1.22.2</code><span class="version-source">父工程锁定</span></td>
+              <td>幻灯片 HTML 解析、DOM 查询与导出资源处理。</td>
+            </tr>
+            <tr>
+              <td><a href="https://github.com/java-diff-utils/java-diff-utils/releases"><code>io.github.java-diff-utils:<wbr>java-diff-utils</code></a></td>
+              <td><code>4.18</code><span class="version-source">父工程锁定</span></td>
+              <td>正文差异计算与 unified diff，供审阅和工具结果使用。</td>
+            </tr>
+            <tr>
+              <td><a href="https://github.com/usefulness/webp-imageio"><code>com.github.usefulness:<wbr>webp-imageio</code></a></td>
+              <td><code>0.11.0</code><span class="version-source">父工程锁定</span></td>
+              <td>附件与幻灯片缩略图的 WebP 编解码；支持 macOS ARM64。</td>
+            </tr>
+            <tr>
+              <td><a href="https://projectlombok.org/changelog"><code>org.projectlombok:<wbr>lombok</code></a></td>
+              <td><code>1.18.48</code><span class="version-source">Boot 管理</span></td>
+              <td>生成访问器与构造器，沿用 QA-Agent 风格；编译期使用，打包排除。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
+    <article class="structure-card" aria-labelledby="interface-package-heading">
+      <header class="card-header">
+        <h2 id="interface-package-heading">接口包</h2>
+      </header>
+      <div class="tree-scroll" role="region" aria-label="接口包树" tabindex="0">
+        <ul class="tree">
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch"></span><span class="tree-name tree-directory">controller/&lt;接口包&gt;/</span></code><span class="tree-description">按 API 功能分组</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">├── </span><span class="tree-name">XxxController.java</span></code><span class="tree-description">请求适配与响应组装</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">├── </span><span class="tree-name tree-directory">dto/</span></code><span class="tree-description">前端请求对象</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">└── </span><span class="tree-name tree-directory">vo/</span></code><span class="tree-description">前端响应对象</span></li>
+        </ul>
+      </div>
+    </article>
+    <article class="structure-card" aria-labelledby="domain-package-heading">
+      <header class="card-header">
+        <h2 id="domain-package-heading">领域包</h2>
+      </header>
+      <div class="tree-scroll" role="region" aria-label="领域包树" tabindex="0">
+        <ul class="tree">
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch"></span><span class="tree-name tree-directory">&lt;领域包&gt;/</span></code><span class="tree-description">project／agent／asset／setting</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">├── </span><span class="tree-name tree-directory">model/</span></code><span class="tree-description">Entity、值对象、枚举及业务输入与结果</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│   ├── </span><span class="tree-name tree-directory">entity/</span></code><span class="tree-description">业务实体</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│   └── </span><span class="tree-name tree-directory">enumeration/</span></code><span class="tree-description">业务状态与类型枚举</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">├── </span><span class="tree-name tree-directory">service/</span></code><span class="tree-description">业务规则与用例编排</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">├── </span><span class="tree-name tree-directory">repository/</span></code><span class="tree-description">业务数据存取接口</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">└── </span><span class="tree-name tree-directory">gateway/</span></code><span class="tree-description">外部能力接口，按需创建</span></li>
+        </ul>
+      </div>
+    </article>
     <article class="structure-card" aria-labelledby="project-heading">
       <header class="card-header">
         <h2 id="project-heading">项目目录</h2>
@@ -88,8 +390,9 @@
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">├── </span><span class="tree-name">{slide_id}.html</span></code><span class="tree-description">幻灯片源码</span></li>
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">├── </span><span class="tree-name tree-directory">.git/</span></code><span class="tree-description">Git 仓库</span></li>
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">└── </span><span class="tree-name tree-directory">.runtime/</span></code><span class="tree-description"></span></li>
-          <li class="tree-row"><code class="tree-path"><span class="tree-branch">    ├── </span><span class="tree-name tree-directory">mutations/</span></code><span class="tree-description">文件修改临时事务记录</span></li>
-          <li class="tree-row"><code class="tree-path"><span class="tree-branch">    │   └── </span><span class="tree-name">{operation_hash}.json</span></code><span class="tree-description"></span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">    ├── </span><span class="tree-name">render-slides.json</span></code><span class="tree-description">按 slide_id 记录最新 screenshot_id 和 hash</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">    ├── </span><span class="tree-name tree-directory">mutations/</span></code><span class="tree-description"></span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">    │   └── </span><span class="tree-name">{operation_hash}.json</span></code><span class="tree-description">文件修改临时事务记录</span></li>
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">    ├── </span><span class="tree-name tree-directory">attachments/</span></code><span class="tree-description"></span></li>
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">    │   ├── </span><span class="tree-name">{attachment_id}.png</span></code><span class="tree-description">附件原图</span></li>
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">    │   └── </span><span class="tree-name">{attachment_id}.webp</span></code><span class="tree-description">附件缩略图</span></li>
@@ -97,10 +400,9 @@
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">    │   └── </span><span class="tree-name">{screenshot_id}.png</span></code><span class="tree-description">截图，ID 全局唯一，内容不覆盖</span></li>
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">    ├── </span><span class="tree-name tree-directory">thumbnails/</span></code><span class="tree-description"></span></li>
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">    │   └── </span><span class="tree-name">{slide_id}.webp</span></code><span class="tree-description">当前幻灯片缩略图</span></li>
-          <li class="tree-row"><code class="tree-path"><span class="tree-branch">    ├── </span><span class="tree-name">render-slides.json</span></code><span class="tree-description">按 slide_id 记录最新 screenshot_id 和 hash</span></li>
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">    └── </span><span class="tree-name tree-directory">exports/</span></code><span class="tree-description">导出临时文件</span></li>
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">        └── </span><span class="tree-name tree-directory">{export_id}/</span></code><span class="tree-description"></span></li>
-          <li class="tree-row"><code class="tree-path"><span class="tree-branch">            ├── </span><span class="tree-name tree-directory">work/</span></code><span class="tree-description">PNG／PDF 临时文件，按需创建</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">            ├── </span><span class="tree-name tree-directory">work/</span></code><span class="tree-description"></span></li>
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">            │   └── </span><span class="tree-name">{序号}-{标题}.png</span></code><span class="tree-description">每张 slide 的渲染图片</span></li>
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">            └── </span><span class="tree-name">{filename}.pdf / .zip / .html</span></code><span class="tree-description">本次导出的唯一成品</span></li>
         </ul>
@@ -129,7 +431,7 @@
          在项目写锁和一致的数据库读取下取得本次输入；HTML、顺序、标题、主题 CSS、装饰配置等固定在任务内存，不复制整套项目文档。
          Logo 继续使用 PNG，从数据库读取并固定本次图片字节；PNG／PDF 渲染与 HTML 导出均通过 Data URL 内嵌，不再保存临时 Logo 文件。
          项目写锁只覆盖取得一致输入的过程，长时间渲染与打包不持有项目写锁；既有前端编辑与项目切换限制继续沿用。
-         程序内置字体和脚本复用固定版本的公共资源，不再为每次导出复制 runtime-assets/；HTML 所需播放器、基础与主题样式、字体、装饰脚本和 Logo 均内嵌到最终文件。
+         程序内置字体和脚本复用固定版本的公共资源，不再为每次导出复制整套渲染资源；HTML 所需播放器、基础与主题样式、字体、装饰脚本和 Logo 均内嵌到最终文件。
          PNG 导出逐张渲染图片并打包为 ZIP；PDF 沿用整页图片合成方案，与 PNG 共用渲染流程。
          HTML 导出为单个 {filename}.html，包含全部 slide 内容；每张 slide 仍通过隔离的 iframe 播放，保留翻页和缩放，不生成 ZIP、截图或 work/ 播放目录。
          HTML 直接使用固定的任务输入和内置资源生成成品，不创建 work/；原有外部资源按 API.html 的允许规则保留，不因单文件形式自动变为离线资源。
@@ -149,16 +451,24 @@
          会话附件及截图的清理与回退、返回最新及其他会话引用之间的关系，仍待明确。 -->
   </main>
   <script>
-    const scrollStorageKey = 'ppt-agent-structure-scroll';
-    const tree = document.querySelector('.tree-scroll');
+    const scrollStorageKey = 'ppt-agent-structure-scroll-v2';
+    const trees = document.querySelectorAll('.tree-scroll');
+    const dependenciesCard = document.getElementById('backend-dependencies');
+    const dependenciesScroll = document.getElementById('dependencies-scroll');
 
     try {
       const savedScroll = JSON.parse(sessionStorage.getItem(scrollStorageKey) || 'null');
       sessionStorage.removeItem(scrollStorageKey);
       if (savedScroll) {
+        if (savedScroll.dependencies) {
+          dependenciesCard.open = savedScroll.dependencies.open;
+          dependenciesScroll.scrollLeft = savedScroll.dependencies.x || 0;
+        }
         requestAnimationFrame(() => {
           window.scrollTo(savedScroll.x, savedScroll.y);
-          tree.scrollLeft = savedScroll.tree;
+          trees.forEach((tree, index) => {
+            tree.scrollLeft = savedScroll.trees[index] || 0;
+          });
         });
       }
     } catch {
@@ -170,7 +480,8 @@
         sessionStorage.setItem(scrollStorageKey, JSON.stringify({
           x: window.scrollX,
           y: window.scrollY,
-          tree: tree.scrollLeft,
+          trees: Array.from(trees, tree => tree.scrollLeft),
+          dependencies: { open: dependenciesCard.open, x: dependenciesScroll.scrollLeft },
         }));
       } catch {
         // Reload even if scroll positions cannot be saved.

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# restart.sh - 重启 Web 或 macOS App；每次重置预置资源，默认保留项目数据并启动 Web。
-# 用法:./scripts/restart.sh --reset 0 --mode web
-#       ./scripts/restart.sh --reset 1 --mode app
+# restart.sh - 重启 Web 或 macOS App；首次建库，reset=1 恢复预置，默认保留已有数据。
+# 用法:./restart.sh --reset 0 --mode web
+#       ./restart.sh --reset 1 --mode app
 set -euo pipefail
 
 RESET_MODE="0"
 RUN_MODE="web"
 usage() {
-  printf '用法:./scripts/restart.sh [--reset 0|1] [--mode app|web]\n默认:--reset 0 --mode web\n'
+  printf '用法:./restart.sh [--reset 0|1] [--mode app|web]\n默认:--reset 0 --mode web\n'
 }
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -28,12 +28,14 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BACKEND_DIR="$ROOT_DIR/backend"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BACKEND_DIR="$ROOT_DIR/backend_go"
 FRONTEND_DIR="$ROOT_DIR/frontend"
 RENDERER_DIR="$BACKEND_DIR/render-worker"
 COMMAND_WORKER_DIR="$BACKEND_DIR/command-worker"
 WORK_ROOT="$HOME/.dasi/ppt"
+DB_PATH="$WORK_ROOT/db/ppt.db"
+SQL_DIR="$ROOT_DIR/backend_java/sql"
 if [ "$RUN_MODE" = "web" ]; then
   BACKEND_ADDR="$(cd "$BACKEND_DIR" && go run ./cmd/server --print-address)"
   BACKEND_PORT="${BACKEND_ADDR##*:}"
@@ -75,18 +77,35 @@ wait_for_url() {
 }
 
 initialize_project() {
-  if [ "$RESET_MODE" = "1" ] && ! rm -rf "$WORK_ROOT" 2>"$LOG_DIR/init-resources.log"; then
-    print_result "$STEP_2" '❌' '初始化失败:无法清空项目数据（日志:tmp/run/init-resources.log）'
-    return 1
+  local create_schema=0
+  [ -s "$DB_PATH" ] || create_schema=1
+  if [ "$create_schema" = "0" ] && [ "$RESET_MODE" = "0" ]; then
+    print_result "$STEP_2" '✅' '保留已有数据库'
+    return 0
   fi
   if ! (
-    mkdir -p "$WORK_ROOT" || exit 1
+    command -v sqlite3 >/dev/null 2>&1 || { printf '缺少 sqlite3\n' >&2; exit 1; }
+    cd "$SQL_DIR" || exit 1
+    [ -r init.sql ] || { printf '缺少 init.sql\n' >&2; exit 1; }
+    if [ "$create_schema" = "1" ]; then
+      [ -r table.sql ] || { printf '缺少 table.sql\n' >&2; exit 1; }
+    fi
+    mkdir -p "$WORK_ROOT/db" || exit 1
     touch "$WORK_ROOT/.desktop-initializing" || exit 1
-    cd "$BACKEND_DIR" || exit 1
-    go run ./cmd/init-resources --seed-root "$BACKEND_DIR/seed" || exit 1
+    {
+      printf '.timeout 5000\nPRAGMA foreign_keys = ON;\nBEGIN IMMEDIATE;\n'
+      if [ "$create_schema" = "1" ]; then
+        printf '.read table.sql\n'
+      fi
+      printf '.read init.sql\nCOMMIT;\n'
+    } | sqlite3 -batch -bail "$DB_PATH" || exit 1
     rm -f "$WORK_ROOT/.desktop-initializing"
-  ) >"$LOG_DIR/init-resources.log" 2>&1; then
-    print_result "$STEP_2" '❌' '初始化失败（日志:tmp/run/init-resources.log）'
+  ) >"$LOG_DIR/init-database.log" 2>&1; then
+    if [ "$create_schema" = "1" ]; then
+      rm -f "$DB_PATH" "$DB_PATH-wal" "$DB_PATH-shm" "$DB_PATH-journal"
+    fi
+    rm -f "$WORK_ROOT/.desktop-initializing"
+    print_result "$STEP_2" '❌' '数据库初始化失败（日志:tmp/run/init-database.log）'
     return 1
   fi
   print_result "$STEP_2" '✅' "reset=$RESET_MODE"
