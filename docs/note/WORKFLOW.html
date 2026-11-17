@@ -1,4 +1,10 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Harness 工作流</title><style>:root {
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>工作流设计</title>
+<style>:root {
   color-scheme: light;
   --ui-workspace: 245 241 237;
   --ui-titlebar: 246 237 227;
@@ -85,7 +91,6 @@ main { width: min(1280px, calc(100% - 48px)); margin: 48px auto 64px; min-width:
 .title-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 h1 { margin: 0; font-size: 28px; line-height: 1.3; font-weight: 650; letter-spacing: -.035em; }
 .status { padding: 4px 10px; border: 1px solid rgb(var(--ui-border-strong)); border-radius: var(--radius-pill); color: rgb(var(--ui-text-600)); font-size: 12px; }
-.scope { max-width: 960px; margin: 16px 0 0; color: rgb(var(--ui-text-600)); font-size: 14px; line-height: 1.7; }
 .page-nav { display: flex; flex-wrap: wrap; gap: 10px 24px; margin-top: 18px; font-size: 14px; }
 a { color: inherit; text-decoration-color: rgb(var(--ui-border-strong)); text-underline-offset: 4px; }
 a:hover { color: rgb(var(--ui-selected-foreground)); text-decoration-color: currentColor; }
@@ -131,12 +136,11 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 .section-rule { stroke: rgb(var(--ui-border)); stroke-width: 1; }
 .decision path { fill: rgb(var(--ui-panel-muted)); stroke: rgb(var(--ui-border-strong)); }
 .decision text { fill: rgb(var(--ui-text-700)); font-size: 13px; }
-.flow-notes { display: grid; gap: 10px; margin: 0; padding: 18px 24px 22px 42px; border-top: 1px solid rgb(var(--ui-border)); color: rgb(var(--ui-text-700)); font-size: 14px; line-height: 1.7; }
-.flow-notes li::marker { color: rgb(var(--ui-text-400)); }
 .class-table { width: 100%; min-width: 1140px; border-collapse: collapse; table-layout: fixed; }
 .class-table th, .class-table td { padding: 16px; border-bottom: 1px solid rgb(var(--ui-border)); text-align: left; vertical-align: top; font-size: 14px; font-weight: 400; line-height: 1.75; }
-.class-table thead th { text-align: center; font-weight: 500; background: rgb(var(--ui-panel-muted)); }
-.class-table .group-heading th { padding: 12px 16px; background: rgb(var(--ui-panel-muted)); color: rgb(var(--ui-text-600)); font-weight: 600; }
+.class-table thead th { padding-block: 13px; text-align: center; font-weight: 500; background: rgb(var(--ui-border-strong)); color: rgb(var(--ui-foreground)); }
+.class-table .group-heading th { padding: 18px 24px; background: rgb(var(--ui-panel-muted)); color: rgb(var(--ui-text-800)); text-align: center; vertical-align: middle; font-weight: 600; line-height: 1.5; }
+.class-table tbody + tbody .group-heading th { border-top: 8px solid rgb(var(--ui-surface)); }
 .class-table code { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 13px; overflow-wrap: anywhere; }
 .class-table td { color: rgb(var(--ui-text-700)); }
 .class-table th[scope=row] { color: rgb(var(--ui-foreground)); font-weight: 500; }
@@ -144,7 +148,6 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 .class-table tbody tr:target > th, .class-table tbody tr:target > td { background: rgb(var(--ui-accent-soft)); }
 .kind { display: block; margin-top: 4px; color: rgb(var(--ui-text-500)); font-size: 12px; font-weight: 400; }
 .catalog-note { margin: 0; padding: 0 24px 18px; font-size: 14px; line-height: 1.7; color: rgb(var(--ui-text-600)); }
-.source-footer { margin-top: 24px; display: flex; flex-wrap: wrap; gap: 10px 18px; font-size: 13px; color: rgb(var(--ui-text-500)); }
 ::selection { background: rgb(var(--ui-text-selection)); }
 @media (max-width: 680px) {
  main { width: calc(100% - 32px); margin: 28px auto 40px; }
@@ -152,8 +155,6 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
  .panel + .panel { margin-top: 24px; }
  .panel > summary { padding: 20px; }
  .legend { padding-inline: 20px; }
- .scope { margin-top: 12px; }
- .flow-notes { padding-inline: 36px 20px; }
  .catalog-note { padding-inline: 20px; }
 }
 @media print {
@@ -169,102 +170,1761 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
  thead { display: table-header-group; }
  tr { break-inside: avoid; }
 }
-</style></head><body><main>
-<header class="page-header"><div class="title-row"><h1>Harness 工作流</h1><span class="status">设计讨论</span></div><p class="scope">围绕 agent/service 的八个职责包，展开主循环、工具执行与人工等待，以及命令、历史和通知边界。图中类名为本轮设计建议。</p><nav class="page-nav" aria-label="工作流章节"><a href="#main-loop">主循环</a><a href="#tool-flow">工具执行</a><a href="#support-flow">命令与历史</a><a href="#class-catalog">类职责</a></nav></header>
-<details class="panel" id="main-loop" open><summary aria-expanded="true" aria-controls="main-loop-body"><h2>主循环</h2></summary><div id="main-loop-body">
-<div class="legend" aria-label="连线含义"><span><i></i>执行路径</span><span><i class="loop-key"></i>回到循环</span><span><i class="wait-key"></i>条件 / 等待</span><span><i class="dependency-key"></i>能力调用</span></div>
-<div class="diagram-scroll" data-scroll-id="main-loop" tabindex="0" role="region" aria-label="主循环图"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 1900" width="1240" height="1900" role="group" aria-labelledby="loop-title loop-description"><title id="loop-title">Harness 主循环</title><desc id="loop-description">受理与初始快照提交后进入 HarnessLoop，循环检查输入、工具、上下文和模型响应；工具、人工答复及未完成检查返回同一循环，终态统一收尾。</desc><defs><marker id="loop-arrow-normal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="arrow-normal" d="M1 1 L9 5 L1 9 Z"/></marker><marker id="loop-arrow-loop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="arrow-loop" d="M1 1 L9 5 L1 9 Z"/></marker><marker id="loop-arrow-wait" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="arrow-wait" d="M1 1 L9 5 L1 9 Z"/></marker><marker id="loop-arrow-stop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="arrow-stop" d="M1 1 L9 5 L1 9 Z"/></marker><marker id="loop-arrow-dependency" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="arrow-dependency" d="M1 1 L9 5 L1 9 Z"/></marker></defs><polyline class="edge normal" points="620,130 620,174" marker-end="url(#loop-arrow-normal)"/><polyline class="edge dependency" points="354,224 465,224" marker-end="url(#loop-arrow-dependency)"/><polyline class="edge normal" points="620,272 620,316" marker-end="url(#loop-arrow-normal)"/><polyline class="edge dependency" points="354,363 465,363" marker-end="url(#loop-arrow-dependency)"/><polyline class="edge normal" points="620,414 620,456" marker-end="url(#loop-arrow-normal)"/><polyline class="edge normal" points="620,550 620,592" marker-end="url(#loop-arrow-normal)"/><polyline class="edge normal" points="620,686 620,736" marker-end="url(#loop-arrow-normal)"/><polyline class="edge loop" points="354,648 393,648 393,784 465,784" marker-end="url(#loop-arrow-loop)"/><polyline class="edge dependency" points="465,808 354,808" marker-end="url(#loop-arrow-dependency)"/><polyline class="edge dependency" points="465,936 382,936 382,835 354,835" marker-end="url(#loop-arrow-dependency)"/><polyline class="edge normal" points="620,834 620,882" marker-end="url(#loop-arrow-normal)"/><polyline class="edge normal" points="620,976 620,1020" marker-end="url(#loop-arrow-normal)"/><polyline class="edge wait" points="775,1061 900,1061" marker-end="url(#loop-arrow-wait)"/><polyline class="edge loop" points="1058,1160 1058,1174 820,1174 820,1120 775,1120" marker-end="url(#loop-arrow-loop)"/><polyline class="edge normal" points="620,1140 620,1186" marker-end="url(#loop-arrow-normal)"/><polyline class="edge normal" points="620,1306 620,1344" marker-end="url(#loop-arrow-normal)"/><polyline class="edge normal" points="712,1382 900,1382" marker-end="url(#loop-arrow-normal)"/><polyline class="edge normal" points="620,1420 620,1470" marker-end="url(#loop-arrow-normal)"/><polyline class="edge loop" points="900,1355 852,1355 852,639 775,639" marker-end="url(#loop-arrow-loop)"/><polyline class="edge wait" points="1058,1430 1058,1480" marker-end="url(#loop-arrow-wait)"/><polyline class="edge loop" points="900,1530 878,1530 878,1410 900,1410" marker-end="url(#loop-arrow-loop)"/><polyline class="edge loop" points="465,1528 418,1528 418,663 465,663" marker-end="url(#loop-arrow-loop)"/><polyline class="edge normal" points="620,1590 620,1634" marker-end="url(#loop-arrow-normal)"/><polyline class="edge normal" points="620,1754 620,1798" marker-end="url(#loop-arrow-normal)"/><polyline class="edge stop" points="775,616 900,616" marker-end="url(#loop-arrow-stop)"/><polyline class="edge stop" points="775,772 825,772 825,700 900,700" marker-end="url(#loop-arrow-stop)"/><polyline class="edge stop" points="1216,660 1230,660 1230,1694 775,1694" marker-end="url(#loop-arrow-stop)"/><g id="loop-entry" class="node plain" transform="translate(465 40)"><rect width="310" height="90" rx="10"/><text class="node-tag" x="16" y="25">interfaces/controller/execution</text><a class="class-link" href="#class-ExecutionController" aria-label="查看 ExecutionController 职责"><text class="node-name" x="16" y="50">ExecutionController</text></a><text class="node-caption" x="16" y="76">新开 / 追加 / 取消</text></g><g id="loop-accept" class="node plain" transform="translate(465 174)"><rect width="310" height="98" rx="10"/><text class="node-tag" x="16" y="25">agent/service/run</text><a class="class-link" href="#class-RunService" aria-label="查看 RunService 职责"><text class="node-name" x="16" y="50">RunService</text></a><text class="node-caption" x="16" y="76">幂等受理、占用检查、固定配置</text></g><g id="loop-settings" class="node plain" transform="translate(24 164)"><rect width="330" height="120" rx="10"/><text class="node-tag" x="16" y="25">session · setting</text><a class="class-link" href="#class-SessionService" aria-label="查看 SessionService 职责"><text class="node-name" x="16" y="50">SessionService</text></a><a class="class-link" href="#class-SettingService" aria-label="查看 SettingService 职责"><text class="node-name" x="16" y="73">SettingService</text></a><text class="node-caption" x="16" y="99">读取会话与本次模型 / 行为设置</text></g><g id="loop-checkpoint" class="node plain" transform="translate(24 316)"><rect width="330" height="94" rx="10"/><text class="node-tag" x="16" y="25">history</text><a class="class-link" href="#class-CheckpointService" aria-label="查看 CheckpointService 职责"><text class="node-name" x="16" y="50">CheckpointService</text></a><text class="node-caption" x="16" y="76">取得 Run 创建前的一致快照</text></g><g id="loop-accept-write" class="node plain" transform="translate(465 316)"><rect width="310" height="98" rx="10"/><text class="node-tag" x="16" y="25">repository</text><a class="class-link" href="#class-RunRepository" aria-label="查看 RunRepository 职责"><text class="node-name" x="16" y="50">RunRepository</text></a><text class="node-caption" x="16" y="76">Run、输入、检查点与凭据同事务</text></g><g id="loop-owner" class="node primary" transform="translate(465 456)"><rect width="310" height="94" rx="10"/><text class="node-tag" x="16" y="25">agent/service/run</text><a class="class-link" href="#class-HarnessLoop" aria-label="查看 HarnessLoop 职责"><text class="node-name" x="16" y="50">HarnessLoop</text></a><text class="node-caption" x="16" y="76">创建本次运行状态，开始循环</text></g><g id="loop-guard" class="node plain" transform="translate(465 592)"><rect width="310" height="94" rx="10"/><text class="node-tag" x="16" y="25">run</text><a class="class-link" href="#class-RunGuard" aria-label="查看 RunGuard 职责"><text class="node-name" x="16" y="50">RunGuard</text></a><text class="node-caption" x="16" y="76">取消、预算、失败与空转检查</text></g><g id="loop-input" class="node plain" transform="translate(465 736)"><rect width="310" height="98" rx="10"/><text class="node-tag" x="16" y="25">input</text><a class="class-link" href="#class-InputService" aria-label="查看 InputService 职责"><text class="node-name" x="16" y="50">InputService</text></a><text class="node-caption" x="16" y="76">判定输入、消费队列、合并授权</text></g><g id="loop-append" class="node plain" transform="translate(24 578)"><rect width="330" height="140" rx="10"/><text class="node-tag" x="16" y="25">追加输入</text><a class="class-link" href="#class-ExecutionController" aria-label="查看 ExecutionController 职责"><text class="node-name" x="16" y="50">ExecutionController</text></a><a class="class-link" href="#class-InputService" aria-label="查看 InputService 职责"><text class="node-name" x="16" y="73">InputService</text></a><text class="node-caption" x="16" y="99">running / waiting 时追加并入队</text><text class="node-caption" x="16" y="119">安全边界消费，保留消息身份</text></g><g id="loop-jev" class="node plain" transform="translate(24 760)"><rect width="330" height="100" rx="10"/><text class="node-tag" x="16" y="25">gateway</text><a class="class-link" href="#class-JevGateway" aria-label="查看 JevGateway 职责"><text class="node-name" x="16" y="50">JevGateway</text></a><text class="node-caption" x="16" y="76">Intent 输入判定 · Prune 工具筛选</text></g><g id="loop-tools" class="node plain" transform="translate(465 882)"><rect width="310" height="94" rx="10"/><text class="node-tag" x="16" y="25">tool</text><a class="class-link" href="#class-ToolRegistry" aria-label="查看 ToolRegistry 职责"><text class="node-name" x="16" y="50">ToolRegistry</text></a><text class="node-caption" x="16" y="76">按模式、范围与判定选择工具</text></g><g id="loop-context" class="node plain" transform="translate(465 1020)"><rect width="310" height="120" rx="10"/><text class="node-tag" x="16" y="25">context</text><a class="class-link" href="#class-ContextService" aria-label="查看 ContextService 职责"><text class="node-name" x="16" y="50">ContextService</text></a><a class="class-link" href="#class-PromptAssembler" aria-label="查看 PromptAssembler 职责"><text class="node-name" x="16" y="73">PromptAssembler</text></a><text class="node-caption" x="16" y="99">组装本轮上下文，估算 Token</text></g><g id="loop-compact" class="node plain" transform="translate(900 1020)"><rect width="316" height="140" rx="10"/><text class="node-tag" x="16" y="25">command → context</text><a class="class-link" href="#class-CommandService" aria-label="查看 CommandService 职责"><text class="node-name" x="16" y="50">CommandService</text></a><a class="class-link" href="#class-ContextCompactor" aria-label="查看 ContextCompactor 职责"><text class="node-name" x="16" y="73">ContextCompactor</text></a><text class="node-caption" x="16" y="99">自动压缩保存摘要与上下文位置</text><text class="node-caption" x="16" y="119">重新组装、重新估算后再调用模型</text></g><g id="loop-llm" class="node plain" transform="translate(465 1186)"><rect width="310" height="120" rx="10"/><text class="node-tag" x="16" y="25">gateway → infrastructure/llm</text><a class="class-link" href="#class-LlmGateway" aria-label="查看 LlmGateway 职责"><text class="node-name" x="16" y="50">LlmGateway</text></a><a class="class-link" href="#class-SpringAiLlmGateway" aria-label="查看 SpringAiLlmGateway 职责"><text class="node-name" x="16" y="73">SpringAiLlmGateway</text></a><text class="node-caption" x="16" y="99">单次调用：文本、推理或工具请求</text></g><g id="loop-response" class="decision"><path d="M620 1344.0 L712.0 1382 L620 1420.0 L528.0 1382 Z"/><text x="620" y="1387" text-anchor="middle">有工具调用？</text></g><g id="loop-execute" class="node plain" transform="translate(900 1332)"><rect width="316" height="98" rx="10"/><text class="node-tag" x="16" y="25">tool</text><a class="class-link" href="#class-ToolExecutor" aria-label="查看 ToolExecutor 职责"><text class="node-name" x="16" y="50">ToolExecutor</text></a><text class="node-caption" x="16" y="76">执行工具；详细分支见下图</text></g><g id="loop-wait" class="node waiting" transform="translate(900 1480)"><rect width="316" height="100" rx="10"/><text class="node-tag" x="16" y="25">interaction</text><a class="class-link" href="#class-InteractionService" aria-label="查看 InteractionService 职责"><text class="node-name" x="16" y="50">InteractionService</text></a><text class="node-caption" x="16" y="76">等待答复后继续原工具与原 Run</text></g><g id="loop-complete" class="node plain" transform="translate(465 1470)"><rect width="310" height="120" rx="10"/><text class="node-tag" x="16" y="25">run</text><a class="class-link" href="#class-CompletionChecker" aria-label="查看 CompletionChecker 职责"><text class="node-name" x="16" y="50">CompletionChecker</text></a><text class="node-caption" x="16" y="76">复查已受理输入、计划与产物证据</text><text class="node-caption" x="16" y="96">通过才采用候选回复</text></g><g id="loop-finish" class="node plain" transform="translate(465 1634)"><rect width="310" height="120" rx="10"/><text class="node-tag" x="16" y="25">run</text><a class="class-link" href="#class-RunService" aria-label="查看 RunService 职责"><text class="node-name" x="16" y="50">RunService</text></a><text class="node-caption" x="16" y="76">统一关闭输入、处理剩余消息</text><text class="node-caption" x="16" y="96">保存回复、净差异与 Run 终态</text></g><g id="loop-after" class="node plain" transform="translate(465 1798)"><rect width="310" height="86" rx="10"/><a class="class-link" href="#class-SessionEventPublisher" aria-label="查看 SessionEventPublisher 职责"><text class="node-name" x="16" y="25">SessionEventPublisher</text></a><a class="class-link" href="#class-CommandTrigger" aria-label="查看 CommandTrigger 职责"><text class="node-name" x="16" y="48">CommandTrigger</text></a><text class="node-caption" x="16" y="74">可读后通知；按条件触发后续命令</text></g><g id="loop-stop" class="node stopping" transform="translate(900 592)"><rect width="316" height="140" rx="10"/><text class="node-tag" x="16" y="25">终止分支</text><a class="class-link" href="#class-RunService" aria-label="查看 RunService 职责"><text class="node-name" x="16" y="50">RunService</text></a><a class="class-link" href="#class-RunRecoveryService" aria-label="查看 RunRecoveryService 职责"><text class="node-name" x="16" y="73">RunRecoveryService</text></a><text class="node-caption" x="16" y="99">取消 / 不可恢复错误 / 进程重启</text><text class="node-caption" x="16" y="119">终止本次执行，进入统一收尾</text></g><text class="lane-label" x="24" y="52" text-anchor="start">受理与输入</text><text class="lane-label" x="900" y="52" text-anchor="start">分支与回流</text><text class="edge-label dependency" x="408" y="210" text-anchor="middle">读取</text><text class="edge-label dependency" x="409" y="350" text-anchor="middle">起始基准</text><text class="edge-label normal" x="690" y="440" text-anchor="middle">提交后调度</text><text class="edge-label loop" x="402" y="712" text-anchor="middle">已受理输入</text><text class="edge-label dependency" x="408" y="797" text-anchor="middle">判定</text><text class="edge-label dependency" x="404" y="924" text-anchor="middle">筛选</text><text class="edge-label normal" x="687" y="866" text-anchor="middle">可执行输入</text><text class="edge-label wait" x="837" y="1048" text-anchor="middle">达到自动压缩阈值</text><text class="edge-label loop" x="896" y="1163" text-anchor="middle">压缩成功</text><text class="edge-label normal" x="665" y="1170" text-anchor="middle">可发送</text><text class="edge-label normal" x="804" y="1367" text-anchor="middle">是</text><text class="edge-label normal" x="650" y="1453" text-anchor="middle">否</text><text class="edge-label loop" x="837" y="990" text-anchor="end">结果进入下一轮</text><text class="edge-label wait" x="1125" y="1460" text-anchor="middle">需人工答复</text><text class="edge-label loop" x="865" y="1470" text-anchor="end">答复后继续</text><text class="edge-label loop" x="403" y="1453" text-anchor="end">新输入 / 未满足条件</text><text class="edge-label normal" x="681" y="1618" text-anchor="middle">允许结束</text><text class="edge-label normal" x="680" y="1782" text-anchor="middle">提交成功</text><text class="edge-label stop" x="838" y="602" text-anchor="middle">停止</text><text class="edge-label stop" x="837" y="758" text-anchor="middle">首条闲聊 → rejected</text><text class="edge-label stop" x="1120" y="1678" text-anchor="middle">统一收尾</text></svg></div>
-<ul class="flow-notes"><li>同会话仅一个非终态 Run；同项目不同会话允许并行。项目锁只覆盖必要的提交或排他操作，不覆盖整次模型调用与人工等待。</li><li>等待答复不创建新 Run；首条闲聊被拒绝时，已受理但未处理的后续输入按契约交接。取消或异常保留已确认的工具结果与已提交修改。</li><li>主循环拥有工具执行权。Spring AI 只返回一次模型响应；单次调用允许有限重试，模型切换重新组装请求。</li></ul></div></details>
-<details class="panel" id="tool-flow" open><summary aria-expanded="true" aria-controls="tool-flow-body"><h2>工具执行、审批与提交</h2></summary><div id="tool-flow-body">
-<div class="diagram-scroll" data-scroll-id="tool-flow" tabindex="0" role="region" aria-label="工具执行、审批与提交图"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 1730" width="1240" height="1730" role="group" aria-labelledby="tool-title tool-description"><title id="tool-title">工具分发与修改提交</title><desc id="tool-description">ToolExecutor 保存调用并经过 ToolGuard 后分发到 AgentTool 实现。读取直接返回，修改先生成候选，必要时审批，应用前重新校验并协调文件和数据库提交。</desc><defs><marker id="tool-arrow-normal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="arrow-normal" d="M1 1 L9 5 L1 9 Z"/></marker><marker id="tool-arrow-loop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="arrow-loop" d="M1 1 L9 5 L1 9 Z"/></marker><marker id="tool-arrow-wait" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="arrow-wait" d="M1 1 L9 5 L1 9 Z"/></marker><marker id="tool-arrow-stop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="arrow-stop" d="M1 1 L9 5 L1 9 Z"/></marker><marker id="tool-arrow-dependency" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="arrow-dependency" d="M1 1 L9 5 L1 9 Z"/></marker></defs><polyline class="edge dependency" points="465,89 354,89" marker-end="url(#tool-arrow-dependency)"/><polyline class="edge normal" points="620,138 620,184" marker-end="url(#tool-arrow-normal)"/><polyline class="edge normal" points="775,233 900,233" marker-end="url(#tool-arrow-normal)"/><polyline class="edge normal" points="620,282 620,340" marker-end="url(#tool-arrow-normal)"/><polyline class="edge normal" points="620,438 620,488 161,488 161,530" marker-end="url(#tool-arrow-normal)"/><polyline class="edge normal" points="620,488 467,488 467,530" marker-end="url(#tool-arrow-normal)"/><polyline class="edge normal" points="620,488 773,488 773,530" marker-end="url(#tool-arrow-normal)"/><polyline class="edge normal" points="620,488 1079,488 1079,530" marker-end="url(#tool-arrow-normal)"/><polyline class="edge normal" points="161,712 161,772" marker-end="url(#tool-arrow-normal)"/><polyline class="edge normal" points="467,712 467,772" marker-end="url(#tool-arrow-normal)"/><polyline class="edge normal" points="773,712 773,772" marker-end="url(#tool-arrow-normal)"/><polyline class="edge normal" points="1079,712 1079,772" marker-end="url(#tool-arrow-normal)"/><polyline class="edge wait" points="636,866 618,866 618,744 467,744 467,772" marker-end="url(#tool-arrow-wait)"/><polyline class="edge normal" points="467,892 467,962" marker-end="url(#tool-arrow-normal)"/><polyline class="edge wait" points="565,1000 636,1000" marker-end="url(#tool-arrow-wait)"/><polyline class="edge normal" points="467,1038 467,1140" marker-end="url(#tool-arrow-normal)"/><polyline class="edge wait" points="942,1016 910,1016" marker-end="url(#tool-arrow-wait)"/><polyline class="edge loop" points="773,1086 773,1114 467,1114 467,1140" marker-end="url(#tool-arrow-loop)"/><polyline class="edge wait" points="910,1044 928,1044 928,1454 738,1454 738,1474" marker-end="url(#tool-arrow-wait)"/><polyline class="edge normal" points="467,1260 467,1304" marker-end="url(#tool-arrow-normal)"/><polyline class="edge normal" points="467,1424 467,1444 620,1444 620,1474" marker-end="url(#tool-arrow-normal)"/><polyline class="edge normal" points="24,832 12,832 12,1524 465,1524" marker-end="url(#tool-arrow-normal)"/><polyline class="edge normal" points="1216,832 1230,832 1230,1434 748,1434 748,1474" marker-end="url(#tool-arrow-normal)"/><polyline class="edge normal" points="910,900 922,900 922,944 1230,944" marker-end="url(#tool-arrow-normal)"/><polyline class="edge loop" points="1216,243 1236,243 1236,1458 792,1458 792,1492 775,1492" marker-end="url(#tool-arrow-loop)"/><polyline class="edge normal" points="775,1524 900,1524" marker-end="url(#tool-arrow-normal)"/><polyline class="edge loop" points="1058,1594 1058,1618 620,1618 620,1634" marker-end="url(#tool-arrow-loop)"/><g id="tool-entry" class="node plain" transform="translate(465 40)"><rect width="310" height="98" rx="10"/><text class="node-tag" x="16" y="25">tool</text><a class="class-link" href="#class-ToolExecutor" aria-label="查看 ToolExecutor 职责"><text class="node-name" x="16" y="50">ToolExecutor</text></a><text class="node-caption" x="16" y="76">记录调用，保留本轮调用顺序</text></g><g id="tool-calls" class="node plain" transform="translate(24 40)"><rect width="330" height="98" rx="10"/><text class="node-tag" x="16" y="25">repository</text><a class="class-link" href="#class-RunRepository" aria-label="查看 RunRepository 职责"><text class="node-name" x="16" y="50">RunRepository</text></a><text class="node-caption" x="16" y="76">调用记录先可读，随后才执行工具</text></g><g id="tool-guard" class="node plain" transform="translate(465 184)"><rect width="310" height="98" rx="10"/><text class="node-tag" x="16" y="25">tool</text><a class="class-link" href="#class-ToolGuard" aria-label="查看 ToolGuard 职责"><text class="node-name" x="16" y="50">ToolGuard</text></a><text class="node-caption" x="16" y="76">参数、可见性、授权与调用去重</text></g><g id="tool-denied" class="node plain" transform="translate(900 184)"><rect width="316" height="118" rx="10"/><text class="node-tag" x="16" y="25">提前返回</text><a class="class-link" href="#class-ToolExecutor" aria-label="查看 ToolExecutor 职责"><text class="node-name" x="16" y="50">ToolExecutor</text></a><text class="node-caption" x="16" y="76">拒绝或复用已确认结果</text><text class="node-caption" x="16" y="96">未知执行结果不据缺失记录重跑</text></g><g id="tool-dispatch" class="node primary" transform="translate(465 340)"><rect width="310" height="98" rx="10"/><text class="node-tag" x="16" y="25">tool · 接口</text><a class="class-link" href="#class-AgentTool" aria-label="查看 AgentTool 职责"><text class="node-name" x="16" y="50">AgentTool</text></a><text class="node-caption" x="16" y="76">按工具名分派实际实现</text></g><g id="tool-read" class="node plain" transform="translate(24 530)"><rect width="274" height="182" rx="10"/><text class="node-tag" x="16" y="25">读取 / 加载</text><a class="class-link" href="#class-ReadResourceTool" aria-label="查看 ReadResourceTool 职责"><text class="node-name" x="16" y="50">ReadResourceTool</text></a><a class="class-link" href="#class-ReadImageTool" aria-label="查看 ReadImageTool 职责"><text class="node-name" x="16" y="73">ReadImageTool</text></a><a class="class-link" href="#class-AssetLoadTool" aria-label="查看 AssetLoadTool 职责"><text class="node-name" x="16" y="96">AssetLoadTool</text></a><text class="node-caption" x="16" y="122">read_resource · read_image</text><text class="node-caption" x="16" y="142">load_skill · load_component</text></g><g id="tool-edit" class="node plain" transform="translate(330 530)"><rect width="274" height="182" rx="10"/><text class="node-tag" x="16" y="25">资源编辑</text><a class="class-link" href="#class-ResourceEditTool" aria-label="查看 ResourceEditTool 职责"><text class="node-name" x="16" y="50">ResourceEditTool</text></a><text class="node-caption" x="16" y="76">edit_meta · edit_constraints</text><text class="node-caption" x="16" y="96">edit_outline · edit_spec</text><text class="node-caption" x="16" y="116">edit_html</text></g><g id="tool-external" class="node plain" transform="translate(636 530)"><rect width="274" height="182" rx="10"/><text class="node-tag" x="16" y="25">外部能力</text><a class="class-link" href="#class-RunCommandTool" aria-label="查看 RunCommandTool 职责"><text class="node-name" x="16" y="50">RunCommandTool</text></a><a class="class-link" href="#class-RenderSlideTool" aria-label="查看 RenderSlideTool 职责"><text class="node-name" x="16" y="73">RenderSlideTool</text></a><a class="class-link" href="#class-ReviewPptTool" aria-label="查看 ReviewPptTool 职责"><text class="node-name" x="16" y="96">ReviewPptTool</text></a><text class="node-caption" x="16" y="122">run_command · render_slide</text><text class="node-caption" x="16" y="142">review_ppt</text></g><g id="tool-control" class="node plain" transform="translate(942 530)"><rect width="274" height="182" rx="10"/><text class="node-tag" x="16" y="25">交互 / 控制</text><a class="class-link" href="#class-AskUserTool" aria-label="查看 AskUserTool 职责"><text class="node-name" x="16" y="50">AskUserTool</text></a><a class="class-link" href="#class-CreatePlanTool" aria-label="查看 CreatePlanTool 职责"><text class="node-name" x="16" y="73">CreatePlanTool</text></a><a class="class-link" href="#class-UpdatePlanTool" aria-label="查看 UpdatePlanTool 职责"><text class="node-name" x="16" y="96">UpdatePlanTool</text></a><a class="class-link" href="#class-RequestPrivilegeTool" aria-label="查看 RequestPrivilegeTool 职责"><text class="node-name" x="16" y="119">RequestPrivilegeTool</text></a><text class="node-caption" x="16" y="145">提问、计划、范围授权</text></g><g id="tool-read-domain" class="node plain" transform="translate(24 772)"><rect width="274" height="120" rx="10"/><text class="node-tag" x="16" y="25">相邻领域</text><a class="class-link" href="#class-ProjectContentService" aria-label="查看 ProjectContentService 职责"><text class="node-name" x="16" y="50">ProjectContentService</text></a><a class="class-link" href="#class-AssetService" aria-label="查看 AssetService 职责"><text class="node-name" x="16" y="73">AssetService</text></a><text class="node-caption" x="16" y="99">读取内容与版本，更新活动引用</text></g><g id="tool-candidate" class="node plain" transform="translate(330 772)"><rect width="274" height="120" rx="10"/><text class="node-tag" x="16" y="25">修改候选</text><a class="class-link" href="#class-ProjectContentService" aria-label="查看 ProjectContentService 职责"><text class="node-name" x="16" y="50">ProjectContentService</text></a><text class="node-caption" x="16" y="76">准备完整候选并校验业务规则</text><text class="node-caption" x="16" y="96">未获批准前不覆盖项目文件</text></g><g id="tool-workers" class="node plain" transform="translate(636 772)"><rect width="274" height="158" rx="10"/><text class="node-tag" x="16" y="25">gateway</text><a class="class-link" href="#class-CommandGateway" aria-label="查看 CommandGateway 职责"><text class="node-name" x="16" y="50">CommandGateway</text></a><a class="class-link" href="#class-RenderGateway" aria-label="查看 RenderGateway 职责"><text class="node-name" x="16" y="73">RenderGateway</text></a><a class="class-link" href="#class-LlmGateway" aria-label="查看 LlmGateway 职责"><text class="node-name" x="16" y="96">LlmGateway</text></a><a class="class-link" href="#class-JevGateway" aria-label="查看 JevGateway 职责"><text class="node-name" x="16" y="119">JevGateway</text></a><text class="node-caption" x="16" y="145">外部任务返回结果或候选</text></g><g id="tool-controls" class="node plain" transform="translate(942 772)"><rect width="274" height="120" rx="10"/><text class="node-tag" x="16" y="25">interaction · session</text><a class="class-link" href="#class-InteractionService" aria-label="查看 InteractionService 职责"><text class="node-name" x="16" y="50">InteractionService</text></a><a class="class-link" href="#class-SessionService" aria-label="查看 SessionService 职责"><text class="node-name" x="16" y="73">SessionService</text></a><text class="node-caption" x="16" y="99">交互生效或更新计划状态</text></g><g id="tool-approval" class="decision"><path d="M467 962.0 L565.0 1000 L467 1038.0 L369.0 1000 Z"/><text x="467" y="1005" text-anchor="middle">需要审批？</text></g><g id="tool-wait" class="node waiting" transform="translate(636 966)"><rect width="274" height="120" rx="10"/><text class="node-tag" x="16" y="25">interaction</text><a class="class-link" href="#class-InteractionService" aria-label="查看 InteractionService 职责"><text class="node-name" x="16" y="50">InteractionService</text></a><text class="node-caption" x="16" y="76">展示候选，等待本次批准</text><text class="node-caption" x="16" y="96">拒绝 / 取消则不应用候选</text></g><g id="tool-reply" class="node plain" transform="translate(942 966)"><rect width="274" height="100" rx="10"/><text class="node-tag" x="16" y="25">interfaces/controller/interaction</text><a class="class-link" href="#class-InteractionController" aria-label="查看 InteractionController 职责"><text class="node-name" x="16" y="50">InteractionController</text></a><text class="node-caption" x="16" y="76">读取表单并提交带版本的答复</text></g><g id="tool-recheck" class="node plain" transform="translate(330 1140)"><rect width="274" height="120" rx="10"/><text class="node-tag" x="16" y="25">真正应用前</text><a class="class-link" href="#class-ToolGuard" aria-label="查看 ToolGuard 职责"><text class="node-name" x="16" y="50">ToolGuard</text></a><text class="node-caption" x="16" y="76">复查取消、当前授权与文件基准</text><text class="node-caption" x="16" y="96">批准只对应已展示的候选</text></g><g id="tool-commit" class="node plain" transform="translate(330 1304)"><rect width="274" height="120" rx="10"/><text class="node-tag" x="16" y="25">project/repository</text><a class="class-link" href="#class-ProjectContentRepository" aria-label="查看 ProjectContentRepository 职责"><text class="node-name" x="16" y="50">ProjectContentRepository</text></a><text class="node-caption" x="16" y="76">协调文件提交、凭据与归属差异</text><text class="node-caption" x="16" y="96">实际提交使相关检查点失效</text></g><g id="tool-result" class="node plain" transform="translate(465 1474)"><rect width="310" height="100" rx="10"/><text class="node-tag" x="16" y="25">tool</text><a class="class-link" href="#class-ToolExecutor" aria-label="查看 ToolExecutor 职责"><text class="node-name" x="16" y="50">ToolExecutor</text></a><text class="node-caption" x="16" y="76">汇总真实结果；失败也形成工具结果</text></g><g id="tool-result-write" class="node plain" transform="translate(900 1474)"><rect width="316" height="120" rx="10"/><text class="node-tag" x="16" y="25">repository</text><a class="class-link" href="#class-RunRepository" aria-label="查看 RunRepository 职责"><text class="node-name" x="16" y="50">RunRepository</text></a><text class="node-caption" x="16" y="76">保存结果及本轮上下文成员</text><text class="node-caption" x="16" y="96">保留必要原生数据与调用对应关系</text></g><g id="tool-next" class="node plain" transform="translate(465 1634)"><rect width="310" height="86" rx="10"/><a class="class-link" href="#class-HarnessLoop" aria-label="查看 HarnessLoop 职责"><text class="node-name" x="16" y="25">HarnessLoop</text></a><text class="node-caption" x="16" y="51">带工具结果进入下一轮</text></g><text class="edge-label dependency" x="407" y="76" text-anchor="middle">先保存</text><text class="edge-label normal" x="837" y="220" text-anchor="middle">不需执行</text><text class="edge-label normal" x="655" y="320" text-anchor="middle">通过</text><text class="edge-label wait" x="606" y="738" text-anchor="end">命令产生文件候选</text><text class="edge-label wait" x="599" y="984" text-anchor="middle">是</text><text class="edge-label normal" x="493" y="1101" text-anchor="middle">否</text><text class="edge-label loop" x="657" y="1103" text-anchor="middle">批准后继续</text><text class="edge-label wait" x="984" y="1288" text-anchor="middle">拒绝 / 已关闭</text><text class="edge-label normal" x="535" y="1289" text-anchor="middle">仍然有效</text><text class="edge-label normal" x="89" y="1509" text-anchor="middle">读取结果</text><text class="edge-label normal" x="1093" y="1423" text-anchor="middle">非写入结果 / 控制结果</text><text class="edge-label loop" x="1087" y="1447" text-anchor="middle">提前返回也记录工具结果</text><text class="edge-label normal" x="837" y="1511" text-anchor="middle">执行结果</text><text class="edge-label loop" x="841" y="1656" text-anchor="middle">结果可读后再通知</text></svg></div>
-<ul class="flow-notes"><li>16 个模型工具名映射到 11 个具体工具类；五个编辑工具共用 ResourceEditTool，技能 / 组件加载共用 AssetLoadTool。</li><li>图中的候选提交路径适用于所有项目文件写入，包括 run_command。基准冲突、校验失败或审批拒绝均不覆盖现有文件；资源编辑不采用 JSON Patch。</li><li>通过工具结果反馈可修复错误；持久化失败或执行结果无法确认时停止 Run。已成功结果不因后续取消改写，调用去重不等于承诺外部命令恰好执行一次。</li></ul></div></details>
-<details class="panel" id="support-flow" open><summary aria-expanded="true" aria-controls="support-flow-body"><h2>命令、历史与运行边界</h2></summary><div id="support-flow-body">
-<div class="diagram-scroll" data-scroll-id="support-flow" tabindex="0" role="region" aria-label="命令、历史与运行边界图"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 1490" width="1240" height="1490" role="group" aria-labelledby="support-title support-description"><title id="support-title">旁路命令、会话、历史与通知</title><desc id="support-description">展示自动触发和手动命令共用执行入口，历史与检查点边界，SSE 的提交后通知，以及启动中断清理。</desc><defs><marker id="support-arrow-normal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="arrow-normal" d="M1 1 L9 5 L1 9 Z"/></marker><marker id="support-arrow-loop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="arrow-loop" d="M1 1 L9 5 L1 9 Z"/></marker><marker id="support-arrow-wait" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="arrow-wait" d="M1 1 L9 5 L1 9 Z"/></marker><marker id="support-arrow-stop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="arrow-stop" d="M1 1 L9 5 L1 9 Z"/></marker><marker id="support-arrow-dependency" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="arrow-dependency" d="M1 1 L9 5 L1 9 Z"/></marker></defs><polyline class="edge normal" points="324,108 392,108 392,165 460,165" marker-end="url(#support-arrow-normal)"/><polyline class="edge normal" points="324,250 392,250 392,213 460,213" marker-end="url(#support-arrow-normal)"/><polyline class="edge normal" points="770,183 900,183" marker-end="url(#support-arrow-normal)"/><polyline class="edge normal" points="1058,242 1058,324 189,324 189,366" marker-end="url(#support-arrow-normal)"/><polyline class="edge normal" points="615,324 615,366" marker-end="url(#support-arrow-normal)"/><polyline class="edge normal" points="615,324 1058,324 1058,366" marker-end="url(#support-arrow-normal)"/><polyline class="edge normal" points="189,466 189,490 615,490 615,510" marker-end="url(#support-arrow-normal)"/><polyline class="edge normal" points="615,466 615,510" marker-end="url(#support-arrow-normal)"/><polyline class="edge normal" points="1058,466 1058,490 615,490" marker-end="url(#support-arrow-normal)"/><polyline class="edge normal" points="770,560 900,560" marker-end="url(#support-arrow-normal)"/><path class="section-rule" d="M24 644 H1216"/><polyline class="edge normal" points="324,750 460,750" marker-end="url(#support-arrow-normal)"/><polyline class="edge normal" points="770,750 900,750" marker-end="url(#support-arrow-normal)"/><polyline class="edge normal" points="324,884 460,884" marker-end="url(#support-arrow-normal)"/><polyline class="edge normal" points="770,884 900,884" marker-end="url(#support-arrow-normal)"/><polyline class="edge normal" points="324,1018 460,1018" marker-end="url(#support-arrow-normal)"/><polyline class="edge normal" points="770,1018 900,1018" marker-end="url(#support-arrow-normal)"/><path class="section-rule" d="M24 1110 H1216"/><polyline class="edge normal" points="324,1222 460,1222" marker-end="url(#support-arrow-normal)"/><polyline class="edge normal" points="900,1222 770,1222" marker-end="url(#support-arrow-normal)"/><polyline class="edge normal" points="324,1401 460,1401" marker-end="url(#support-arrow-normal)"/><polyline class="edge normal" points="770,1401 900,1401" marker-end="url(#support-arrow-normal)"/><text class="lane-label" x="24" y="34" text-anchor="start">旁路命令</text><g id="support-manual" class="node plain" transform="translate(24 62)"><rect width="300" height="92" rx="10"/><text class="node-tag" x="16" y="25">interfaces/controller/execution</text><a class="class-link" href="#class-ExecutionController" aria-label="查看 ExecutionController 职责"><text class="node-name" x="16" y="50">ExecutionController</text></a><text class="node-caption" x="16" y="76">发起、修订与取消命令</text></g><g id="support-auto" class="node plain" transform="translate(24 194)"><rect width="300" height="112" rx="10"/><text class="node-tag" x="16" y="25">command</text><a class="class-link" href="#class-CommandTrigger" aria-label="查看 CommandTrigger 职责"><text class="node-name" x="16" y="50">CommandTrigger</text></a><text class="node-caption" x="16" y="76">自动命名 / 自动建议</text><text class="node-caption" x="16" y="96">依据行为设置与会话当前状态</text></g><g id="support-command" class="node primary" transform="translate(460 124)"><rect width="310" height="118" rx="10"/><text class="node-tag" x="16" y="25">command</text><a class="class-link" href="#class-CommandService" aria-label="查看 CommandService 职责"><text class="node-name" x="16" y="50">CommandService</text></a><text class="node-caption" x="16" y="76">幂等受理、分配独立执行 ID</text><text class="node-caption" x="16" y="96">处理占用、修订、取消与分支确认</text></g><g id="support-accept" class="node plain" transform="translate(900 124)"><rect width="316" height="118" rx="10"/><text class="node-tag" x="16" y="25">repository</text><a class="class-link" href="#class-CommandRepository" aria-label="查看 CommandRepository 职责"><text class="node-name" x="16" y="50">CommandRepository</text></a><text class="node-caption" x="16" y="76">受理凭据与执行记录同事务</text><text class="node-caption" x="16" y="96">修订沿用操作身份，保留旧产物</text></g><g id="support-compact" class="node plain" transform="translate(24 366)"><rect width="330" height="100" rx="10"/><text class="node-tag" x="16" y="25">context</text><a class="class-link" href="#class-ContextCompactor" aria-label="查看 ContextCompactor 职责"><text class="node-name" x="16" y="50">ContextCompactor</text></a><text class="node-caption" x="16" y="76">compact：生成摘要与保留上下文</text></g><g id="support-models" class="node plain" transform="translate(460 366)"><rect width="310" height="100" rx="10"/><a class="class-link" href="#class-PromptAssembler" aria-label="查看 PromptAssembler 职责"><text class="node-name" x="16" y="25">PromptAssembler</text></a><a class="class-link" href="#class-LlmGateway" aria-label="查看 LlmGateway 职责"><text class="node-name" x="16" y="48">LlmGateway</text></a><text class="node-caption" x="16" y="74">rename / suggest / polish / handoff</text></g><g id="support-git" class="node plain" transform="translate(900 366)"><rect width="316" height="100" rx="10"/><text class="node-tag" x="16" y="25">gateway</text><a class="class-link" href="#class-GitGateway" aria-label="查看 GitGateway 职责"><text class="node-name" x="16" y="50">GitGateway</text></a><text class="node-caption" x="16" y="76">commit：暂存、分析、确认提交</text></g><g id="support-finish" class="node plain" transform="translate(460 510)"><rect width="310" height="100" rx="10"/><text class="node-tag" x="16" y="25">repository</text><a class="class-link" href="#class-CommandRepository" aria-label="查看 CommandRepository 职责"><text class="node-name" x="16" y="50">CommandRepository</text></a><text class="node-caption" x="16" y="76">产物、相关会话变更与终态同事务</text></g><g id="support-notify" class="node plain" transform="translate(900 510)"><rect width="316" height="100" rx="10"/><text class="node-tag" x="16" y="25">gateway</text><a class="class-link" href="#class-SessionEventPublisher" aria-label="查看 SessionEventPublisher 职责"><text class="node-name" x="16" y="50">SessionEventPublisher</text></a><text class="node-caption" x="16" y="76">产物可读后通知 commands 等区域</text></g><text class="edge-label normal" x="837" y="170" text-anchor="middle">受理</text><text class="edge-label normal" x="615" y="310" text-anchor="middle">受理提交后执行</text><text class="edge-label normal" x="837" y="547" text-anchor="middle">提交成功</text><text class="lane-label" x="24" y="678" text-anchor="start">会话、历史与检查点</text><g id="support-session-api" class="node plain" transform="translate(24 706)"><rect width="300" height="88" rx="10"/><a class="class-link" href="#class-SessionController" aria-label="查看 SessionController 职责"><text class="node-name" x="16" y="25">SessionController</text></a><text class="node-caption" x="16" y="51">管理 / 状态查询</text></g><g id="support-session" class="node plain" transform="translate(460 706)"><rect width="310" height="88" rx="10"/><a class="class-link" href="#class-SessionService" aria-label="查看 SessionService 职责"><text class="node-name" x="16" y="25">SessionService</text></a><text class="node-caption" x="16" y="51">会话业务状态与计划</text></g><g id="support-session-repo" class="node plain" transform="translate(900 706)"><rect width="316" height="88" rx="10"/><a class="class-link" href="#class-SessionRepository" aria-label="查看 SessionRepository 职责"><text class="node-name" x="16" y="25">SessionRepository</text></a><text class="node-caption" x="16" y="51">一致的会话数据与版本</text></g><g id="support-history-api" class="node plain" transform="translate(24 840)"><rect width="300" height="88" rx="10"/><a class="class-link" href="#class-HistoryController" aria-label="查看 HistoryController 职责"><text class="node-name" x="16" y="25">HistoryController</text></a><text class="node-caption" x="16" y="51">历史 / Run / 命令 / 工具详情</text></g><g id="support-history" class="node plain" transform="translate(460 840)"><rect width="310" height="88" rx="10"/><a class="class-link" href="#class-HistoryService" aria-label="查看 HistoryService 职责"><text class="node-name" x="16" y="25">HistoryService</text></a><text class="node-caption" x="16" y="51">公开投影与已保存的差异</text></g><g id="support-history-repo" class="node plain" transform="translate(900 832)"><rect width="316" height="104" rx="10"/><a class="class-link" href="#class-RunRepository" aria-label="查看 RunRepository 职责"><text class="node-name" x="16" y="25">RunRepository</text></a><a class="class-link" href="#class-CommandRepository" aria-label="查看 CommandRepository 职责"><text class="node-name" x="16" y="48">CommandRepository</text></a><text class="node-caption" x="16" y="74">按 API 聚合历史与详情</text></g><g id="support-checkpoint-api" class="node plain" transform="translate(24 974)"><rect width="300" height="88" rx="10"/><a class="class-link" href="#class-CheckpointController" aria-label="查看 CheckpointController 职责"><text class="node-name" x="16" y="25">CheckpointController</text></a><text class="node-caption" x="16" y="51">检查点 / 预览 / 回退 / 返回</text></g><g id="support-checkpoint" class="node plain" transform="translate(460 974)"><rect width="310" height="88" rx="10"/><a class="class-link" href="#class-CheckpointService" aria-label="查看 CheckpointService 职责"><text class="node-name" x="16" y="25">CheckpointService</text></a><text class="node-caption" x="16" y="51">项目排他、版本校验与历史恢复</text></g><g id="support-checkpoint-repo" class="node plain" transform="translate(900 966)"><rect width="316" height="110" rx="10"/><a class="class-link" href="#class-CheckpointRepository" aria-label="查看 CheckpointRepository 职责"><text class="node-name" x="16" y="25">CheckpointRepository</text></a><a class="class-link" href="#class-ProjectContentRepository" aria-label="查看 ProjectContentRepository 职责"><text class="node-name" x="16" y="48">ProjectContentRepository</text></a><text class="node-caption" x="16" y="74">仅恢复目标会话及其可恢复文件</text></g><text class="lane-label" x="24" y="1144" text-anchor="start">通知与启动清理</text><g id="support-subscribe" class="node plain" transform="translate(24 1172)"><rect width="300" height="100" rx="10"/><text class="node-tag" x="16" y="25">interfaces/controller/history</text><a class="class-link" href="#class-HistoryController" aria-label="查看 HistoryController 职责"><text class="node-name" x="16" y="50">HistoryController</text></a><text class="node-caption" x="16" y="76">建立会话订阅；连接不拥有 Run</text></g><g id="support-sse" class="node plain" transform="translate(460 1172)"><rect width="310" height="100" rx="10"/><text class="node-tag" x="16" y="25">interfaces/sse</text><a class="class-link" href="#class-SessionSsePublisher" aria-label="查看 SessionSsePublisher 职责"><text class="node-name" x="16" y="50">SessionSsePublisher</text></a><text class="node-caption" x="16" y="76">changed / reset / 进度 / interaction</text></g><g id="support-event" class="node plain" transform="translate(900 1172)"><rect width="316" height="100" rx="10"/><text class="node-tag" x="16" y="25">gateway</text><a class="class-link" href="#class-SessionEventPublisher" aria-label="查看 SessionEventPublisher 职责"><text class="node-name" x="16" y="50">SessionEventPublisher</text></a><text class="node-caption" x="16" y="76">提交后的变化与运行中瞬时通知</text></g><text class="edge-label normal" x="392" y="1209" text-anchor="middle">订阅</text><text class="edge-label normal" x="835" y="1209" text-anchor="middle">发布</text><g id="support-recovery" class="node stopping" transform="translate(24 1342)"><rect width="300" height="118" rx="10"/><text class="node-tag" x="16" y="25">run</text><a class="class-link" href="#class-RunRecoveryService" aria-label="查看 RunRecoveryService 职责"><text class="node-name" x="16" y="50">RunRecoveryService</text></a><text class="node-caption" x="16" y="76">启动时扫描未结束执行</text><text class="node-caption" x="16" y="96">不恢复原 Run 或自动重放工具</text></g><g id="support-reconcile" class="node plain" transform="translate(460 1342)"><rect width="310" height="118" rx="10"/><text class="node-tag" x="16" y="25">project/service</text><a class="class-link" href="#class-ProjectContentService" aria-label="查看 ProjectContentService 职责"><text class="node-name" x="16" y="50">ProjectContentService</text></a><text class="node-caption" x="16" y="76">核对遗留文件事务与提交凭据</text><text class="node-caption" x="16" y="96">完成提交或回滚，清理临时记录</text></g><g id="support-interrupt" class="node plain" transform="translate(900 1342)"><rect width="316" height="118" rx="10"/><text class="node-tag" x="16" y="25">repository</text><a class="class-link" href="#class-RunRepository" aria-label="查看 RunRepository 职责"><text class="node-name" x="16" y="50">RunRepository</text></a><a class="class-link" href="#class-CommandRepository" aria-label="查看 CommandRepository 职责"><text class="node-name" x="16" y="73">CommandRepository</text></a><text class="node-caption" x="16" y="99">标记 interrupted，保留确认成功项</text></g></svg></div>
-<ul class="flow-notes"><li>自动压缩由 HarnessLoop 协调，经 CommandService 留下命令记录后复用 ContextCompactor。手动 compact 与本会话新 Run 互斥；Git 提交要求项目内无活动 Run。</li><li>检查点是 Run 开始前的历史基准，不是断点续跑快照。文件改变会使同项目其他会话的检查点失效；回退 / 返回不重放原任务。</li><li>SSE 提供通知，查询接口提供事实。业务变化可读取后才发送 changed；断线不停止后台执行，重连或 reset 后重新读取。</li></ul></div></details>
-<details class="panel" id="class-catalog" open><summary aria-expanded="true" aria-controls="class-catalog-body"><h2>类职责</h2></summary><div id="class-catalog-body"><p class="catalog-note">共 51 个服务类、工具实现与直接依赖的边界类型。输入、输出只描述业务含义；数据对象与基础设施内部实现不在本次展开。</p><div class="table-scroll" data-scroll-id="class-catalog" tabindex="0" role="region" aria-label="类职责表"><table class="class-table"><colgroup><col style="width:22%"><col style="width:19%"><col style="width:19%"><col style="width:40%"></colgroup><thead><tr><th scope="col">类名</th><th scope="col">输入</th><th scope="col">输出</th><th scope="col">作用</th></tr></thead>
-<tbody><tr class="group-heading"><th colspan="4" scope="rowgroup">agent/service/run</th></tr>
-<tr id="class-RunService"><th scope="row"><code>RunService</code></th><td>新开、追加或取消请求；主循环的结束结果</td><td>受理的 Run；状态变化与最终持久结果</td><td>组织受理、模型配置固定、后台执行和统一收尾。协调会话占用与初始检查点；回复、净差异、终态及必要的输入交接协调提交。</td></tr>
-<tr id="class-HarnessLoop"><th scope="row"><code>HarnessLoop</code></th><td>本次 Run 的配置、输入、上下文及取消信号</td><td>待收尾的执行结果</td><td>唯一主循环：处理输入、选择工具、组装上下文、调用模型、执行工具、等待交互、检查完成条件。工具调用与下一轮请求始终由它掌握。</td></tr>
-<tr id="class-RunGuard"><th scope="row"><code>RunGuard</code></th><td>当前 Run 的取消状态、执行用量与最近进展</td><td>继续执行或停止原因</td><td>在循环和外部调用边界检查取消、轮次与活动时间预算、连续失败、重复读取及重复完成驳回；等待人工的时间不计入活动执行时间。</td></tr>
-<tr id="class-CompletionChecker"><th scope="row"><code>CompletionChecker</code></th><td>候选回复、当前模式与计划、实际修改及最新校验证据</td><td>允许结束，或需要继续处理的事项</td><td>结束前重新检查已受理输入、计划状态、授权和产物证据。Plan 模式的普通文本不能代替计划审批；有问题则反馈给同一 Loop。</td></tr>
-<tr id="class-RunRecoveryService"><th scope="row"><code>RunRecoveryService</code></th><td>启动时遗留的活动 Run、命令与文件事务</td><td>完成清理的文件状态；中断状态</td><td>先协调遗留文件提交或回滚，再将无法继续的执行标记为 interrupted。保留已确认成功的工具与 Git 结果，不恢复旧 Loop，也不重新执行未知结果的工具。</td></tr>
+</style>
+</head>
+<body>
+<main>
+<header class="page-header">
+<div class="title-row">
+<h1>工作流设计</h1>
+<span class="status">设计讨论</span>
+</div>
+<nav class="page-nav" aria-label="工作流章节">
+<a href="#main-loop">主循环</a>
+<a href="#tool-flow">工具执行</a>
+<a href="#support-flow">命令与历史</a>
+<a href="#handler-assembler-flow">接口与实现</a>
+<a href="#class-catalog">类职责</a>
+</nav>
+</header>
+<details class="panel" id="main-loop" open>
+<summary aria-expanded="true" aria-controls="main-loop-body">
+<h2>主循环</h2>
+</summary>
+<div id="main-loop-body">
+<div class="legend" aria-label="连线含义">
+<span>
+<i>
+</i>执行路径</span>
+<span>
+<i class="loop-key">
+</i>回到循环</span>
+<span>
+<i class="wait-key">
+</i>条件 / 等待</span>
+<span>
+<i class="dependency-key">
+</i>能力调用</span>
+</div>
+<div class="diagram-scroll" data-scroll-id="main-loop" tabindex="0" role="region" aria-label="主循环图">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 1900" width="1240" height="1900" role="group" aria-labelledby="loop-title loop-description">
+<title id="loop-title">Harness 主循环</title>
+<desc id="loop-description">受理与初始快照提交后进入 HarnessLoop，循环检查输入、工具、上下文和模型响应；工具、人工答复及未完成检查返回同一循环，终态统一收尾。</desc>
+<defs>
+<marker id="loop-arrow-normal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path class="arrow-normal" d="M1 1 L9 5 L1 9 Z"/>
+</marker>
+<marker id="loop-arrow-loop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path class="arrow-loop" d="M1 1 L9 5 L1 9 Z"/>
+</marker>
+<marker id="loop-arrow-wait" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path class="arrow-wait" d="M1 1 L9 5 L1 9 Z"/>
+</marker>
+<marker id="loop-arrow-stop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path class="arrow-stop" d="M1 1 L9 5 L1 9 Z"/>
+</marker>
+<marker id="loop-arrow-dependency" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path class="arrow-dependency" d="M1 1 L9 5 L1 9 Z"/>
+</marker>
+</defs>
+<polyline class="edge normal" points="620,130 620,174" marker-end="url(#loop-arrow-normal)"/>
+<polyline class="edge dependency" points="354,224 465,224" marker-end="url(#loop-arrow-dependency)"/>
+<polyline class="edge normal" points="620,272 620,316" marker-end="url(#loop-arrow-normal)"/>
+<polyline class="edge dependency" points="354,363 465,363" marker-end="url(#loop-arrow-dependency)"/>
+<polyline class="edge normal" points="620,414 620,456" marker-end="url(#loop-arrow-normal)"/>
+<polyline class="edge normal" points="620,550 620,592" marker-end="url(#loop-arrow-normal)"/>
+<polyline class="edge normal" points="620,686 620,736" marker-end="url(#loop-arrow-normal)"/>
+<polyline class="edge loop" points="354,648 393,648 393,784 465,784" marker-end="url(#loop-arrow-loop)"/>
+<polyline class="edge dependency" points="465,808 354,808" marker-end="url(#loop-arrow-dependency)"/>
+<polyline class="edge dependency" points="465,936 382,936 382,835 354,835" marker-end="url(#loop-arrow-dependency)"/>
+<polyline class="edge normal" points="620,834 620,882" marker-end="url(#loop-arrow-normal)"/>
+<polyline class="edge dependency" points="775,814 805,814 805,890 900,890" marker-end="url(#loop-arrow-dependency)"/>
+<polyline class="edge normal" points="620,976 620,1020" marker-end="url(#loop-arrow-normal)"/>
+<polyline class="edge wait" points="775,1061 900,1061" marker-end="url(#loop-arrow-wait)"/>
+<polyline class="edge loop" points="1058,1160 1058,1174 820,1174 820,1120 775,1120" marker-end="url(#loop-arrow-loop)"/>
+<polyline class="edge normal" points="620,1140 620,1186" marker-end="url(#loop-arrow-normal)"/>
+<polyline class="edge normal" points="620,1306 620,1344" marker-end="url(#loop-arrow-normal)"/>
+<polyline class="edge normal" points="712,1382 900,1382" marker-end="url(#loop-arrow-normal)"/>
+<polyline class="edge normal" points="620,1420 620,1470" marker-end="url(#loop-arrow-normal)"/>
+<polyline class="edge loop" points="900,1355 852,1355 852,639 775,639" marker-end="url(#loop-arrow-loop)"/>
+<polyline class="edge wait" points="1058,1430 1058,1480" marker-end="url(#loop-arrow-wait)"/>
+<polyline class="edge loop" points="900,1530 878,1530 878,1410 900,1410" marker-end="url(#loop-arrow-loop)"/>
+<polyline class="edge loop" points="465,1528 418,1528 418,663 465,663" marker-end="url(#loop-arrow-loop)"/>
+<polyline class="edge normal" points="620,1590 620,1634" marker-end="url(#loop-arrow-normal)"/>
+<polyline class="edge normal" points="620,1754 620,1798" marker-end="url(#loop-arrow-normal)"/>
+<polyline class="edge stop" points="775,616 900,616" marker-end="url(#loop-arrow-stop)"/>
+<polyline class="edge stop" points="775,772 825,772 825,700 900,700" marker-end="url(#loop-arrow-stop)"/>
+<polyline class="edge stop" points="1216,660 1230,660 1230,1694 775,1694" marker-end="url(#loop-arrow-stop)"/>
+<g id="loop-entry" class="node plain" transform="translate(465 40)">
+<rect width="310" height="90" rx="10"/>
+<text class="node-tag" x="16" y="25">interfaces/controller/execution</text>
+<a class="class-link" href="#class-ExecutionController" aria-label="查看 ExecutionController 职责">
+<text class="node-name" x="16" y="50">ExecutionController</text>
+</a>
+<text class="node-caption" x="16" y="76">新开 / 追加 / 取消</text>
+</g>
+<g id="loop-accept" class="node plain" transform="translate(465 174)">
+<rect width="310" height="98" rx="10"/>
+<text class="node-tag" x="16" y="25">agent/service/run</text>
+<a class="class-link" href="#class-RunService" aria-label="查看 RunService 职责">
+<text class="node-name" x="16" y="50">RunService</text>
+</a>
+<text class="node-caption" x="16" y="76">幂等受理、占用检查、固定配置</text>
+</g>
+<g id="loop-settings" class="node plain" transform="translate(24 164)">
+<rect width="330" height="120" rx="10"/>
+<text class="node-tag" x="16" y="25">session · setting</text>
+<a class="class-link" href="#class-SessionService" aria-label="查看 SessionService 职责">
+<text class="node-name" x="16" y="50">SessionService</text>
+</a>
+<a class="class-link" href="#class-SettingService" aria-label="查看 SettingService 职责">
+<text class="node-name" x="16" y="73">SettingService</text>
+</a>
+<text class="node-caption" x="16" y="99">读取会话与本次模型 / 行为设置</text>
+</g>
+<g id="loop-checkpoint" class="node plain" transform="translate(24 316)">
+<rect width="330" height="94" rx="10"/>
+<text class="node-tag" x="16" y="25">history</text>
+<a class="class-link" href="#class-CheckpointService" aria-label="查看 CheckpointService 职责">
+<text class="node-name" x="16" y="50">CheckpointService</text>
+</a>
+<text class="node-caption" x="16" y="76">取得 Run 创建前的一致快照</text>
+</g>
+<g id="loop-accept-write" class="node plain" transform="translate(465 316)">
+<rect width="310" height="98" rx="10"/>
+<text class="node-tag" x="16" y="25">repository</text>
+<a class="class-link" href="#class-IRunRepository" aria-label="查看 IRunRepository 职责">
+<text class="node-name" x="16" y="50">IRunRepository</text>
+</a>
+<text class="node-caption" x="16" y="76">Run、输入、检查点与凭据同事务</text>
+</g>
+<g id="loop-owner" class="node primary" transform="translate(465 456)">
+<rect width="310" height="94" rx="10"/>
+<text class="node-tag" x="16" y="25">agent/service/run</text>
+<a class="class-link" href="#class-HarnessLoop" aria-label="查看 HarnessLoop 职责">
+<text class="node-name" x="16" y="50">HarnessLoop</text>
+</a>
+<text class="node-caption" x="16" y="76">创建本次运行状态，开始循环</text>
+</g>
+<g id="loop-guard" class="node plain" transform="translate(465 592)">
+<rect width="310" height="94" rx="10"/>
+<text class="node-tag" x="16" y="25">run</text>
+<a class="class-link" href="#class-RunGuard" aria-label="查看 RunGuard 职责">
+<text class="node-name" x="16" y="50">RunGuard</text>
+</a>
+<text class="node-caption" x="16" y="76">取消、预算、失败与空转检查</text>
+</g>
+<g id="loop-input" class="node plain" transform="translate(465 736)">
+<rect width="310" height="98" rx="10"/>
+<text class="node-tag" x="16" y="25">input</text>
+<a class="class-link" href="#class-InputService" aria-label="查看 InputService 职责">
+<text class="node-name" x="16" y="50">InputService</text>
+</a>
+<text class="node-caption" x="16" y="76">判定输入、消费队列、合并授权</text>
+</g>
+<g id="loop-append" class="node plain" transform="translate(24 578)">
+<rect width="330" height="140" rx="10"/>
+<text class="node-tag" x="16" y="25">追加输入</text>
+<a class="class-link" href="#class-ExecutionController" aria-label="查看 ExecutionController 职责">
+<text class="node-name" x="16" y="50">ExecutionController</text>
+</a>
+<a class="class-link" href="#class-InputService" aria-label="查看 InputService 职责">
+<text class="node-name" x="16" y="73">InputService</text>
+</a>
+<text class="node-caption" x="16" y="99">running / waiting 时追加并入队</text>
+<text class="node-caption" x="16" y="119">安全边界消费，保留消息身份</text>
+</g>
+<g id="loop-jev" class="node plain" transform="translate(24 760)">
+<rect width="330" height="100" rx="10"/>
+<text class="node-tag" x="16" y="25">gateway</text>
+<a class="class-link" href="#class-IJevGateway" aria-label="查看 IJevGateway 职责">
+<text class="node-name" x="16" y="50">IJevGateway</text>
+</a>
+<text class="node-caption" x="16" y="76">Intent 输入判定 · Prune 工具筛选</text>
+</g>
+<g id="loop-tools" class="node plain" transform="translate(465 882)">
+<rect width="310" height="94" rx="10"/>
+<text class="node-tag" x="16" y="25">tool</text>
+<a class="class-link" href="#class-ToolRegistry" aria-label="查看 ToolRegistry 职责">
+<text class="node-name" x="16" y="50">ToolRegistry</text>
+</a>
+<text class="node-caption" x="16" y="76">按模式、范围与判定选择工具</text>
+</g>
+<g id="loop-auto-rename" class="node plain" transform="translate(900 840)">
+<rect width="316" height="100" rx="10"/>
+<text class="node-tag" x="16" y="25">command · 自动命名</text>
+<a class="class-link" href="#class-CommandService" aria-label="查看 CommandService 职责">
+<text class="node-name" x="16" y="50">CommandService</text>
+</a>
+<text class="node-caption" x="16" y="76">tryAutoRename(...)：按需 JEV 判定</text>
+</g>
+<g id="loop-context" class="node plain" transform="translate(465 1020)">
+<rect width="310" height="120" rx="10"/>
+<text class="node-tag" x="16" y="25">context</text>
+<a class="class-link" href="#class-ContextService" aria-label="查看 ContextService 职责">
+<text class="node-name" x="16" y="50">ContextService</text>
+</a>
+<a class="class-link" href="#class-PromptAssembler" aria-label="查看 PromptAssembler 职责">
+<text class="node-name" x="16" y="73">PromptAssembler</text>
+</a>
+<text class="node-caption" x="16" y="99">组装本轮上下文，估算 Token</text>
+</g>
+<g id="loop-compact" class="node plain" transform="translate(900 1020)">
+<rect width="316" height="140" rx="10"/>
+<text class="node-tag" x="16" y="25">command → context</text>
+<a class="class-link" href="#class-CommandService" aria-label="查看 CommandService 职责">
+<text class="node-name" x="16" y="50">CommandService</text>
+</a>
+<a class="class-link" href="#class-CompactCommandHandler" aria-label="查看 CompactCommandHandler 职责">
+<text class="node-name" x="16" y="73">CompactCommandHandler</text>
+</a>
+<a class="class-link" href="#class-ContextCompactor" aria-label="查看 ContextCompactor 职责">
+<text class="node-name" x="16" y="96">ContextCompactor</text>
+</a>
+<text class="node-caption" x="16" y="122">保存压缩结果，再组装并重新估算</text>
+</g>
+<g id="loop-llm" class="node plain" transform="translate(465 1186)">
+<rect width="310" height="120" rx="10"/>
+<text class="node-tag" x="16" y="25">gateway → infrastructure/llm</text>
+<a class="class-link" href="#class-ILlmGateway" aria-label="查看 ILlmGateway 职责">
+<text class="node-name" x="16" y="50">ILlmGateway</text>
+</a>
+<a class="class-link" href="#class-LlmGateway" aria-label="查看 LlmGateway 职责">
+<text class="node-name" x="16" y="73">LlmGateway</text>
+</a>
+<text class="node-caption" x="16" y="99">单次调用：文本、推理或工具请求</text>
+</g>
+<g id="loop-response" class="decision">
+<path d="M620 1344.0 L712.0 1382 L620 1420.0 L528.0 1382 Z"/>
+<text x="620" y="1387" text-anchor="middle">有工具调用？</text>
+</g>
+<g id="loop-execute" class="node plain" transform="translate(900 1332)">
+<rect width="316" height="98" rx="10"/>
+<text class="node-tag" x="16" y="25">tool</text>
+<a class="class-link" href="#class-ToolExecutor" aria-label="查看 ToolExecutor 职责">
+<text class="node-name" x="16" y="50">ToolExecutor</text>
+</a>
+<text class="node-caption" x="16" y="76">执行工具；详细分支见下图</text>
+</g>
+<g id="loop-wait" class="node waiting" transform="translate(900 1480)">
+<rect width="316" height="100" rx="10"/>
+<text class="node-tag" x="16" y="25">interaction</text>
+<a class="class-link" href="#class-InteractionService" aria-label="查看 InteractionService 职责">
+<text class="node-name" x="16" y="50">InteractionService</text>
+</a>
+<text class="node-caption" x="16" y="76">等待答复后继续原工具与原 Run</text>
+</g>
+<g id="loop-complete" class="node plain" transform="translate(465 1470)">
+<rect width="310" height="120" rx="10"/>
+<text class="node-tag" x="16" y="25">run</text>
+<a class="class-link" href="#class-CompletionChecker" aria-label="查看 CompletionChecker 职责">
+<text class="node-name" x="16" y="50">CompletionChecker</text>
+</a>
+<text class="node-caption" x="16" y="76">先封闭输入边界，再核对输入与证据</text>
+<text class="node-caption" x="16" y="96">需要继续则恢复受理并回到 Loop</text>
+</g>
+<g id="loop-finish" class="node plain" transform="translate(465 1634)">
+<rect width="310" height="120" rx="10"/>
+<text class="node-tag" x="16" y="25">run</text>
+<a class="class-link" href="#class-RunService" aria-label="查看 RunService 职责">
+<text class="node-name" x="16" y="50">RunService</text>
+</a>
+<text class="node-caption" x="16" y="76">统一关闭输入、处理剩余消息</text>
+<text class="node-caption" x="16" y="96">保存回复、净差异与 Run 终态</text>
+</g>
+<g id="loop-after" class="node plain" transform="translate(465 1798)">
+<rect width="310" height="86" rx="10"/>
+<a class="class-link" href="#class-EventPublisher" aria-label="查看 EventPublisher 职责">
+<text class="node-name" x="16" y="25">EventPublisher</text>
+</a>
+<a class="class-link" href="#class-CommandService" aria-label="查看 CommandService 职责">
+<text class="node-name" x="16" y="48">CommandService</text>
+</a>
+<text class="node-caption" x="16" y="74">通知；完成后 tryAutoSuggest(...)</text>
+</g>
+<g id="loop-stop" class="node stopping" transform="translate(900 592)">
+<rect width="316" height="140" rx="10"/>
+<text class="node-tag" x="16" y="25">终止分支</text>
+<a class="class-link" href="#class-RunService" aria-label="查看 RunService 职责">
+<text class="node-name" x="16" y="50">RunService</text>
+</a>
+<a class="class-link" href="#class-RunRecoveryService" aria-label="查看 RunRecoveryService 职责">
+<text class="node-name" x="16" y="73">RunRecoveryService</text>
+</a>
+<text class="node-caption" x="16" y="99">取消 / 不可恢复错误 / 进程重启</text>
+<text class="node-caption" x="16" y="119">终止本次执行，进入统一收尾</text>
+</g>
+<text class="lane-label" x="24" y="52" text-anchor="start">受理与输入</text>
+<text class="lane-label" x="900" y="52" text-anchor="start">分支与回流</text>
+<text class="edge-label dependency" x="408" y="210" text-anchor="middle">读取</text>
+<text class="edge-label dependency" x="409" y="350" text-anchor="middle">起始基准</text>
+<text class="edge-label normal" x="690" y="440" text-anchor="middle">提交后调度</text>
+<text class="edge-label loop" x="402" y="712" text-anchor="middle">已受理输入</text>
+<text class="edge-label dependency" x="408" y="797" text-anchor="middle">判定</text>
+<text class="edge-label dependency" x="404" y="924" text-anchor="middle">筛选</text>
+<text class="edge-label normal" x="687" y="866" text-anchor="middle">可执行输入</text>
+<text class="edge-label dependency" x="842" y="876" text-anchor="middle">输入受理后</text>
+<text class="edge-label wait" x="837" y="1048" text-anchor="middle">达到自动压缩阈值</text>
+<text class="edge-label loop" x="896" y="1163" text-anchor="middle">压缩成功</text>
+<text class="edge-label normal" x="665" y="1170" text-anchor="middle">可发送</text>
+<text class="edge-label normal" x="804" y="1367" text-anchor="middle">是</text>
+<text class="edge-label normal" x="650" y="1453" text-anchor="middle">否</text>
+<text class="edge-label loop" x="837" y="990" text-anchor="end">结果进入下一轮</text>
+<text class="edge-label wait" x="1125" y="1460" text-anchor="middle">需人工答复</text>
+<text class="edge-label loop" x="865" y="1470" text-anchor="end">答复后继续</text>
+<text class="edge-label loop" x="403" y="1453" text-anchor="end">新输入 / 未满足条件</text>
+<text class="edge-label normal" x="681" y="1618" text-anchor="middle">允许结束</text>
+<text class="edge-label normal" x="680" y="1782" text-anchor="middle">提交成功</text>
+<text class="edge-label stop" x="838" y="602" text-anchor="middle">停止</text>
+<text class="edge-label stop" x="837" y="758" text-anchor="middle">首条闲聊 → rejected</text>
+<text class="edge-label stop" x="1120" y="1678" text-anchor="middle">统一收尾</text>
+</svg>
+</div>
+<!-- 主循环边界：
+     同会话仅一个非终态 Run；同项目不同会话允许并行。项目锁只覆盖必要的提交或排他操作，不覆盖整次模型调用与人工等待。
+     等待答复不创建新 Run；首条闲聊被拒绝时，已受理但未处理的后续输入按契约交接。取消或异常保留已确认的工具结果与已提交修改。
+     主循环拥有工具执行权。Spring AI 只返回一次模型响应；单次调用允许有限重试，模型切换重新组装请求。 -->
+</div>
+</details>
+<details class="panel" id="tool-flow" open>
+<summary aria-expanded="true" aria-controls="tool-flow-body">
+<h2>工具执行、审批与提交</h2>
+</summary>
+<div id="tool-flow-body">
+<div class="diagram-scroll" data-scroll-id="tool-flow" tabindex="0" role="region" aria-label="工具执行、审批与提交图">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 1730" width="1240" height="1730" role="group" aria-labelledby="tool-title tool-description">
+<title id="tool-title">工具分发与修改提交</title>
+<desc id="tool-description">ToolExecutor 保存调用并经过 ToolGuard 后分发到 AgentTool 实现。读取直接返回，修改先生成候选，必要时审批，应用前重新校验并协调文件和数据库提交。</desc>
+<defs>
+<marker id="tool-arrow-normal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path class="arrow-normal" d="M1 1 L9 5 L1 9 Z"/>
+</marker>
+<marker id="tool-arrow-loop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path class="arrow-loop" d="M1 1 L9 5 L1 9 Z"/>
+</marker>
+<marker id="tool-arrow-wait" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path class="arrow-wait" d="M1 1 L9 5 L1 9 Z"/>
+</marker>
+<marker id="tool-arrow-stop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path class="arrow-stop" d="M1 1 L9 5 L1 9 Z"/>
+</marker>
+<marker id="tool-arrow-dependency" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path class="arrow-dependency" d="M1 1 L9 5 L1 9 Z"/>
+</marker>
+</defs>
+<polyline class="edge dependency" points="465,89 354,89" marker-end="url(#tool-arrow-dependency)"/>
+<polyline class="edge normal" points="620,138 620,184" marker-end="url(#tool-arrow-normal)"/>
+<polyline class="edge normal" points="775,233 900,233" marker-end="url(#tool-arrow-normal)"/>
+<polyline class="edge normal" points="620,282 620,340" marker-end="url(#tool-arrow-normal)"/>
+<polyline class="edge normal" points="620,438 620,488 161,488 161,530" marker-end="url(#tool-arrow-normal)"/>
+<polyline class="edge normal" points="620,488 467,488 467,530" marker-end="url(#tool-arrow-normal)"/>
+<polyline class="edge normal" points="620,488 773,488 773,530" marker-end="url(#tool-arrow-normal)"/>
+<polyline class="edge normal" points="620,488 1079,488 1079,530" marker-end="url(#tool-arrow-normal)"/>
+<polyline class="edge normal" points="161,712 161,772" marker-end="url(#tool-arrow-normal)"/>
+<polyline class="edge normal" points="467,712 467,772" marker-end="url(#tool-arrow-normal)"/>
+<polyline class="edge normal" points="773,712 773,772" marker-end="url(#tool-arrow-normal)"/>
+<polyline class="edge normal" points="1079,712 1079,772" marker-end="url(#tool-arrow-normal)"/>
+<polyline class="edge wait" points="636,866 618,866 618,744 467,744 467,772" marker-end="url(#tool-arrow-wait)"/>
+<polyline class="edge normal" points="467,892 467,962" marker-end="url(#tool-arrow-normal)"/>
+<polyline class="edge wait" points="565,1000 636,1000" marker-end="url(#tool-arrow-wait)"/>
+<polyline class="edge normal" points="467,1038 467,1140" marker-end="url(#tool-arrow-normal)"/>
+<polyline class="edge wait" points="942,1016 910,1016" marker-end="url(#tool-arrow-wait)"/>
+<polyline class="edge loop" points="773,1086 773,1114 467,1114 467,1140" marker-end="url(#tool-arrow-loop)"/>
+<polyline class="edge wait" points="910,1044 928,1044 928,1454 738,1454 738,1474" marker-end="url(#tool-arrow-wait)"/>
+<polyline class="edge normal" points="467,1260 467,1304" marker-end="url(#tool-arrow-normal)"/>
+<polyline class="edge normal" points="467,1424 467,1444 620,1444 620,1474" marker-end="url(#tool-arrow-normal)"/>
+<polyline class="edge normal" points="24,832 12,832 12,1524 465,1524" marker-end="url(#tool-arrow-normal)"/>
+<polyline class="edge normal" points="1216,832 1230,832 1230,1434 748,1434 748,1474" marker-end="url(#tool-arrow-normal)"/>
+<polyline class="edge normal" points="910,900 922,900 922,944 1230,944" marker-end="url(#tool-arrow-normal)"/>
+<polyline class="edge loop" points="1216,243 1236,243 1236,1458 792,1458 792,1492 775,1492" marker-end="url(#tool-arrow-loop)"/>
+<polyline class="edge normal" points="775,1524 900,1524" marker-end="url(#tool-arrow-normal)"/>
+<polyline class="edge loop" points="1058,1594 1058,1618 620,1618 620,1634" marker-end="url(#tool-arrow-loop)"/>
+<g id="tool-entry" class="node plain" transform="translate(465 40)">
+<rect width="310" height="98" rx="10"/>
+<text class="node-tag" x="16" y="25">tool</text>
+<a class="class-link" href="#class-ToolExecutor" aria-label="查看 ToolExecutor 职责">
+<text class="node-name" x="16" y="50">ToolExecutor</text>
+</a>
+<text class="node-caption" x="16" y="76">记录调用，保留本轮调用顺序</text>
+</g>
+<g id="tool-calls" class="node plain" transform="translate(24 40)">
+<rect width="330" height="98" rx="10"/>
+<text class="node-tag" x="16" y="25">repository</text>
+<a class="class-link" href="#class-IRunRepository" aria-label="查看 IRunRepository 职责">
+<text class="node-name" x="16" y="50">IRunRepository</text>
+</a>
+<text class="node-caption" x="16" y="76">调用记录先可读，随后才执行工具</text>
+</g>
+<g id="tool-guard" class="node plain" transform="translate(465 184)">
+<rect width="310" height="98" rx="10"/>
+<text class="node-tag" x="16" y="25">tool</text>
+<a class="class-link" href="#class-ToolGuard" aria-label="查看 ToolGuard 职责">
+<text class="node-name" x="16" y="50">ToolGuard</text>
+</a>
+<text class="node-caption" x="16" y="76">参数、可见性、授权与调用去重</text>
+</g>
+<g id="tool-denied" class="node plain" transform="translate(900 184)">
+<rect width="316" height="118" rx="10"/>
+<text class="node-tag" x="16" y="25">提前返回</text>
+<a class="class-link" href="#class-ToolExecutor" aria-label="查看 ToolExecutor 职责">
+<text class="node-name" x="16" y="50">ToolExecutor</text>
+</a>
+<text class="node-caption" x="16" y="76">拒绝或复用已确认结果</text>
+<text class="node-caption" x="16" y="96">未知执行结果不据缺失记录重跑</text>
+</g>
+<g id="tool-dispatch" class="node primary" transform="translate(465 340)">
+<rect width="310" height="98" rx="10"/>
+<text class="node-tag" x="16" y="25">tool · 接口</text>
+<a class="class-link" href="#class-AgentTool" aria-label="查看 AgentTool 职责">
+<text class="node-name" x="16" y="50">AgentTool</text>
+</a>
+<text class="node-caption" x="16" y="76">按工具名分派实际实现</text>
+</g>
+<g id="tool-read" class="node plain" transform="translate(24 530)">
+<rect width="274" height="182" rx="10"/>
+<text class="node-tag" x="16" y="25">读取 / 加载</text>
+<a class="class-link" href="#class-ReadResourceTool" aria-label="查看 ReadResourceTool 职责">
+<text class="node-name" x="16" y="50">ReadResourceTool</text>
+</a>
+<a class="class-link" href="#class-ReadImageTool" aria-label="查看 ReadImageTool 职责">
+<text class="node-name" x="16" y="73">ReadImageTool</text>
+</a>
+<a class="class-link" href="#class-AssetLoadTool" aria-label="查看 AssetLoadTool 职责">
+<text class="node-name" x="16" y="96">AssetLoadTool</text>
+</a>
+<text class="node-caption" x="16" y="122">read_resource · read_image</text>
+<text class="node-caption" x="16" y="142">load_skill · load_component</text>
+</g>
+<g id="tool-edit" class="node plain" transform="translate(330 530)">
+<rect width="274" height="182" rx="10"/>
+<text class="node-tag" x="16" y="25">资源编辑</text>
+<a class="class-link" href="#class-ResourceEditTool" aria-label="查看 ResourceEditTool 职责">
+<text class="node-name" x="16" y="50">ResourceEditTool</text>
+</a>
+<text class="node-caption" x="16" y="76">edit_meta · edit_constraints</text>
+<text class="node-caption" x="16" y="96">edit_outline · edit_spec</text>
+<text class="node-caption" x="16" y="116">edit_html</text>
+</g>
+<g id="tool-external" class="node plain" transform="translate(636 530)">
+<rect width="274" height="182" rx="10"/>
+<text class="node-tag" x="16" y="25">外部能力</text>
+<a class="class-link" href="#class-RunCommandTool" aria-label="查看 RunCommandTool 职责">
+<text class="node-name" x="16" y="50">RunCommandTool</text>
+</a>
+<a class="class-link" href="#class-RenderSlideTool" aria-label="查看 RenderSlideTool 职责">
+<text class="node-name" x="16" y="73">RenderSlideTool</text>
+</a>
+<a class="class-link" href="#class-ReviewPptTool" aria-label="查看 ReviewPptTool 职责">
+<text class="node-name" x="16" y="96">ReviewPptTool</text>
+</a>
+<text class="node-caption" x="16" y="122">run_command · render_slide</text>
+<text class="node-caption" x="16" y="142">review_ppt</text>
+</g>
+<g id="tool-control" class="node plain" transform="translate(942 530)">
+<rect width="274" height="182" rx="10"/>
+<text class="node-tag" x="16" y="25">交互 / 控制</text>
+<a class="class-link" href="#class-AskUserTool" aria-label="查看 AskUserTool 职责">
+<text class="node-name" x="16" y="50">AskUserTool</text>
+</a>
+<a class="class-link" href="#class-CreatePlanTool" aria-label="查看 CreatePlanTool 职责">
+<text class="node-name" x="16" y="73">CreatePlanTool</text>
+</a>
+<a class="class-link" href="#class-UpdatePlanTool" aria-label="查看 UpdatePlanTool 职责">
+<text class="node-name" x="16" y="96">UpdatePlanTool</text>
+</a>
+<a class="class-link" href="#class-RequestPrivilegeTool" aria-label="查看 RequestPrivilegeTool 职责">
+<text class="node-name" x="16" y="119">RequestPrivilegeTool</text>
+</a>
+<text class="node-caption" x="16" y="145">提问、计划、范围授权</text>
+</g>
+<g id="tool-read-domain" class="node plain" transform="translate(24 772)">
+<rect width="274" height="120" rx="10"/>
+<text class="node-tag" x="16" y="25">相邻领域</text>
+<a class="class-link" href="#class-ProjectContentService" aria-label="查看 ProjectContentService 职责">
+<text class="node-name" x="16" y="50">ProjectContentService</text>
+</a>
+<a class="class-link" href="#class-AssetService" aria-label="查看 AssetService 职责">
+<text class="node-name" x="16" y="73">AssetService</text>
+</a>
+<text class="node-caption" x="16" y="99">读取内容与版本，更新活动引用</text>
+</g>
+<g id="tool-candidate" class="node plain" transform="translate(330 772)">
+<rect width="274" height="120" rx="10"/>
+<text class="node-tag" x="16" y="25">修改候选</text>
+<a class="class-link" href="#class-ProjectContentService" aria-label="查看 ProjectContentService 职责">
+<text class="node-name" x="16" y="50">ProjectContentService</text>
+</a>
+<text class="node-caption" x="16" y="76">准备完整候选并校验业务规则</text>
+<text class="node-caption" x="16" y="96">未获批准前不覆盖项目文件</text>
+</g>
+<g id="tool-workers" class="node plain" transform="translate(636 772)">
+<rect width="274" height="158" rx="10"/>
+<text class="node-tag" x="16" y="25">gateway</text>
+<a class="class-link" href="#class-IBashGateway" aria-label="查看 IBashGateway 职责">
+<text class="node-name" x="16" y="50">IBashGateway</text>
+</a>
+<a class="class-link" href="#class-IRenderGateway" aria-label="查看 IRenderGateway 职责">
+<text class="node-name" x="16" y="73">IRenderGateway</text>
+</a>
+<a class="class-link" href="#class-ILlmGateway" aria-label="查看 ILlmGateway 职责">
+<text class="node-name" x="16" y="96">ILlmGateway</text>
+</a>
+<a class="class-link" href="#class-IJevGateway" aria-label="查看 IJevGateway 职责">
+<text class="node-name" x="16" y="119">IJevGateway</text>
+</a>
+<text class="node-caption" x="16" y="145">外部任务返回结果或候选</text>
+</g>
+<g id="tool-controls" class="node plain" transform="translate(942 772)">
+<rect width="274" height="120" rx="10"/>
+<text class="node-tag" x="16" y="25">interaction · session</text>
+<a class="class-link" href="#class-InteractionService" aria-label="查看 InteractionService 职责">
+<text class="node-name" x="16" y="50">InteractionService</text>
+</a>
+<a class="class-link" href="#class-SessionService" aria-label="查看 SessionService 职责">
+<text class="node-name" x="16" y="73">SessionService</text>
+</a>
+<text class="node-caption" x="16" y="99">交互生效或更新计划状态</text>
+</g>
+<g id="tool-approval" class="decision">
+<path d="M467 962.0 L565.0 1000 L467 1038.0 L369.0 1000 Z"/>
+<text x="467" y="1005" text-anchor="middle">需要审批？</text>
+</g>
+<g id="tool-wait" class="node waiting" transform="translate(636 966)">
+<rect width="274" height="120" rx="10"/>
+<text class="node-tag" x="16" y="25">interaction</text>
+<a class="class-link" href="#class-InteractionService" aria-label="查看 InteractionService 职责">
+<text class="node-name" x="16" y="50">InteractionService</text>
+</a>
+<text class="node-caption" x="16" y="76">展示候选，等待本次批准</text>
+<text class="node-caption" x="16" y="96">拒绝 / 取消则不应用候选</text>
+</g>
+<g id="tool-reply" class="node plain" transform="translate(942 966)">
+<rect width="274" height="100" rx="10"/>
+<text class="node-tag" x="16" y="25">interfaces/controller/interaction</text>
+<a class="class-link" href="#class-InteractionController" aria-label="查看 InteractionController 职责">
+<text class="node-name" x="16" y="50">InteractionController</text>
+</a>
+<text class="node-caption" x="16" y="76">读取表单并提交带版本的答复</text>
+</g>
+<g id="tool-recheck" class="node plain" transform="translate(330 1140)">
+<rect width="274" height="120" rx="10"/>
+<text class="node-tag" x="16" y="25">真正应用前</text>
+<a class="class-link" href="#class-ToolGuard" aria-label="查看 ToolGuard 职责">
+<text class="node-name" x="16" y="50">ToolGuard</text>
+</a>
+<text class="node-caption" x="16" y="76">复查取消、当前授权与文件基准</text>
+<text class="node-caption" x="16" y="96">批准只对应已展示的候选</text>
+</g>
+<g id="tool-commit" class="node plain" transform="translate(330 1304)">
+<rect width="274" height="120" rx="10"/>
+<text class="node-tag" x="16" y="25">project/repository</text>
+<a class="class-link" href="#class-IProjectContentRepository" aria-label="查看 IProjectContentRepository 职责">
+<text class="node-name" x="16" y="50">IProjectContentRepository</text>
+</a>
+<text class="node-caption" x="16" y="76">协调文件提交、凭据与归属差异</text>
+<text class="node-caption" x="16" y="96">实际提交使相关检查点失效</text>
+</g>
+<g id="tool-result" class="node plain" transform="translate(465 1474)">
+<rect width="310" height="100" rx="10"/>
+<text class="node-tag" x="16" y="25">tool</text>
+<a class="class-link" href="#class-ToolExecutor" aria-label="查看 ToolExecutor 职责">
+<text class="node-name" x="16" y="50">ToolExecutor</text>
+</a>
+<text class="node-caption" x="16" y="76">汇总真实结果；失败也形成工具结果</text>
+</g>
+<g id="tool-result-write" class="node plain" transform="translate(900 1474)">
+<rect width="316" height="120" rx="10"/>
+<text class="node-tag" x="16" y="25">repository</text>
+<a class="class-link" href="#class-IRunRepository" aria-label="查看 IRunRepository 职责">
+<text class="node-name" x="16" y="50">IRunRepository</text>
+</a>
+<text class="node-caption" x="16" y="76">保存结果及本轮上下文成员</text>
+<text class="node-caption" x="16" y="96">保留必要原生数据与调用对应关系</text>
+</g>
+<g id="tool-next" class="node plain" transform="translate(465 1634)">
+<rect width="310" height="86" rx="10"/>
+<a class="class-link" href="#class-HarnessLoop" aria-label="查看 HarnessLoop 职责">
+<text class="node-name" x="16" y="25">HarnessLoop</text>
+</a>
+<text class="node-caption" x="16" y="51">带工具结果进入下一轮</text>
+</g>
+<text class="edge-label dependency" x="407" y="76" text-anchor="middle">先保存</text>
+<text class="edge-label normal" x="837" y="220" text-anchor="middle">不需执行</text>
+<text class="edge-label normal" x="655" y="320" text-anchor="middle">通过</text>
+<text class="edge-label wait" x="606" y="738" text-anchor="end">命令产生文件候选</text>
+<text class="edge-label wait" x="599" y="984" text-anchor="middle">是</text>
+<text class="edge-label normal" x="493" y="1101" text-anchor="middle">否</text>
+<text class="edge-label loop" x="657" y="1103" text-anchor="middle">批准后继续</text>
+<text class="edge-label wait" x="984" y="1288" text-anchor="middle">拒绝 / 已关闭</text>
+<text class="edge-label normal" x="535" y="1289" text-anchor="middle">仍然有效</text>
+<text class="edge-label normal" x="89" y="1509" text-anchor="middle">读取结果</text>
+<text class="edge-label normal" x="1093" y="1423" text-anchor="middle">非写入结果 / 控制结果</text>
+<text class="edge-label loop" x="1087" y="1447" text-anchor="middle">提前返回也记录工具结果</text>
+<text class="edge-label normal" x="837" y="1511" text-anchor="middle">执行结果</text>
+<text class="edge-label loop" x="841" y="1656" text-anchor="middle">结果可读后再通知</text>
+</svg>
+</div>
+<!-- 工具执行边界：
+     16 个模型工具名映射到 11 个具体工具类；五个编辑工具共用 ResourceEditTool，技能 / 组件加载共用 AssetLoadTool。
+     图中的候选提交路径适用于所有项目文件写入，包括 run_command。基准冲突、校验失败或审批拒绝均不覆盖现有文件；资源编辑不采用 JSON Patch。
+     通过工具结果反馈可修复错误；持久化失败或执行结果无法确认时停止 Run。已成功结果不因后续取消改写，调用去重不等于承诺外部命令恰好执行一次。 -->
+</div>
+</details>
+<details class="panel" id="support-flow" open>
+<summary aria-expanded="true" aria-controls="support-flow-body">
+<h2>命令、历史与运行边界</h2>
+</summary>
+<div id="support-flow-body">
+<div class="diagram-scroll" data-scroll-id="support-flow" tabindex="0" role="region" aria-label="命令、历史与运行边界图">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 1490" width="1240" height="1490" role="group" aria-labelledby="support-title support-description">
+<title id="support-title">旁路命令、会话、历史与通知</title>
+<desc id="support-description">展示自动触发和手动命令共用执行入口，历史与检查点边界，SSE 的提交后通知，以及启动中断清理。</desc>
+<defs>
+<marker id="support-arrow-normal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path class="arrow-normal" d="M1 1 L9 5 L1 9 Z"/>
+</marker>
+<marker id="support-arrow-loop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path class="arrow-loop" d="M1 1 L9 5 L1 9 Z"/>
+</marker>
+<marker id="support-arrow-wait" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path class="arrow-wait" d="M1 1 L9 5 L1 9 Z"/>
+</marker>
+<marker id="support-arrow-stop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path class="arrow-stop" d="M1 1 L9 5 L1 9 Z"/>
+</marker>
+<marker id="support-arrow-dependency" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path class="arrow-dependency" d="M1 1 L9 5 L1 9 Z"/>
+</marker>
+</defs>
+<polyline class="edge normal" points="324,108 392,108 392,165 460,165" marker-end="url(#support-arrow-normal)"/>
+<polyline class="edge normal" points="324,250 392,250 392,213 460,213" marker-end="url(#support-arrow-normal)"/>
+<polyline class="edge normal" points="770,183 900,183" marker-end="url(#support-arrow-normal)"/>
+<polyline class="edge normal" points="1058,242 1058,250 615,250 615,260" marker-end="url(#support-arrow-normal)"/>
+<polyline class="edge normal" points="615,346 615,356 189,356 189,366" marker-end="url(#support-arrow-normal)"/>
+<polyline class="edge normal" points="615,346 615,366" marker-end="url(#support-arrow-normal)"/>
+<polyline class="edge normal" points="615,356 1058,356 1058,366" marker-end="url(#support-arrow-normal)"/>
+<polyline class="edge normal" points="189,466 189,490 615,490 615,510" marker-end="url(#support-arrow-normal)"/>
+<polyline class="edge normal" points="615,466 615,510" marker-end="url(#support-arrow-normal)"/>
+<polyline class="edge normal" points="1058,466 1058,490 615,490" marker-end="url(#support-arrow-normal)"/>
+<polyline class="edge normal" points="770,560 900,560" marker-end="url(#support-arrow-normal)"/>
+<path class="section-rule" d="M24 644 H1216"/>
+<polyline class="edge normal" points="324,750 460,750" marker-end="url(#support-arrow-normal)"/>
+<polyline class="edge normal" points="770,750 900,750" marker-end="url(#support-arrow-normal)"/>
+<polyline class="edge normal" points="324,884 460,884" marker-end="url(#support-arrow-normal)"/>
+<polyline class="edge normal" points="770,884 900,884" marker-end="url(#support-arrow-normal)"/>
+<polyline class="edge normal" points="324,1018 460,1018" marker-end="url(#support-arrow-normal)"/>
+<polyline class="edge normal" points="770,1018 900,1018" marker-end="url(#support-arrow-normal)"/>
+<path class="section-rule" d="M24 1110 H1216"/>
+<polyline class="edge normal" points="324,1222 460,1222" marker-end="url(#support-arrow-normal)"/>
+<polyline class="edge normal" points="900,1222 770,1222" marker-end="url(#support-arrow-normal)"/>
+<polyline class="edge normal" points="324,1401 460,1401" marker-end="url(#support-arrow-normal)"/>
+<polyline class="edge normal" points="770,1401 900,1401" marker-end="url(#support-arrow-normal)"/>
+<text class="lane-label" x="24" y="34" text-anchor="start">旁路命令</text>
+<g id="support-manual" class="node plain" transform="translate(24 62)">
+<rect width="300" height="92" rx="10"/>
+<text class="node-tag" x="16" y="25">interfaces/controller/execution</text>
+<a class="class-link" href="#class-ExecutionController" aria-label="查看 ExecutionController 职责">
+<text class="node-name" x="16" y="50">ExecutionController</text>
+</a>
+<text class="node-caption" x="16" y="76">发起、修订与取消命令</text>
+</g>
+<g id="support-auto" class="node plain" transform="translate(24 194)">
+<rect width="300" height="112" rx="10"/>
+<text class="node-tag" x="16" y="25">自动入口调用方</text>
+<a class="class-link" href="#class-InputService" aria-label="查看 InputService 职责">
+<text class="node-name" x="16" y="50">InputService</text>
+</a>
+<a class="class-link" href="#class-RunService" aria-label="查看 RunService 职责">
+<text class="node-name" x="16" y="73">RunService</text>
+</a>
+<text class="node-caption" x="16" y="99">输入受理后 / Run 完成后</text>
+</g>
+<g id="support-command" class="node primary" transform="translate(460 124)">
+<rect width="310" height="118" rx="10"/>
+<text class="node-tag" x="16" y="25">command</text>
+<a class="class-link" href="#class-CommandService" aria-label="查看 CommandService 职责">
+<text class="node-name" x="16" y="50">CommandService</text>
+</a>
+<text class="node-caption" x="16" y="76">自动条件检查、统一幂等受理</text>
+<text class="node-caption" x="16" y="96">处理占用、修订、取消与分支确认</text>
+</g>
+<g id="support-accept" class="node plain" transform="translate(900 124)">
+<rect width="316" height="118" rx="10"/>
+<text class="node-tag" x="16" y="25">repository</text>
+<a class="class-link" href="#class-ICommandRepository" aria-label="查看 ICommandRepository 职责">
+<text class="node-name" x="16" y="50">ICommandRepository</text>
+</a>
+<text class="node-caption" x="16" y="76">受理凭据与执行记录同事务</text>
+<text class="node-caption" x="16" y="96">修订沿用操作身份，保留旧产物</text>
+</g>
+<g id="support-handler" class="node primary" transform="translate(460 260)">
+<rect width="310" height="86" rx="10"/>
+<a class="class-link" href="#class-CommandHandler" aria-label="查看 CommandHandler 职责">
+<text class="node-name" x="16" y="25">CommandHandler</text>
+</a>
+<text class="node-caption" x="16" y="51">按命令类型选择一个实现</text>
+</g>
+<g id="support-compact" class="node plain" transform="translate(24 366)">
+<rect width="330" height="100" rx="10"/>
+<a class="class-link" href="#class-CompactCommandHandler" aria-label="查看 CompactCommandHandler 职责">
+<text class="node-name" x="16" y="25">CompactCommandHandler</text>
+</a>
+<a class="class-link" href="#class-ContextCompactor" aria-label="查看 ContextCompactor 职责">
+<text class="node-name" x="16" y="48">ContextCompactor</text>
+</a>
+<text class="node-caption" x="16" y="74">生成摘要与保留上下文</text>
+</g>
+<g id="support-models" class="node plain" transform="translate(460 366)">
+<rect width="310" height="100" rx="10"/>
+<a class="class-link" href="#class-PromptAssembler" aria-label="查看 PromptAssembler 职责">
+<text class="node-name" x="16" y="25">PromptAssembler</text>
+</a>
+<a class="class-link" href="#class-ILlmGateway" aria-label="查看 ILlmGateway 职责">
+<text class="node-name" x="16" y="48">ILlmGateway</text>
+</a>
+<text class="node-caption" x="16" y="74">由对应 Handler 组装并调用模型</text>
+</g>
+<g id="support-git" class="node plain" transform="translate(900 366)">
+<rect width="316" height="100" rx="10"/>
+<a class="class-link" href="#class-CommitCommandHandler" aria-label="查看 CommitCommandHandler 职责">
+<text class="node-name" x="16" y="25">CommitCommandHandler</text>
+</a>
+<a class="class-link" href="#class-IGitGateway" aria-label="查看 IGitGateway 职责">
+<text class="node-name" x="16" y="48">IGitGateway</text>
+</a>
+<text class="node-caption" x="16" y="74">Git 暂存 → 模型分析 → 确认提交</text>
+</g>
+<g id="support-finish" class="node plain" transform="translate(460 510)">
+<rect width="310" height="100" rx="10"/>
+<a class="class-link" href="#class-CommandService" aria-label="查看 CommandService 职责">
+<text class="node-name" x="16" y="25">CommandService</text>
+</a>
+<a class="class-link" href="#class-ICommandRepository" aria-label="查看 ICommandRepository 职责">
+<text class="node-name" x="16" y="48">ICommandRepository</text>
+</a>
+<text class="node-caption" x="16" y="74">产物、相关会话变更与终态同事务</text>
+</g>
+<g id="support-notify" class="node plain" transform="translate(900 510)">
+<rect width="316" height="100" rx="10"/>
+<text class="node-tag" x="16" y="25">gateway</text>
+<a class="class-link" href="#class-EventPublisher" aria-label="查看 EventPublisher 职责">
+<text class="node-name" x="16" y="50">EventPublisher</text>
+</a>
+<text class="node-caption" x="16" y="76">产物可读后通知 commands 等区域</text>
+</g>
+<text class="edge-label normal" x="837" y="170" text-anchor="middle">受理</text>
+<text class="lane-label" x="800" y="282" text-anchor="start">受理提交后执行</text>
+<text class="edge-label normal" x="837" y="547" text-anchor="middle">提交成功</text>
+<text class="lane-label" x="24" y="678" text-anchor="start">会话、历史与检查点</text>
+<g id="support-session-api" class="node plain" transform="translate(24 706)">
+<rect width="300" height="88" rx="10"/>
+<a class="class-link" href="#class-SessionController" aria-label="查看 SessionController 职责">
+<text class="node-name" x="16" y="25">SessionController</text>
+</a>
+<text class="node-caption" x="16" y="51">管理 / 状态查询</text>
+</g>
+<g id="support-session" class="node plain" transform="translate(460 706)">
+<rect width="310" height="88" rx="10"/>
+<a class="class-link" href="#class-SessionService" aria-label="查看 SessionService 职责">
+<text class="node-name" x="16" y="25">SessionService</text>
+</a>
+<text class="node-caption" x="16" y="51">会话业务状态与计划</text>
+</g>
+<g id="support-session-repo" class="node plain" transform="translate(900 706)">
+<rect width="316" height="88" rx="10"/>
+<a class="class-link" href="#class-ISessionRepository" aria-label="查看 ISessionRepository 职责">
+<text class="node-name" x="16" y="25">ISessionRepository</text>
+</a>
+<text class="node-caption" x="16" y="51">一致的会话数据与版本</text>
+</g>
+<g id="support-history-api" class="node plain" transform="translate(24 840)">
+<rect width="300" height="88" rx="10"/>
+<a class="class-link" href="#class-HistoryController" aria-label="查看 HistoryController 职责">
+<text class="node-name" x="16" y="25">HistoryController</text>
+</a>
+<text class="node-caption" x="16" y="51">历史 / Run / 命令 / 工具详情</text>
+</g>
+<g id="support-history" class="node plain" transform="translate(460 840)">
+<rect width="310" height="88" rx="10"/>
+<a class="class-link" href="#class-HistoryService" aria-label="查看 HistoryService 职责">
+<text class="node-name" x="16" y="25">HistoryService</text>
+</a>
+<text class="node-caption" x="16" y="51">公开投影与已保存的差异</text>
+</g>
+<g id="support-history-repo" class="node plain" transform="translate(900 832)">
+<rect width="316" height="104" rx="10"/>
+<a class="class-link" href="#class-IRunRepository" aria-label="查看 IRunRepository 职责">
+<text class="node-name" x="16" y="25">IRunRepository</text>
+</a>
+<a class="class-link" href="#class-ICommandRepository" aria-label="查看 ICommandRepository 职责">
+<text class="node-name" x="16" y="48">ICommandRepository</text>
+</a>
+<text class="node-caption" x="16" y="74">按 API 聚合历史与详情</text>
+</g>
+<g id="support-checkpoint-api" class="node plain" transform="translate(24 974)">
+<rect width="300" height="88" rx="10"/>
+<a class="class-link" href="#class-CheckpointController" aria-label="查看 CheckpointController 职责">
+<text class="node-name" x="16" y="25">CheckpointController</text>
+</a>
+<text class="node-caption" x="16" y="51">检查点 / 预览 / 回退 / 返回</text>
+</g>
+<g id="support-checkpoint" class="node plain" transform="translate(460 974)">
+<rect width="310" height="88" rx="10"/>
+<a class="class-link" href="#class-CheckpointService" aria-label="查看 CheckpointService 职责">
+<text class="node-name" x="16" y="25">CheckpointService</text>
+</a>
+<text class="node-caption" x="16" y="51">项目排他、版本校验与历史恢复</text>
+</g>
+<g id="support-checkpoint-repo" class="node plain" transform="translate(900 966)">
+<rect width="316" height="110" rx="10"/>
+<a class="class-link" href="#class-ICheckpointRepository" aria-label="查看 ICheckpointRepository 职责">
+<text class="node-name" x="16" y="25">ICheckpointRepository</text>
+</a>
+<a class="class-link" href="#class-IProjectContentRepository" aria-label="查看 IProjectContentRepository 职责">
+<text class="node-name" x="16" y="48">IProjectContentRepository</text>
+</a>
+<text class="node-caption" x="16" y="74">仅恢复目标会话及其可恢复文件</text>
+</g>
+<text class="lane-label" x="24" y="1144" text-anchor="start">通知与启动清理</text>
+<g id="support-subscribe" class="node plain" transform="translate(24 1172)">
+<rect width="300" height="100" rx="10"/>
+<text class="node-tag" x="16" y="25">interfaces/controller/history</text>
+<a class="class-link" href="#class-HistoryController" aria-label="查看 HistoryController 职责">
+<text class="node-name" x="16" y="50">HistoryController</text>
+</a>
+<text class="node-caption" x="16" y="76">建立会话订阅；连接不拥有 Run</text>
+</g>
+<g id="support-sse" class="node plain" transform="translate(460 1172)">
+<rect width="310" height="100" rx="10"/>
+<text class="node-tag" x="16" y="25">interfaces/sse</text>
+<a class="class-link" href="#class-SseEventPublisher" aria-label="查看 SseEventPublisher 职责">
+<text class="node-name" x="16" y="50">SseEventPublisher</text>
+</a>
+<text class="node-caption" x="16" y="76">changed / reset / 进度 / interaction</text>
+</g>
+<g id="support-event" class="node plain" transform="translate(900 1172)">
+<rect width="316" height="100" rx="10"/>
+<text class="node-tag" x="16" y="25">gateway</text>
+<a class="class-link" href="#class-EventPublisher" aria-label="查看 EventPublisher 职责">
+<text class="node-name" x="16" y="50">EventPublisher</text>
+</a>
+<text class="node-caption" x="16" y="76">提交后的变化与运行中瞬时通知</text>
+</g>
+<text class="edge-label normal" x="392" y="1209" text-anchor="middle">订阅</text>
+<text class="edge-label normal" x="835" y="1209" text-anchor="middle">发布</text>
+<g id="support-recovery" class="node stopping" transform="translate(24 1342)">
+<rect width="300" height="118" rx="10"/>
+<text class="node-tag" x="16" y="25">run</text>
+<a class="class-link" href="#class-RunRecoveryService" aria-label="查看 RunRecoveryService 职责">
+<text class="node-name" x="16" y="50">RunRecoveryService</text>
+</a>
+<text class="node-caption" x="16" y="76">启动时扫描未结束执行</text>
+<text class="node-caption" x="16" y="96">不恢复原 Run 或自动重放工具</text>
+</g>
+<g id="support-reconcile" class="node plain" transform="translate(460 1342)">
+<rect width="310" height="118" rx="10"/>
+<text class="node-tag" x="16" y="25">project/service</text>
+<a class="class-link" href="#class-ProjectContentService" aria-label="查看 ProjectContentService 职责">
+<text class="node-name" x="16" y="50">ProjectContentService</text>
+</a>
+<text class="node-caption" x="16" y="76">核对遗留文件事务与提交凭据</text>
+<text class="node-caption" x="16" y="96">完成提交或回滚，清理临时记录</text>
+</g>
+<g id="support-interrupt" class="node plain" transform="translate(900 1342)">
+<rect width="316" height="118" rx="10"/>
+<text class="node-tag" x="16" y="25">repository</text>
+<a class="class-link" href="#class-IRunRepository" aria-label="查看 IRunRepository 职责">
+<text class="node-name" x="16" y="50">IRunRepository</text>
+</a>
+<a class="class-link" href="#class-ICommandRepository" aria-label="查看 ICommandRepository 职责">
+<text class="node-name" x="16" y="73">ICommandRepository</text>
+</a>
+<text class="node-caption" x="16" y="99">标记 interrupted，保留确认成功项</text>
+</g>
+</svg>
+</div>
+<!-- 命令、历史与通知边界：
+     输入受理后由 InputService 调用 CommandService.tryAutoRename；Run 完成收尾后由 RunService 调用 CommandService.tryAutoSuggest。
+     自动入口检查行为开关与会话状态，命名按需通过 IJevGateway 进行 JEV Rename 判定；可返回最新时不自动发起。
+     自动入口复用统一命令受理流程，由该流程保证幂等与并发占用；具体执行仍委托对应 CommandHandler，不引入通用 Hook 总线。
+     自动压缩由 HarnessLoop 协调，经 CommandService → CompactCommandHandler → ContextCompactor 执行；ContextCompactor 不反向调用 CommandService。手动 compact 与本会话新 Run 互斥；Git 提交要求项目内无活动 Run。
+     检查点是 Run 开始前的历史基准，不是断点续跑快照。文件改变会使同项目其他会话的检查点失效；回退 / 返回不重放原任务。
+     SSE 提供通知，查询接口提供事实。业务变化可读取后才发送 changed；断线不停止后台执行，重连或 reset 后重新读取。 -->
+</div>
+</details>
+<details class="panel" id="handler-assembler-flow" open>
+<summary aria-expanded="true" aria-controls="handler-assembler-flow-body">
+<h2>CommandHandler 与 PromptAssembler</h2>
+</summary>
+<div id="handler-assembler-flow-body">
+<div class="legend" aria-label="多态图连线含义">
+<span><i></i>调用</span>
+<span><i class="dependency-key"></i>按类型选择具体实现</span>
+</div>
+<div class="diagram-scroll" data-scroll-id="handler-assembler-flow" tabindex="0" role="region" aria-label="命令执行与提示词拼装多态图">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 1110" width="1240" height="1110" role="group" aria-labelledby="dispatch-title dispatch-description">
+<title id="dispatch-title">命令处理与提示词拼装的接口和实现</title>
+<desc id="dispatch-description">CommandService 按命令类型选择六个 CommandHandler 之一；各处理器使用对应 PromptAssembler，压缩经 ContextCompactor，提交协调 Git 与模型。PromptAssembler 的实现覆盖四种主模式、六种命令和 Reviewer；具体实现负责拼装，模型调用由调用方负责。</desc>
+<defs>
+<marker id="dispatch-arrow-normal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path class="arrow-normal" d="M1 1 L9 5 L1 9 Z"/>
+</marker>
+<marker id="dispatch-arrow-dependency" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path class="arrow-dependency" d="M1 1 L9 5 L1 9 Z"/>
+</marker>
+</defs>
+<polyline class="edge normal" points="384,115 440,115" marker-end="url(#dispatch-arrow-normal)"/>
+<polyline class="edge dependency" points="620,170 620,200 204,200 204,230" marker-end="url(#dispatch-arrow-dependency)"/>
+<polyline class="edge dependency" points="620,170 620,230" marker-end="url(#dispatch-arrow-dependency)"/>
+<polyline class="edge dependency" points="620,200 1036,200 1036,230" marker-end="url(#dispatch-arrow-dependency)"/>
+<polyline class="edge dependency" points="204,200 12,200 12,410 204,410 204,430" marker-end="url(#dispatch-arrow-dependency)"/>
+<polyline class="edge dependency" points="620,200 420,200 420,410 620,410 620,430" marker-end="url(#dispatch-arrow-dependency)"/>
+<polyline class="edge dependency" points="1036,200 1228,200 1228,410 1036,410 1036,430" marker-end="url(#dispatch-arrow-dependency)"/>
+<polyline class="edge normal" points="384,742 440,742" marker-end="url(#dispatch-arrow-normal)"/>
+<polyline class="edge normal" points="856,742 800,742" marker-end="url(#dispatch-arrow-normal)"/>
+<polyline class="edge dependency" points="620,794 620,830 204,830 204,860" marker-end="url(#dispatch-arrow-dependency)"/>
+<polyline class="edge dependency" points="620,794 620,860" marker-end="url(#dispatch-arrow-dependency)"/>
+<polyline class="edge dependency" points="620,830 1036,830 1036,860" marker-end="url(#dispatch-arrow-dependency)"/>
+<text class="lane-label" x="24" y="34" text-anchor="start">命令执行 · 每个 Handler 使用对应的提示词实现</text>
+<path class="section-rule" d="M24 624 H1216"/>
+<text class="lane-label" x="24" y="654" text-anchor="start">提示词拼装 · 实现类掌握各自的拼装顺序</text>
+<g id="dispatch-service" class="node primary" transform="translate(24 60)">
+<rect width="360" height="110" rx="10"/>
+<text class="node-tag" x="16" y="25">命令生命周期</text>
+<a class="class-link" href="#class-CommandService" aria-label="查看 CommandService 职责">
+<text class="node-name" x="16" y="50">CommandService</text>
+</a>
+<text class="node-caption" x="16" y="76">自动触发、统一受理与生命周期</text>
+</g>
+<g id="dispatch-handler" class="node primary" transform="translate(440 60)">
+<rect width="360" height="110" rx="10"/>
+<text class="node-tag" x="16" y="25">接口 · 按命令类型选择</text>
+<a class="class-link" href="#class-CommandHandler" aria-label="查看 CommandHandler 职责">
+<text class="node-name" x="16" y="50">CommandHandler</text>
+</a>
+<text class="node-caption" x="16" y="76">每次执行委托一个具体实现</text>
+</g>
+<g id="dispatch-rename" class="node plain" transform="translate(24 230)">
+<rect width="360" height="140" rx="10"/>
+<text class="node-tag" x="16" y="25">rename</text>
+<a class="class-link" href="#class-RenameCommandHandler" aria-label="查看 RenameCommandHandler 职责">
+<text class="node-name" x="16" y="50">RenameCommandHandler</text>
+</a>
+<a class="class-link" href="#class-RenamePromptAssembler" aria-label="查看 RenamePromptAssembler 职责">
+<text class="node-name" x="16" y="73">RenamePromptAssembler</text>
+</a>
+<text class="node-caption" x="16" y="99">组装 → ILlmGateway → 校验标题</text>
+</g>
+<g id="dispatch-suggest" class="node plain" transform="translate(440 230)">
+<rect width="360" height="140" rx="10"/>
+<text class="node-tag" x="16" y="25">suggest</text>
+<a class="class-link" href="#class-SuggestCommandHandler" aria-label="查看 SuggestCommandHandler 职责">
+<text class="node-name" x="16" y="50">SuggestCommandHandler</text>
+</a>
+<a class="class-link" href="#class-SuggestPromptAssembler" aria-label="查看 SuggestPromptAssembler 职责">
+<text class="node-name" x="16" y="73">SuggestPromptAssembler</text>
+</a>
+<text class="node-caption" x="16" y="99">组装 → ILlmGateway → 校验建议</text>
+</g>
+<g id="dispatch-polish" class="node plain" transform="translate(856 230)">
+<rect width="360" height="140" rx="10"/>
+<text class="node-tag" x="16" y="25">polish</text>
+<a class="class-link" href="#class-PolishCommandHandler" aria-label="查看 PolishCommandHandler 职责">
+<text class="node-name" x="16" y="50">PolishCommandHandler</text>
+</a>
+<a class="class-link" href="#class-PolishPromptAssembler" aria-label="查看 PolishPromptAssembler 职责">
+<text class="node-name" x="16" y="73">PolishPromptAssembler</text>
+</a>
+<text class="node-caption" x="16" y="99">组装 → ILlmGateway → 校验润色产物</text>
+</g>
+<g id="dispatch-handoff" class="node plain" transform="translate(24 430)">
+<rect width="360" height="140" rx="10"/>
+<text class="node-tag" x="16" y="25">handoff</text>
+<a class="class-link" href="#class-HandoffCommandHandler" aria-label="查看 HandoffCommandHandler 职责">
+<text class="node-name" x="16" y="50">HandoffCommandHandler</text>
+</a>
+<a class="class-link" href="#class-HandoffPromptAssembler" aria-label="查看 HandoffPromptAssembler 职责">
+<text class="node-name" x="16" y="73">HandoffPromptAssembler</text>
+</a>
+<text class="node-caption" x="16" y="99">组装 → ILlmGateway → 校验交接产物</text>
+</g>
+<g id="dispatch-compact" class="node plain" transform="translate(440 430)">
+<rect width="360" height="140" rx="10"/>
+<text class="node-tag" x="16" y="25">compact</text>
+<a class="class-link" href="#class-CompactCommandHandler" aria-label="查看 CompactCommandHandler 职责">
+<text class="node-name" x="16" y="50">CompactCommandHandler</text>
+</a>
+<a class="class-link" href="#class-ContextCompactor" aria-label="查看 ContextCompactor 职责">
+<text class="node-name" x="16" y="73">ContextCompactor</text>
+</a>
+<a class="class-link" href="#class-CompactPromptAssembler" aria-label="查看 CompactPromptAssembler 职责">
+<text class="node-name" x="16" y="96">CompactPromptAssembler</text>
+</a>
+<text class="node-caption" x="16" y="122">委托压缩 → 组装 → 模型生成与校验</text>
+</g>
+<g id="dispatch-commit" class="node plain" transform="translate(856 430)">
+<rect width="360" height="140" rx="10"/>
+<text class="node-tag" x="16" y="25">commit</text>
+<a class="class-link" href="#class-CommitCommandHandler" aria-label="查看 CommitCommandHandler 职责">
+<text class="node-name" x="16" y="50">CommitCommandHandler</text>
+</a>
+<a class="class-link" href="#class-CommitPromptAssembler" aria-label="查看 CommitPromptAssembler 职责">
+<text class="node-name" x="16" y="73">CommitPromptAssembler</text>
+</a>
+<a class="class-link" href="#class-IGitGateway" aria-label="查看 IGitGateway 职责">
+<text class="node-name" x="16" y="96">IGitGateway</text>
+</a>
+<text class="node-caption" x="16" y="122">Git 材料 → 模型分析 → Git 提交核实</text>
+</g>
+<g id="dispatch-context" class="node plain" transform="translate(24 690)">
+<rect width="360" height="104" rx="10"/>
+<text class="node-tag" x="16" y="25">主 Agent</text>
+<a class="class-link" href="#class-ContextService" aria-label="查看 ContextService 职责">
+<text class="node-name" x="16" y="50">ContextService</text>
+</a>
+<text class="node-caption" x="16" y="76">按模式选择对应 Assembler</text>
+</g>
+<g id="dispatch-assembler" class="node primary" transform="translate(440 690)">
+<rect width="360" height="104" rx="10"/>
+<text class="node-tag" x="16" y="25">接口 · 按场景提供实现</text>
+<a class="class-link" href="#class-PromptAssembler" aria-label="查看 PromptAssembler 职责">
+<text class="node-name" x="16" y="50">PromptAssembler</text>
+</a>
+<text class="node-caption" x="16" y="76">模块选择、材料组织与拼装顺序</text>
+</g>
+<g id="dispatch-review" class="node plain" transform="translate(856 690)">
+<rect width="360" height="104" rx="10"/>
+<text class="node-tag" x="16" y="25">Reviewer</text>
+<a class="class-link" href="#class-ReviewPptTool" aria-label="查看 ReviewPptTool 职责">
+<text class="node-name" x="16" y="50">ReviewPptTool</text>
+</a>
+<text class="node-caption" x="16" y="76">使用 ReviewPromptAssembler</text>
+</g>
+<g id="dispatch-main-prompts" class="node plain" transform="translate(24 860)">
+<rect width="360" height="220" rx="10"/>
+<text class="node-tag" x="16" y="25">主 Agent · 四种模式</text>
+<a class="class-link" href="#class-ChatPromptAssembler" aria-label="查看 ChatPromptAssembler 职责">
+<text class="node-name" x="16" y="50">ChatPromptAssembler</text>
+</a>
+<a class="class-link" href="#class-AskPromptAssembler" aria-label="查看 AskPromptAssembler 职责">
+<text class="node-name" x="16" y="73">AskPromptAssembler</text>
+</a>
+<a class="class-link" href="#class-PlanPromptAssembler" aria-label="查看 PlanPromptAssembler 职责">
+<text class="node-name" x="16" y="96">PlanPromptAssembler</text>
+</a>
+<a class="class-link" href="#class-CreatePromptAssembler" aria-label="查看 CreatePromptAssembler 职责">
+<text class="node-name" x="16" y="119">CreatePromptAssembler</text>
+</a>
+<text class="node-caption" x="16" y="145">组装结果交回 HarnessLoop 调用模型</text>
+</g>
+<g id="dispatch-command-prompts" class="node plain" transform="translate(440 860)">
+<rect width="360" height="220" rx="10"/>
+<text class="node-tag" x="16" y="25">旁路命令 · 六种场景</text>
+<a class="class-link" href="#class-RenamePromptAssembler" aria-label="查看 RenamePromptAssembler 职责">
+<text class="node-name" x="16" y="50">RenamePromptAssembler</text>
+</a>
+<a class="class-link" href="#class-SuggestPromptAssembler" aria-label="查看 SuggestPromptAssembler 职责">
+<text class="node-name" x="16" y="73">SuggestPromptAssembler</text>
+</a>
+<a class="class-link" href="#class-PolishPromptAssembler" aria-label="查看 PolishPromptAssembler 职责">
+<text class="node-name" x="16" y="96">PolishPromptAssembler</text>
+</a>
+<a class="class-link" href="#class-HandoffPromptAssembler" aria-label="查看 HandoffPromptAssembler 职责">
+<text class="node-name" x="16" y="119">HandoffPromptAssembler</text>
+</a>
+<a class="class-link" href="#class-CompactPromptAssembler" aria-label="查看 CompactPromptAssembler 职责">
+<text class="node-name" x="16" y="142">CompactPromptAssembler</text>
+</a>
+<a class="class-link" href="#class-CommitPromptAssembler" aria-label="查看 CommitPromptAssembler 职责">
+<text class="node-name" x="16" y="165">CommitPromptAssembler</text>
+</a>
+<text class="node-caption" x="16" y="191">由对应 Handler / ContextCompactor 使用</text>
+</g>
+<g id="dispatch-review-prompts" class="node plain" transform="translate(856 860)">
+<rect width="360" height="220" rx="10"/>
+<text class="node-tag" x="16" y="25">Reviewer · 审查场景</text>
+<a class="class-link" href="#class-ReviewPromptAssembler" aria-label="查看 ReviewPromptAssembler 职责">
+<text class="node-name" x="16" y="50">ReviewPromptAssembler</text>
+</a>
+<text class="node-caption" x="16" y="76">返回审查提示词与材料</text>
+<text class="node-caption" x="16" y="96">由 ReviewPptTool 调用 ILlmGateway</text>
+</g>
+</svg>
+</div>
+<!-- 命令处理与提示词拼装职责：
+     CommandService 负责自动触发条件与公共生命周期，CommandHandler 负责具体业务执行；使用相同 ILlmGateway 的命令仍拥有各自的 Handler。
+     ContextService 按主模式选择 Assembler；命令与 Reviewer 使用各自场景的实现。Assembler 返回拼装材料，模型调用由 HarnessLoop、Handler、ContextCompactor 或 ReviewPptTool 发起。
+     各 Assembler 复用公共模板渲染，分别控制模块、材料和顺序；不调用模型、不管理执行状态或持久化。 -->
+</div>
+</details>
+<!-- 已确认的命名约定：
+     Repository 和以 Gateway 命名的领域接口统一加 I 前缀；只有一个实现时，实现类去掉 I，不加 Impl；多个实现按具体实现特征区分。
+     Bash 执行接口为 IBashGateway，单实现为 infrastructure/worker/BashGateway；CommandService 仍表示产品旁路命令。
+     AgentTool 不加 I，位于 domain/agent/service/tool；其工具实现继续按各自职责命名。
+     EventPublisher 不加 I，位于 domain/agent/gateway；实现类为 interfaces/sse/SseEventPublisher，装配归 bootstrap。
+     CommandHandler 与 PromptAssembler 是无 I 前缀的多态接口；实现类分别采用 XxxCommandHandler、XxxPromptAssembler 命名。
+     CommandService 保持具体类，负责自动触发条件并协调公共生命周期；ContextCompactor 不反向调用 CommandService。
+     Service、Loop、Guard 保持具体类，不为命名规则额外增加接口。 -->
+<details class="panel" id="class-catalog" open>
+<summary aria-expanded="true" aria-controls="class-catalog-body">
+<h2>类职责</h2>
+</summary>
+<div id="class-catalog-body">
+<div class="table-scroll" data-scroll-id="class-catalog" tabindex="0" role="region" aria-label="类职责表">
+<table class="class-table">
+<colgroup>
+<col style="width:22%">
+<col style="width:19%">
+<col style="width:19%">
+<col style="width:40%">
+</colgroup>
+<thead>
+<tr>
+<th scope="col">类名</th>
+<th scope="col">输入</th>
+<th scope="col">输出</th>
+<th scope="col">作用</th>
+</tr>
+</thead>
+<tbody>
+<tr class="group-heading">
+<th colspan="4" scope="rowgroup">agent/service/run</th>
+</tr>
+<tr id="class-RunService">
+<th scope="row">
+<code>RunService</code>
+</th>
+<td>新开、追加或取消请求；主循环的结束结果</td>
+<td>受理的 Run；状态变化与最终持久结果</td>
+<td>组织受理、模型配置固定、后台执行和统一收尾。协调会话占用与初始检查点；回复、净差异、终态及必要的输入交接协调提交。Run 完成收尾后调用 CommandService.tryAutoSuggest。</td>
+</tr>
+<tr id="class-HarnessLoop">
+<th scope="row">
+<code>HarnessLoop</code>
+</th>
+<td>本次 Run 的配置、输入、上下文及取消信号</td>
+<td>待收尾的执行结果</td>
+<td>唯一主循环：处理输入、选择工具、组装上下文、调用模型、执行工具、等待交互、检查完成条件。工具调用与下一轮请求始终由它掌握。</td>
+</tr>
+<tr id="class-RunGuard">
+<th scope="row">
+<code>RunGuard</code>
+</th>
+<td>当前 Run 的取消状态、执行用量与最近进展</td>
+<td>继续执行或停止原因</td>
+<td>在循环和外部调用边界检查取消、轮次与活动时间预算、连续失败、重复读取及重复完成驳回；等待人工的时间不计入活动执行时间。</td>
+</tr>
+<tr id="class-CompletionChecker">
+<th scope="row">
+<code>CompletionChecker</code>
+</th>
+<td>候选回复、当前模式与计划、实际修改及最新校验证据</td>
+<td>允许结束，或需要继续处理的事项</td>
+<td>协调 InputService 原子封闭输入边界，再检查已受理输入、计划、授权和产物证据；需要继续时恢复受理并回到同一 Loop。Plan 模式普通文本不能代替计划审批。</td>
+</tr>
+<tr id="class-RunRecoveryService">
+<th scope="row">
+<code>RunRecoveryService</code>
+</th>
+<td>启动时遗留的活动 Run、命令与文件事务</td>
+<td>完成清理的文件状态；中断状态</td>
+<td>先协调遗留文件提交或回滚，再将无法继续的执行标记为 interrupted。保留已确认成功的工具与 Git 结果，不恢复旧 Loop，也不重新执行未知结果的工具。</td>
+</tr>
 </tbody>
-<tbody><tr class="group-heading"><th colspan="4" scope="rowgroup">agent/service/input</th></tr>
-<tr id="class-InputService"><th scope="row"><code>InputService</code></th><td>首条指令或追加输入；引用、当前授权与待答状态</td><td>受理回执；已判定输入与合并后的授权</td><td>校验消息幂等、引用与输入开关；调用 JEV 判定，在安全边界消费队列。追加授权取并集，引用本身不扩大范围；首条闲聊拒绝后交接已受理的剩余输入。</td></tr>
+<tbody>
+<tr class="group-heading">
+<th colspan="4" scope="rowgroup">agent/service/input</th>
+</tr>
+<tr id="class-InputService">
+<th scope="row">
+<code>InputService</code>
+</th>
+<td>首条指令或追加输入；引用、当前授权与待答状态</td>
+<td>受理回执；已判定输入与合并后的授权</td>
+<td>校验消息幂等、引用与输入开关；调用 JEV 判定，在安全边界消费队列。输入受理后调用 CommandService.tryAutoRename。追加授权取并集，引用本身不扩大范围；首条闲聊拒绝后交接已受理的剩余输入。</td>
+</tr>
 </tbody>
-<tbody><tr class="group-heading"><th colspan="4" scope="rowgroup">agent/service/context</th></tr>
-<tr id="class-ContextService"><th scope="row"><code>ContextService</code></th><td>Run 状态、项目内容、会话上下文、引用与公开工具</td><td>本轮模型上下文及 Token 估算</td><td>刷新项目来源，按 ASSEMBLE 组装上下文，保留 Assistant / Tool 配对与消息顺序；识别压缩需要，压缩后重新估算。</td></tr>
-<tr id="class-PromptAssembler"><th scope="row"><code>PromptAssembler</code></th><td>模式或任务类型、提示词模块及所需业务内容</td><td>按固定顺序拼装的提示词内容</td><td>复用主 Agent、Reviewer 与旁路命令的拼装规则。仅拼装，不调用模型、不决定业务流程。</td></tr>
-<tr id="class-ContextCompactor"><th scope="row"><code>ContextCompactor</code></th><td>原摘要、待压缩内容、保留内容及压缩模型</td><td>新摘要、保留的上下文成员及前后用量</td><td>生成并校验压缩结果；保留工具轮次完整性。由 CommandService 提交摘要与上下文位置，历史正文不删除；不反向调用 command。</td></tr>
+<tbody>
+<tr class="group-heading">
+<th colspan="4" scope="rowgroup">agent/service/context</th>
+</tr>
+<tr id="class-ContextService">
+<th scope="row">
+<code>ContextService</code>
+</th>
+<td>Run 状态、项目内容、会话上下文、引用与公开工具</td>
+<td>本轮模型上下文及 Token 估算</td>
+<td>刷新项目来源，按当前模式选择 Chat / Ask / Plan / CreatePromptAssembler；保留 Assistant / Tool 配对与消息顺序。识别压缩需要，压缩后重新组装和估算。</td>
+</tr>
+<tr id="class-PromptAssembler">
+<th scope="row">
+<code>PromptAssembler</code>
+<span class="kind">接口</span>
+</th>
+<td>当前场景需要的提示词模块、业务材料与工具定义</td>
+<td>按场景约定顺序拼装的模型输入材料</td>
+<td>提示词拼装接口，不加 I。由 XxxPromptAssembler 实现各场景的模块选择、材料组织、可选块与拼装顺序；复用公共模板渲染。只拼装，不调用模型、不管理执行状态或持久化。</td>
+</tr>
+<tr id="class-ChatPromptAssembler">
+<th scope="row">
+<code>ChatPromptAssembler</code>
+</th>
+<td>会话历史、当前输入及必要运行上下文</td>
+<td>Chat 模式提示词与消息</td>
+<td>按 ASSEMBLE 的 Chat 顺序拼装公共模块、mode_chat 和上下文，配合该模式允许的工具。</td>
+</tr>
+<tr id="class-AskPromptAssembler">
+<th scope="row">
+<code>AskPromptAssembler</code>
+</th>
+<td>咨询需求、项目上下文、会话历史与引用</td>
+<td>Ask 模式提示词与消息</td>
+<td>按 ASSEMBLE 的 Ask 顺序拼装公共模块、mode_ask 和上下文；提问工具仍由 ToolRegistry 选择。</td>
+</tr>
+<tr id="class-PlanPromptAssembler">
+<th scope="row">
+<code>PlanPromptAssembler</code>
+</th>
+<td>规划需求、项目与计划状态、会话历史</td>
+<td>Plan 模式提示词与消息</td>
+<td>按 ASSEMBLE 的 Plan 顺序拼装公共模块、mode_plan 和上下文；计划执行与审批仍归原服务。</td>
+</tr>
+<tr id="class-CreatePromptAssembler">
+<th scope="row">
+<code>CreatePromptAssembler</code>
+</th>
+<td>创作需求、项目与计划状态、资产及会话上下文</td>
+<td>Create 模式提示词与消息</td>
+<td>按 ASSEMBLE 的 Create 顺序拼装核心、playbook、rule、mode_create、边界提醒与上下文。</td>
+</tr>
+<tr id="class-RenamePromptAssembler">
+<th scope="row">
+<code>RenamePromptAssembler</code>
+</th>
+<td>当前标题、会话历史及命名要求</td>
+<td>命名提示词与所需工具定义</td>
+<td>拼装 command_rename、当前标题、历史和用户要求，附带 rename_thread 输出约束。</td>
+</tr>
+<tr id="class-SuggestPromptAssembler">
+<th scope="row">
+<code>SuggestPromptAssembler</code>
+</th>
+<td>项目与计划状态、会话历史及建议要求</td>
+<td>建议提示词与所需工具定义</td>
+<td>拼装 command_suggest、项目与计划上下文、历史和用户要求，附带 suggest_request 输出约束。</td>
+</tr>
+<tr id="class-PolishPromptAssembler">
+<th scope="row">
+<code>PolishPromptAssembler</code>
+</th>
+<td>用户草稿、上一修订、反馈及当前要求</td>
+<td>润色提示词与所需工具定义</td>
+<td>拼装 command_polish、草稿及修订材料，附带 polish_instruction 输出约束；保持修订材料顺序。</td>
+</tr>
+<tr id="class-HandoffPromptAssembler">
+<th scope="row">
+<code>HandoffPromptAssembler</code>
+</th>
+<td>项目上下文、会话历史、上一修订及反馈</td>
+<td>交接提示词与所需工具定义</td>
+<td>拼装 command_handoff、项目与历史、修订反馈和用户要求，附带 handoff_thread 输出约束。</td>
+</tr>
+<tr id="class-CompactPromptAssembler">
+<th scope="row">
+<code>CompactPromptAssembler</code>
+</th>
+<td>原摘要、待压缩上下文与需要保留的上下文</td>
+<td>压缩提示词与所需工具定义</td>
+<td>拼装 command_compact、previous_summary、compressed_context、retained_context，附带 compact_context 输出约束。</td>
+</tr>
+<tr id="class-CommitPromptAssembler">
+<th scope="row">
+<code>CommitPromptAssembler</code>
+</th>
+<td>Git 状态、变更统计、暂存差异及提交要求</td>
+<td>提交分析提示词与所需工具定义</td>
+<td>拼装 command_commit、文件状态、行数统计、暂存差异和用户要求，附带 git_commit 输出约束；不执行 Git。</td>
+</tr>
+<tr id="class-ReviewPromptAssembler">
+<th scope="row">
+<code>ReviewPromptAssembler</code>
+</th>
+<td>用户需求、审查要求、当前源码及本 Run 差异</td>
+<td>Reviewer 提示词与审查材料</td>
+<td>拼装 reviewer_agent，并按 ASSEMBLE 顺序加入需求、审查要求、当前源码和差异；不执行审查调用。</td>
+</tr>
+<tr id="class-ContextCompactor">
+<th scope="row">
+<code>ContextCompactor</code>
+</th>
+<td>原摘要、待压缩内容、保留内容及压缩模型</td>
+<td>新摘要、保留的上下文成员及前后用量</td>
+<td>由 CompactCommandHandler 调用；使用 CompactPromptAssembler 和 ILlmGateway 生成并校验压缩结果，保留工具轮次完整性。结果返回 CommandService 保存，历史正文不删除；不反向调用 command。</td>
+</tr>
 </tbody>
-<tbody><tr class="group-heading"><th colspan="4" scope="rowgroup">agent/service/tool</th></tr>
-<tr id="class-ToolRegistry"><th scope="row"><code>ToolRegistry</code></th><td>已有工具实现、当前模式、授权及 JEV Prune 结果</td><td>本轮可见工具定义；工具名对应的实现</td><td>集中注册、选择与查找工具；以 ASSEMBLE 的工具集合为上限。工具声明可见性与执行时权限校验分别负责。</td></tr>
-<tr id="class-ToolGuard"><th scope="row"><code>ToolGuard</code></th><td>工具调用、已公开定义、授权、资源基准与审批结果</td><td>允许执行、复用已确认结果，或拒绝原因</td><td>校验工具参数、可见性、模式、目标权限和调用身份；实际应用修改前再次校验基准与审批。按固定顺序直接检查，暂不建责任链框架。</td></tr>
-<tr id="class-ToolExecutor"><th scope="row"><code>ToolExecutor</code></th><td>模型返回的工具调用及当前运行上下文</td><td>有序工具结果、必要的待答状态与修改结果</td><td>调用先记录，再分发到 AgentTool，结果可读后通知。独立只读调用可并行，冲突写入受提交边界约束；可修复工具失败返回模型，持久化不确定等错误终止 Run。</td></tr>
-<tr id="class-AgentTool"><th scope="row"><code>AgentTool</code><span class="kind">接口</span></th><td>已验证的工具参数与当前运行上下文</td><td>工具结果，或候选变更 / 人工交互请求</td><td>统一工具定义与执行契约。这里存在多种真实工具实现，使用接口多态；不为普通 Service 机械增加接口与 Impl。</td></tr>
+<tbody>
+<tr class="group-heading">
+<th colspan="4" scope="rowgroup">agent/service/tool</th>
+</tr>
+<tr id="class-ToolRegistry">
+<th scope="row">
+<code>ToolRegistry</code>
+</th>
+<td>已有工具实现、当前模式、授权及 JEV Prune 结果</td>
+<td>本轮可见工具定义；工具名对应的实现</td>
+<td>集中注册、选择与查找工具；以 ASSEMBLE 的工具集合为上限。工具声明可见性与执行时权限校验分别负责。</td>
+</tr>
+<tr id="class-ToolGuard">
+<th scope="row">
+<code>ToolGuard</code>
+</th>
+<td>工具调用、已公开定义、授权、资源基准与审批结果</td>
+<td>允许执行、复用已确认结果，或拒绝原因</td>
+<td>校验工具参数、可见性、模式、目标权限和调用身份；实际应用修改前再次校验基准与审批。按固定顺序直接检查，暂不建责任链框架。</td>
+</tr>
+<tr id="class-ToolExecutor">
+<th scope="row">
+<code>ToolExecutor</code>
+</th>
+<td>模型返回的工具调用及当前运行上下文</td>
+<td>有序工具结果、必要的待答状态与修改结果</td>
+<td>调用先记录，再分发到 AgentTool，结果可读后通知。独立只读调用可并行，冲突写入受提交边界约束；可修复工具失败返回模型，持久化不确定等错误终止 Run。</td>
+</tr>
+<tr id="class-AgentTool">
+<th scope="row">
+<code>AgentTool</code>
+<span class="kind">接口</span>
+</th>
+<td>已验证的工具参数与当前运行上下文</td>
+<td>工具结果，或候选变更 / 人工交互请求</td>
+<td>统一工具定义与执行契约。这里存在多种真实工具实现，使用接口多态；不为普通 Service 机械增加接口与 Impl。</td>
+</tr>
 </tbody>
-<tbody><tr class="group-heading"><th colspan="4" scope="rowgroup">agent/service/interaction</th></tr>
-<tr id="class-InteractionService"><th scope="row"><code>InteractionService</code></th><td>提问或审批申请；用户答复及当前待答版本</td><td>有效答复、拒绝或关闭结果；同一 Run 的唤醒信号</td><td>统一 question、plan、permission、scope、resource 五类交互。答复只受理一次；计划批准同时更新模式、计划与工具结果；范围变化合并，资料批准应用完整定稿前仍检查基准。</td></tr>
+<tbody>
+<tr class="group-heading">
+<th colspan="4" scope="rowgroup">agent/service/interaction</th>
+</tr>
+<tr id="class-InteractionService">
+<th scope="row">
+<code>InteractionService</code>
+</th>
+<td>提问或审批申请；用户答复及当前待答版本</td>
+<td>有效答复、拒绝或关闭结果；同一 Run 的唤醒信号</td>
+<td>统一 question、plan、permission、scope、resource 五类交互。答复只受理一次；计划批准同时更新模式、计划与工具结果；范围变化合并，资料批准应用完整定稿前仍检查基准。</td>
+</tr>
 </tbody>
-<tbody><tr class="group-heading"><th colspan="4" scope="rowgroup">agent/service/command</th></tr>
-<tr id="class-CommandService"><th scope="row"><code>CommandService</code></th><td>手动命令、修订请求或自动触发；任务上下文</td><td>独立命令执行记录及实际产物</td><td>受理、取消并执行 rename、suggest、polish、handoff、compact、commit。有限的固定类型直接分派；压缩复用 ContextCompactor，提交使用 GitGateway。修订保留每次执行与最近成功产物。</td></tr>
-<tr id="class-CommandTrigger"><th scope="row"><code>CommandTrigger</code></th><td>明确的生命周期时点、行为设置与当前会话状态</td><td>符合条件的 rename / suggest 发起请求，或不触发</td><td>处理自动命名、自动建议的业务条件与去重；可返回最新时不自动发起。由所属服务在明确时点直接调用，不引入通用 Hook 总线。</td></tr>
+<tbody>
+<tr class="group-heading">
+<th colspan="4" scope="rowgroup">agent/service/command</th>
+</tr>
+<tr id="class-CommandService">
+<th scope="row">
+<code>CommandService</code>
+</th>
+<td>手动命令、修订请求，或输入受理 / Run 完成时点；任务上下文、行为设置与会话状态</td>
+<td>受理的命令执行记录与产物，或跳过自动触发</td>
+<td>保持具体类；tryAutoRename / tryAutoSuggest 检查自动命令条件，命名按需通过 JEV 判定。统一处理幂等受理、占用、修订、调度与取消，按类型选择 CommandHandler。接收结果后协调产物、关联变更与终态原子保存，再通知；保留每次执行及最近成功产物。</td>
+</tr>
+<tr id="class-CommandHandler">
+<th scope="row">
+<code>CommandHandler</code>
+<span class="kind">接口</span>
+</th>
+<td>已受理的命令类型、业务上下文与取消信号</td>
+<td>可校验的命令产物、关联变更及外部执行事实</td>
+<td>命令业务执行接口，不加 I。每种命令对应一个 XxxCommandHandler；具体实现负责组装、调用所需能力并校验结果，统一生命周期和命令终态保存交给 CommandService。</td>
+</tr>
+<tr id="class-RenameCommandHandler">
+<th scope="row">
+<code>RenameCommandHandler</code>
+</th>
+<td>命名请求、当前标题、会话历史及取消信号</td>
+<td>校验后的标题与待应用的会话变更</td>
+<td>调用 RenamePromptAssembler 与 ILlmGateway，解析并校验 rename_thread 结果；交由 CommandService 保存并更新标题。</td>
+</tr>
+<tr id="class-SuggestCommandHandler">
+<th scope="row">
+<code>SuggestCommandHandler</code>
+</th>
+<td>建议请求、项目与计划上下文、会话历史及取消信号</td>
+<td>校验后的下一步建议</td>
+<td>调用 SuggestPromptAssembler 与 ILlmGateway，解析并校验 suggest_request 结果；交由 CommandService 保存。</td>
+</tr>
+<tr id="class-PolishCommandHandler">
+<th scope="row">
+<code>PolishCommandHandler</code>
+</th>
+<td>润色请求、原草稿、上一修订、反馈及取消信号</td>
+<td>当前执行生成的润色产物</td>
+<td>调用 PolishPromptAssembler 与 ILlmGateway，解析并校验 polish_instruction 结果；修订记录与最近成功产物由 CommandService 管理。</td>
+</tr>
+<tr id="class-HandoffCommandHandler">
+<th scope="row">
+<code>HandoffCommandHandler</code>
+</th>
+<td>交接请求、项目与会话上下文、修订反馈及取消信号</td>
+<td>交接产物及待应用的关联变更</td>
+<td>调用 HandoffPromptAssembler 与 ILlmGateway，解析并校验 handoff_thread 结果；交接产物及关联会话变更由 CommandService 统一保存。</td>
+</tr>
+<tr id="class-CompactCommandHandler">
+<th scope="row">
+<code>CompactCommandHandler</code>
+</th>
+<td>压缩请求、当前摘要、会话上下文及取消信号</td>
+<td>压缩产物与待调整的上下文位置</td>
+<td>委托 ContextCompactor 完成压缩；将结果交还 CommandService，保证摘要、上下文位置与命令终态同事务提交。</td>
+</tr>
+<tr id="class-CommitCommandHandler">
+<th scope="row">
+<code>CommitCommandHandler</code>
+</th>
+<td>提交请求、项目 Git 状态、用户要求及取消信号</td>
+<td>已确认的 Git 提交事实或明确失败</td>
+<td>通过 IGitGateway 获取状态、暂存及差异，调用 CommitPromptAssembler 与 ILlmGateway 分析并生成提交意图，再由 IGitGateway 提交和核实。已确认提交不因随后取消而改记失败。</td>
+</tr>
 </tbody>
-<tbody><tr class="group-heading"><th colspan="4" scope="rowgroup">agent/service/session</th></tr>
-<tr id="class-SessionService"><th scope="row"><code>SessionService</code></th><td>会话管理请求或执行引起的会话状态变更</td><td>会话信息、状态及一致版本</td><td>管理会话创建、改名、删除、当前计划与状态查询。删除协调停止本会话活动；会话占用规则由原子持久化操作最终保证。</td></tr>
+<tbody>
+<tr class="group-heading">
+<th colspan="4" scope="rowgroup">agent/service/session</th>
+</tr>
+<tr id="class-SessionService">
+<th scope="row">
+<code>SessionService</code>
+</th>
+<td>会话管理请求或执行引起的会话状态变更</td>
+<td>会话信息、状态及一致版本</td>
+<td>管理会话创建、改名、删除、当前计划与状态查询。删除协调停止本会话活动；会话占用规则由原子持久化操作最终保证。</td>
+</tr>
 </tbody>
-<tbody><tr class="group-heading"><th colspan="4" scope="rowgroup">agent/service/history</th></tr>
-<tr id="class-HistoryService"><th scope="row"><code>HistoryService</code></th><td>历史游标、Run / 命令 / 工具定位信息</td><td>历史分组、执行详情与已保存差异</td><td>按 API 聚合可公开历史，过滤供应商原生数据和内部提示；失败工具结果仍可持久化，展示设置不改变事实。</td></tr>
-<tr id="class-CheckpointService"><th scope="row"><code>CheckpointService</code></th><td>新 Run 的起始状态，或回退 / 返回请求与预览版本</td><td>起始快照、可用回退目标，或历史恢复结果</td><td>创建 Run 前的一致基准；管理回退、返回最新与分支确认。共享文件修改使其他会话检查点失效；恢复只影响目标会话及其可恢复文件。</td></tr>
+<tbody>
+<tr class="group-heading">
+<th colspan="4" scope="rowgroup">agent/service/history</th>
+</tr>
+<tr id="class-HistoryService">
+<th scope="row">
+<code>HistoryService</code>
+</th>
+<td>历史游标、Run / 命令 / 工具定位信息</td>
+<td>历史分组、执行详情与已保存差异</td>
+<td>按 API 聚合可公开历史，过滤供应商原生数据和内部提示；失败工具结果仍可持久化，展示设置不改变事实。</td>
+</tr>
+<tr id="class-CheckpointService">
+<th scope="row">
+<code>CheckpointService</code>
+</th>
+<td>新 Run 的起始状态，或回退 / 返回请求与预览版本</td>
+<td>起始快照、可用回退目标，或历史恢复结果</td>
+<td>创建 Run 前的一致基准；管理回退、返回最新与分支确认。共享文件修改使其他会话检查点失效；恢复只影响目标会话及其可恢复文件。</td>
+</tr>
 </tbody>
-<tbody><tr class="group-heading"><th colspan="4" scope="rowgroup">agent/service/tool · AgentTool 实现</th></tr>
-<tr id="class-ReadResourceTool"><th scope="row"><code>ReadResourceTool</code></th><td>资源目标及读取要求</td><td>资源内容、版本基准与可用观察结果</td><td>实现 read_resource；读取项目资料、结构、规格或 HTML，并记录后续修改所依赖的内容基准。</td></tr>
-<tr id="class-ReadImageTool"><th scope="row"><code>ReadImageTool</code></th><td>允许访问的图片引用</td><td>图片内容及必要描述</td><td>实现 read_image；解析项目附件或工具截图，校验归属与存在性，供模型理解图片。</td></tr>
-<tr id="class-AssetLoadTool"><th scope="row"><code>AssetLoadTool</code></th><td>技能或组件的稳定资产标识</td><td>资产正文与更新后的活动资产集合</td><td>共用实现 load_skill、load_component；通过 AssetService 读取数据库正文，再加入本 Run 上下文。</td></tr>
-<tr id="class-ResourceEditTool"><th scope="row"><code>ResourceEditTool</code></th><td>资源种类、字段更新或正文修改意图，以及已读基准</td><td>完整候选文档、审批请求或实际修改结果</td><td>共用实现 edit_meta、edit_constraints、edit_outline、edit_spec、edit_html。委托项目领域校验与提交；按设置审批资料修改；不使用 JSON Patch。</td></tr>
-<tr id="class-RunCommandTool"><th scope="row"><code>RunCommandTool</code></th><td>模型提出的命令、工作目录与已授权能力</td><td>进程输出、候选文件变更及最终执行结果</td><td>实现 run_command；调用命令 worker，在沙箱准备结果。需审批时先展示命令与候选变更；批准仅作用于该候选，主项目写入走统一提交边界。</td></tr>
-<tr id="class-RenderSlideTool"><th scope="row"><code>RenderSlideTool</code></th><td>幻灯片及当前渲染输入；可选评分要求</td><td>截图、版面检查与可选评分结果</td><td>实现 render_slide；调用渲染 worker，按最新综合输入基准更新截图索引。可选评分调用 JEV，结果及复用基准存入 tool_result。</td></tr>
-<tr id="class-ReviewPptTool"><th scope="row"><code>ReviewPptTool</code></th><td>当前需求、项目源码及本 Run 的实际修改</td><td>内容审查结论与可执行改进意见</td><td>实现 review_ppt；按 Reviewer 提示词调用模型，起始基准复用检查点。审查结果返回主 Loop，由主 Loop 决定后续行动。</td></tr>
-<tr id="class-AskUserTool"><th scope="row"><code>AskUserTool</code></th><td>待澄清问题与可选答案</td><td>用户选择、自填内容或跳过结果</td><td>实现 ask_user；由 InteractionService 创建待答项，答复后继续原 Run。</td></tr>
-<tr id="class-CreatePlanTool"><th scope="row"><code>CreatePlanTool</code></th><td>规划模式下的完整计划提案</td><td>计划审批结果及生效后的计划 / 模式</td><td>实现 create_plan；批准后同一 Run 从 plan 转为 create，拒绝后继续规划，不覆盖已有生效计划。</td></tr>
-<tr id="class-UpdatePlanTool"><th scope="row"><code>UpdatePlanTool</code></th><td>执行中的计划步骤更新</td><td>更新后的生效计划</td><td>实现 update_plan；经 SessionService 更新计划，校验步骤状态与同时最多一个 processing。</td></tr>
-<tr id="class-RequestPrivilegeTool"><th scope="row"><code>RequestPrivilegeTool</code></th><td>当前范围之外的目标及申请理由</td><td>范围批准、拒绝或被追加授权满足的结果</td><td>实现 request_privilege；创建 scope 交互，与期间新增授权合并；剩余申请变化时更新待答版本。</td></tr>
+<tbody>
+<tr class="group-heading">
+<th colspan="4" scope="rowgroup">agent/service/tool · AgentTool 实现</th>
+</tr>
+<tr id="class-ReadResourceTool">
+<th scope="row">
+<code>ReadResourceTool</code>
+</th>
+<td>资源目标及读取要求</td>
+<td>资源内容、版本基准与可用观察结果</td>
+<td>实现 read_resource；读取项目资料、结构、规格或 HTML，并记录后续修改所依赖的内容基准。</td>
+</tr>
+<tr id="class-ReadImageTool">
+<th scope="row">
+<code>ReadImageTool</code>
+</th>
+<td>允许访问的图片引用</td>
+<td>图片内容及必要描述</td>
+<td>实现 read_image；解析项目附件或工具截图，校验归属与存在性，供模型理解图片。</td>
+</tr>
+<tr id="class-AssetLoadTool">
+<th scope="row">
+<code>AssetLoadTool</code>
+</th>
+<td>技能或组件的稳定资产标识</td>
+<td>资产正文与更新后的活动资产集合</td>
+<td>共用实现 load_skill、load_component；通过 AssetService 读取数据库正文，再加入本 Run 上下文。</td>
+</tr>
+<tr id="class-ResourceEditTool">
+<th scope="row">
+<code>ResourceEditTool</code>
+</th>
+<td>资源种类、字段更新或正文修改意图，以及已读基准</td>
+<td>完整候选文档、审批请求或实际修改结果</td>
+<td>共用实现 edit_meta、edit_constraints、edit_outline、edit_spec、edit_html。委托项目领域校验与提交；按设置审批资料修改；不使用 JSON Patch。</td>
+</tr>
+<tr id="class-RunCommandTool">
+<th scope="row">
+<code>RunCommandTool</code>
+</th>
+<td>模型提出的命令、工作目录与已授权能力</td>
+<td>进程输出、候选文件变更及最终执行结果</td>
+<td>实现 run_command；调用命令 worker，在沙箱准备结果。需审批时先展示命令与候选变更；批准仅作用于该候选，主项目写入走统一提交边界。</td>
+</tr>
+<tr id="class-RenderSlideTool">
+<th scope="row">
+<code>RenderSlideTool</code>
+</th>
+<td>幻灯片及当前渲染输入；可选评分要求</td>
+<td>截图、版面检查与可选评分结果</td>
+<td>实现 render_slide；调用渲染 worker，按最新综合输入基准更新截图索引。可选评分调用 JEV，结果及复用基准存入 tool_result。</td>
+</tr>
+<tr id="class-ReviewPptTool">
+<th scope="row">
+<code>ReviewPptTool</code>
+</th>
+<td>当前需求、项目源码及本 Run 的实际修改</td>
+<td>内容审查结论与可执行改进意见</td>
+<td>实现 review_ppt；通过 ReviewPromptAssembler 组装后调用 ILlmGateway，起始基准复用检查点。审查结果返回主 Loop，由主 Loop 决定后续行动。</td>
+</tr>
+<tr id="class-AskUserTool">
+<th scope="row">
+<code>AskUserTool</code>
+</th>
+<td>待澄清问题与可选答案</td>
+<td>用户选择、自填内容或跳过结果</td>
+<td>实现 ask_user；由 InteractionService 创建待答项，答复后继续原 Run。</td>
+</tr>
+<tr id="class-CreatePlanTool">
+<th scope="row">
+<code>CreatePlanTool</code>
+</th>
+<td>规划模式下的完整计划提案</td>
+<td>计划审批结果及生效后的计划 / 模式</td>
+<td>实现 create_plan；批准后同一 Run 从 plan 转为 create，拒绝后继续规划，不覆盖已有生效计划。</td>
+</tr>
+<tr id="class-UpdatePlanTool">
+<th scope="row">
+<code>UpdatePlanTool</code>
+</th>
+<td>执行中的计划步骤更新</td>
+<td>更新后的生效计划</td>
+<td>实现 update_plan；经 SessionService 更新计划，校验步骤状态与同时最多一个 processing。</td>
+</tr>
+<tr id="class-RequestPrivilegeTool">
+<th scope="row">
+<code>RequestPrivilegeTool</code>
+</th>
+<td>当前范围之外的目标及申请理由</td>
+<td>范围批准、拒绝或被追加授权满足的结果</td>
+<td>实现 request_privilege；创建 scope 交互，与期间新增授权合并；剩余申请变化时更新待答版本。</td>
+</tr>
 </tbody>
-<tbody><tr class="group-heading"><th colspan="4" scope="rowgroup">interfaces/controller · 接入边界</th></tr>
-<tr id="class-ExecutionController"><th scope="row"><code>ExecutionController</code></th><td>发送指令、发起命令及取消的 HTTP 请求</td><td>受理 ID 或空成功响应</td><td>负责 DTO 校验与领域输入转换，调用 RunService / CommandService；不承载 Loop 或业务编排。</td></tr>
-<tr id="class-InteractionController"><th scope="row"><code>InteractionController</code></th><td>待答读取或人工答复 HTTP 请求</td><td>公开待答表单或空成功响应</td><td>调用 InteractionService；空响应仅表示答复已受理，实际工具结果仍从详情读取。</td></tr>
-<tr id="class-SessionController"><th scope="row"><code>SessionController</code></th><td>会话列表、状态或管理 HTTP 请求</td><td>会话 VO 或管理结果</td><td>调用 SessionService；公开字段遵循会话接口契约。</td></tr>
-<tr id="class-HistoryController"><th scope="row"><code>HistoryController</code></th><td>历史 / 详情查询或会话订阅请求</td><td>历史 VO、详情 VO 或 SSE 连接</td><td>查询交给 HistoryService；订阅交给 SessionSsePublisher。</td></tr>
-<tr id="class-CheckpointController"><th scope="row"><code>CheckpointController</code></th><td>检查点列表、预览、回退或返回请求</td><td>检查点信息、预览或恢复结果</td><td>调用 CheckpointService，保留预览版本与分支确认约束。</td></tr>
+<tbody>
+<tr class="group-heading">
+<th colspan="4" scope="rowgroup">interfaces/controller · 接入边界</th>
+</tr>
+<tr id="class-ExecutionController">
+<th scope="row">
+<code>ExecutionController</code>
+</th>
+<td>发送指令、发起命令及取消的 HTTP 请求</td>
+<td>受理 ID 或空成功响应</td>
+<td>负责 DTO 校验与领域输入转换，调用 RunService / CommandService；不承载 Loop 或业务编排。</td>
+</tr>
+<tr id="class-InteractionController">
+<th scope="row">
+<code>InteractionController</code>
+</th>
+<td>待答读取或人工答复 HTTP 请求</td>
+<td>公开待答表单或空成功响应</td>
+<td>调用 InteractionService；空响应仅表示答复已受理，实际工具结果仍从详情读取。</td>
+</tr>
+<tr id="class-SessionController">
+<th scope="row">
+<code>SessionController</code>
+</th>
+<td>会话列表、状态或管理 HTTP 请求</td>
+<td>会话 VO 或管理结果</td>
+<td>调用 SessionService；公开字段遵循会话接口契约。</td>
+</tr>
+<tr id="class-HistoryController">
+<th scope="row">
+<code>HistoryController</code>
+</th>
+<td>历史 / 详情查询或会话订阅请求</td>
+<td>历史 VO、详情 VO 或 SSE 连接</td>
+<td>查询交给 HistoryService；订阅交给 SseEventPublisher。</td>
+</tr>
+<tr id="class-CheckpointController">
+<th scope="row">
+<code>CheckpointController</code>
+</th>
+<td>检查点列表、预览、回退或返回请求</td>
+<td>检查点信息、预览或恢复结果</td>
+<td>调用 CheckpointService，保留预览版本与分支确认约束。</td>
+</tr>
 </tbody>
-<tbody><tr class="group-heading"><th colspan="4" scope="rowgroup">相邻领域 · 调用边界</th></tr>
-<tr id="class-ProjectContentService"><th scope="row"><code>ProjectContentService</code></th><td>资源读取、候选修改、渲染结果或遗留事务</td><td>合法候选、实际提交结果或一致的项目内容</td><td>归 domain/project/service；统一资源规则、Schema / 引用校验、内容基准和文件提交。工具与人工保存复用；批准前候选不覆盖主项目，实际变更协调检查点失效。</td></tr>
-<tr id="class-AssetService"><th scope="row"><code>AssetService</code></th><td>资产标识与使用场景</td><td>可用技能、组件或主题内容</td><td>归 domain/asset/service；数据库是资产正文来源，统一存在性、类型与禁用校验。</td></tr>
-<tr id="class-SettingService"><th scope="row"><code>SettingService</code></th><td>模型选择与所需行为设置</td><td>已校验的模型 / 路由与行为配置</td><td>归 domain/setting/service；Run 开始时读取并固定所用配置，后续全局修改不改变正在执行的 Run。</td></tr>
+<tbody>
+<tr class="group-heading">
+<th colspan="4" scope="rowgroup">相邻领域 · 调用边界</th>
+</tr>
+<tr id="class-ProjectContentService">
+<th scope="row">
+<code>ProjectContentService</code>
+</th>
+<td>资源读取、候选修改、渲染结果或遗留事务</td>
+<td>合法候选、实际提交结果或一致的项目内容</td>
+<td>归 domain/project/service；统一资源规则、Schema / 引用校验、内容基准和文件提交。工具与人工保存复用；批准前候选不覆盖主项目，实际变更协调检查点失效。</td>
+</tr>
+<tr id="class-AssetService">
+<th scope="row">
+<code>AssetService</code>
+</th>
+<td>资产标识与使用场景</td>
+<td>可用技能、组件或主题内容</td>
+<td>归 domain/asset/service；数据库是资产正文来源，统一存在性、类型与禁用校验。</td>
+</tr>
+<tr id="class-SettingService">
+<th scope="row">
+<code>SettingService</code>
+</th>
+<td>模型选择与所需行为设置</td>
+<td>已校验的模型 / 路由与行为配置</td>
+<td>归 domain/setting/service；Run 开始时读取并固定所用配置，后续全局修改不改变正在执行的 Run。</td>
+</tr>
 </tbody>
-<tbody><tr class="group-heading"><th colspan="4" scope="rowgroup">domain · repository 边界接口</th></tr>
-<tr id="class-RunRepository"><th scope="row"><code>RunRepository</code><span class="kind">接口</span></th><td>Run 受理、输入处理、模型 / 工具消息或收尾业务变更</td><td>持久结果、消息或一致快照</td><td>负责 Run 相关复合提交与查询：起始快照、首条输入、凭据一起受理；完成结果与终态一起保存；输入移交保留身份与序号。不是逐表 CRUD 包装。</td></tr>
-<tr id="class-SessionRepository"><th scope="row"><code>SessionRepository</code><span class="kind">接口</span></th><td>会话信息、计划或上下文成员的读写需求</td><td>会话数据及对应 revision</td><td>保存和读取会话业务状态。受影响数据与版本在同一事务处理，跨实体业务提交通过仓储实现协调，不能单独先递增版本。</td></tr>
-<tr id="class-CommandRepository"><th scope="row"><code>CommandRepository</code><span class="kind">接口</span></th><td>命令受理、修订、取消或完成业务变更</td><td>单次命令记录、成功产物与执行状态</td><td>保证受理幂等、同操作占用与命令终态；命令产物及关联会话状态一并提交。compact 的摘要写入、上下文位置调整与 done 同事务保存。</td></tr>
-<tr id="class-CheckpointRepository"><th scope="row"><code>CheckpointRepository</code><span class="kind">接口</span></th><td>一致快照、检查点查询或历史恢复集合</td><td>检查点、恢复基准或恢复后的会话数据</td><td>归 agent/repository；支持普通 / 返回快照、分支清理和受影响会话版本更新；不保存周期性 Loop 运行快照。</td></tr>
-<tr id="class-ProjectContentRepository"><th scope="row"><code>ProjectContentRepository</code><span class="kind">接口</span></th><td>带基准和归属的候选文件集合、提交标识或恢复请求</td><td>一致读取或可确认的文件提交结果</td><td>归 project/repository；基础设施实现组合文件系统与数据库。使用本次修改事务记录、成功凭据和启动清理协调提交，避免把文件系统当作数据库事务的一部分。</td></tr>
+<tbody>
+<tr class="group-heading">
+<th colspan="4" scope="rowgroup">domain · repository 边界接口</th>
+</tr>
+<tr id="class-IRunRepository">
+<th scope="row">
+<code>IRunRepository</code>
+<span class="kind">接口</span>
+</th>
+<td>Run 受理、输入处理、模型 / 工具消息或收尾业务变更</td>
+<td>持久结果、消息或一致快照</td>
+<td>由 <code>infrastructure/repository/RunRepository</code> 实现。负责 Run 相关复合提交与查询：起始快照、首条输入、凭据一起受理；完成结果与终态一起保存；输入移交保留身份与序号。不是逐表 CRUD 包装。</td>
+</tr>
+<tr id="class-ISessionRepository">
+<th scope="row">
+<code>ISessionRepository</code>
+<span class="kind">接口</span>
+</th>
+<td>会话信息、计划或上下文成员的读写需求</td>
+<td>会话数据及对应 revision</td>
+<td>由 <code>infrastructure/repository/SessionRepository</code> 实现。保存和读取会话业务状态。受影响数据与版本在同一事务处理，跨实体业务提交通过仓储实现协调，不能单独先递增版本。</td>
+</tr>
+<tr id="class-ICommandRepository">
+<th scope="row">
+<code>ICommandRepository</code>
+<span class="kind">接口</span>
+</th>
+<td>命令受理、修订、取消或完成业务变更</td>
+<td>单次命令记录、成功产物与执行状态</td>
+<td>由 <code>infrastructure/repository/CommandRepository</code> 实现。保证受理幂等、同操作占用与命令终态；命令产物及关联会话状态一并提交。compact 的摘要写入、上下文位置调整与 done 同事务保存。</td>
+</tr>
+<tr id="class-ICheckpointRepository">
+<th scope="row">
+<code>ICheckpointRepository</code>
+<span class="kind">接口</span>
+</th>
+<td>一致快照、检查点查询或历史恢复集合</td>
+<td>检查点、恢复基准或恢复后的会话数据</td>
+<td>由 <code>infrastructure/repository/CheckpointRepository</code> 实现。归 agent/repository；支持普通 / 返回快照、分支清理和受影响会话版本更新；不保存周期性 Loop 运行快照。</td>
+</tr>
+<tr id="class-IProjectContentRepository">
+<th scope="row">
+<code>IProjectContentRepository</code>
+<span class="kind">接口</span>
+</th>
+<td>带基准和归属的候选文件集合、提交标识或恢复请求</td>
+<td>一致读取或可确认的文件提交结果</td>
+<td>由 <code>infrastructure/repository/ProjectContentRepository</code> 实现。归 project/repository；基础设施实现组合文件系统与数据库。使用本次修改事务记录、成功凭据和启动清理协调提交，避免把文件系统当作数据库事务的一部分。</td>
+</tr>
 </tbody>
-<tbody><tr class="group-heading"><th colspan="4" scope="rowgroup">domain/agent/gateway · 外部能力接口</th></tr>
-<tr id="class-LlmGateway"><th scope="row"><code>LlmGateway</code><span class="kind">接口</span></th><td>已组装上下文、工具定义、模型配置及取消信号</td><td>文本 / 推理 / 工具请求、用量与必要原生回传数据</td><td>抽象一次模型请求。业务层只依赖领域类型，不暴露 Spring AI / SDK 类型；不在 gateway 内循环执行工具。</td></tr>
-<tr id="class-JevGateway"><th scope="row"><code>JevGateway</code><span class="kind">接口</span></th><td>判定任务与对应内容</td><td>Intent、Prune、Rename 或 Preview 判定结果</td><td>封装 JEV 能力调用；业务上何时调用及如何使用判定仍由 input、tool、command 负责。</td></tr>
-<tr id="class-CommandGateway"><th scope="row"><code>CommandGateway</code><span class="kind">接口</span></th><td>允许的命令、沙箱参数与取消信号</td><td>退出结果、输出及沙箱文件候选</td><td>对接 command-worker；执行与超时、取消、输出限制属于基础设施，是否允许应用结果由领域决定。</td></tr>
-<tr id="class-RenderGateway"><th scope="row"><code>RenderGateway</code><span class="kind">接口</span></th><td>固定的完整渲染输入与取消信号</td><td>截图及必要版面检查结果</td><td>对接 render-worker；不负责主 Loop、批准或会话历史。</td></tr>
-<tr id="class-GitGateway"><th scope="row"><code>GitGateway</code><span class="kind">接口</span></th><td>项目 Git 操作及确定的提交意图</td><td>状态 / 差异或已确认的提交结果</td><td>执行 Git 能力；项目互斥和命令生命周期由 CommandService 协调。无法确认的提交结果不能假定成功或重复执行。</td></tr>
-<tr id="class-SessionEventPublisher"><th scope="row"><code>SessionEventPublisher</code><span class="kind">接口</span></th><td>已可读取的业务变化，或瞬时进度 / 待答变化</td><td>面向会话订阅者的通知</td><td>领域侧事件出口；持久变化提交成功后发送 changed，进度与待答通知按实际状态发送。通知只负责促使前端读取，不承担持久历史。</td></tr>
+<tbody>
+<tr class="group-heading">
+<th colspan="4" scope="rowgroup">domain/agent/gateway · 外部能力接口</th>
+</tr>
+<tr id="class-ILlmGateway">
+<th scope="row">
+<code>ILlmGateway</code>
+<span class="kind">接口</span>
+</th>
+<td>已组装上下文、工具定义、模型配置及取消信号</td>
+<td>文本 / 推理 / 工具请求、用量与必要原生回传数据</td>
+<td>由 <code>infrastructure/llm/LlmGateway</code> 实现。抽象一次模型请求。业务层只依赖领域类型，不暴露 Spring AI / SDK 类型；不在 gateway 内循环执行工具。</td>
+</tr>
+<tr id="class-IJevGateway">
+<th scope="row">
+<code>IJevGateway</code>
+<span class="kind">接口</span>
+</th>
+<td>判定任务与对应内容</td>
+<td>Intent、Prune、Rename 或 Preview 判定结果</td>
+<td>由 <code>infrastructure/jev/JevGateway</code> 实现。封装 JEV 能力调用；业务上何时调用及如何使用判定仍由 input、tool、command 负责。</td>
+</tr>
+<tr id="class-IBashGateway">
+<th scope="row">
+<code>IBashGateway</code>
+<span class="kind">接口</span>
+</th>
+<td>允许的 Bash 命令、沙箱参数与取消信号</td>
+<td>退出结果、输出及沙箱文件候选</td>
+<td>由 <code>infrastructure/worker/BashGateway</code> 实现。对接 command-worker；执行与超时、取消、输出限制属于基础设施，是否允许应用结果由领域决定。</td>
+</tr>
+<tr id="class-IRenderGateway">
+<th scope="row">
+<code>IRenderGateway</code>
+<span class="kind">接口</span>
+</th>
+<td>固定的完整渲染输入与取消信号</td>
+<td>截图及必要版面检查结果</td>
+<td>由 <code>infrastructure/worker/RenderGateway</code> 实现。对接 render-worker；不负责主 Loop、批准或会话历史。</td>
+</tr>
+<tr id="class-IGitGateway">
+<th scope="row">
+<code>IGitGateway</code>
+<span class="kind">接口</span>
+</th>
+<td>项目 Git 操作及确定的提交意图</td>
+<td>状态 / 差异或已确认的提交结果</td>
+<td>由 <code>infrastructure/git/GitGateway</code> 实现。执行 Git 能力；项目互斥和命令生命周期由 CommandService 协调。无法确认的提交结果不能假定成功或重复执行。</td>
+</tr>
+<tr id="class-EventPublisher">
+<th scope="row">
+<code>EventPublisher</code>
+<span class="kind">接口</span>
+</th>
+<td>已可读取的业务变化，或瞬时进度 / 待答变化</td>
+<td>面向会话订阅者的通知</td>
+<td>位于 domain/agent/gateway，由 interfaces/sse/SseEventPublisher 实现。持久变化提交成功后发送 changed，进度与待答通知按实际状态发送；通知不承担持久历史。</td>
+</tr>
 </tbody>
-<tbody><tr class="group-heading"><th colspan="4" scope="rowgroup">interfaces/sse · 通知实现</th></tr>
-<tr id="class-SessionSsePublisher"><th scope="row"><code>SessionSsePublisher</code></th><td>会话订阅与 SessionEventPublisher 通知</td><td>SSE changed / reset / 进度 / 交互消息</td><td>实现会话通知出口并管理连接。断线不取消 Run；不提供历史事件补放，重连或 reset 后按 API 重新读取。</td></tr>
+<tbody>
+<tr class="group-heading">
+<th colspan="4" scope="rowgroup">interfaces/sse · 通知实现</th>
+</tr>
+<tr id="class-SseEventPublisher">
+<th scope="row">
+<code>SseEventPublisher</code>
+</th>
+<td>会话订阅与 EventPublisher 通知</td>
+<td>SSE changed / reset / 进度 / 交互消息</td>
+<td>实现 EventPublisher，由 bootstrap 装配到领域服务。管理 SSE 连接并按会话发送通知；断线不取消 Run，不提供历史事件补放，重连或 reset 后按 API 重新读取。</td>
+</tr>
 </tbody>
-<tbody><tr class="group-heading"><th colspan="4" scope="rowgroup">infrastructure/llm · 模型实现</th></tr>
-<tr id="class-SpringAiLlmGateway"><th scope="row"><code>SpringAiLlmGateway</code></th><td>领域模型请求及固定的协议 / 路由配置</td><td>转换后的领域模型响应或可识别错误</td><td>实现 LlmGateway，以 Spring AI 适配 OpenAI / Anthropic；关闭框架自动工具执行。处理有限重试、模型切换、取消与原生协议转换，切换后按目标协议重建请求。</td></tr>
-</tbody></table></div></div></details>
-<footer class="source-footer" aria-label="设计依据"><span>设计依据</span><a href="STRUCTURE.html">目录与职责边界</a><a href="API.html">接口与执行规则</a><a href="DATABASE.html">持久化与一致性</a><a href="ASSEMBLE.html">提示词与工具集合</a><a href="https://docs.spring.io/spring-ai/reference/api/tools.html">Spring AI 工具调用边界</a></footer>
-</main><script>
+<tbody>
+<tr class="group-heading">
+<th colspan="4" scope="rowgroup">infrastructure/llm · 模型实现</th>
+</tr>
+<tr id="class-LlmGateway">
+<th scope="row">
+<code>LlmGateway</code>
+</th>
+<td>领域模型请求及固定的协议 / 路由配置</td>
+<td>转换后的领域模型响应或可识别错误</td>
+<td>实现 ILlmGateway，以 Spring AI 适配 OpenAI / Anthropic；关闭框架自动工具执行。处理有限重试、模型切换、取消与原生协议转换，切换后按目标协议重建请求。</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</details>
+</main>
+<script>
 (function () {
   'use strict';
   const key = 'ppt-agent:workflow:v1:' + location.pathname;
@@ -274,14 +1934,23 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
     const summary = panel.querySelector('summary');
     summary.setAttribute('aria-expanded', String(panel.open));
   }
+  function position() {
+    return {
+      path: location.pathname,
+      y: window.scrollY,
+      hash: location.hash,
+      panels: Object.fromEntries(panels.map(function (p) { return [p.id, p.open]; })),
+      scrolls: Object.fromEntries(scrolls.map(function (s) { return [s.dataset.scrollId, s.scrollLeft]; }))
+    };
+  }
+  function remember() {
+    const current = position();
+    history.replaceState(Object.assign({}, history.state, {workflowPosition: current}), '', location.href);
+    return current;
+  }
   function save() {
     try {
-      sessionStorage.setItem(key, JSON.stringify({
-        y: window.scrollY,
-        hash: location.hash,
-        panels: Object.fromEntries(panels.map(function (p) { return [p.id, p.open]; })),
-        scrolls: Object.fromEntries(scrolls.map(function (s) { return [s.dataset.scrollId, s.scrollLeft]; }))
-      }));
+      sessionStorage.setItem(key, JSON.stringify(remember()));
     } catch (_) {}
   }
   function reveal(target) {
@@ -295,6 +1964,30 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
     try { return location.hash ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null; }
     catch (_) { return null; }
   }
+  function savedPosition() {
+    const current = history.state && history.state.workflowPosition;
+    return current && current.path === location.pathname && current.hash === location.hash ? current : null;
+  }
+  let restoreVersion = 0;
+  let restoring = false;
+  function restore(current) {
+    const version = ++restoreVersion;
+    restoring = true;
+    panels.forEach(function (panel) {
+      if (current && current.panels && typeof current.panels[panel.id] === 'boolean') panel.open = current.panels[panel.id];
+      updateExpanded(panel);
+    });
+    const target = targetFromHash();
+    if (!current && target) reveal(target);
+    requestAnimationFrame(function () {
+      if (version !== restoreVersion) return;
+      if (current && current.scrolls) scrolls.forEach(function (s) { s.scrollLeft = Number(current.scrolls[s.dataset.scrollId]) || 0; });
+      if (current) window.scrollTo(0, Number(current.y) || 0);
+      else if (target) target.scrollIntoView({block: 'start'});
+      restoring = false;
+      remember();
+    });
+  }
   let state = null;
   try { state = JSON.parse(sessionStorage.getItem(key) || 'null'); } catch (_) {}
   try { history.scrollRestoration = 'manual'; } catch (_) {}
@@ -304,24 +1997,27 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
     panel.addEventListener('toggle', function () { updateExpanded(panel); });
   });
   document.addEventListener('click', function (event) {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     const link = event.target.closest('a[href^="#"]');
-    if (!link) return;
+    if (!link || link.hasAttribute('download') || (link.target && link.target !== '_self')) return;
     const target = document.getElementById(link.getAttribute('href').slice(1));
-    if (target) reveal(target);
+    if (!target) return;
+    event.preventDefault();
+    ++restoreVersion;
+    restoring = false;
+    remember();
+    if (location.hash !== link.getAttribute('href')) history.pushState(null, '', link.getAttribute('href'));
+    reveal(target);
+    target.scrollIntoView({block: 'start'});
+    remember();
+  });
+  window.addEventListener('popstate', function () {
+    restore(savedPosition());
   });
   window.addEventListener('hashchange', function () {
-    const target = targetFromHash();
-    if (target) { reveal(target); target.scrollIntoView({block: 'start'}); }
+    restore(savedPosition());
   });
-  requestAnimationFrame(function () {
-    if (state && state.scrolls) scrolls.forEach(function (s) { s.scrollLeft = Number(state.scrolls[s.dataset.scrollId]) || 0; });
-    const target = targetFromHash();
-    if (target) reveal(target);
-    requestAnimationFrame(function () {
-      if (state && state.hash === location.hash) window.scrollTo(0, Number(state.y) || 0);
-      else if (target) target.scrollIntoView({block: 'start'});
-    });
-  });
+  restore(savedPosition() || (state && state.hash === location.hash ? state : null));
   window.addEventListener('pagehide', save);
   let printing = false;
   let printState = null;
@@ -335,9 +2031,11 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
     printing = false;
   });
   setInterval(function () {
-    if (printing || document.hidden) return;
+    if (printing || restoring || document.hidden) return;
     save();
     location.reload();
   }, 5000);
 }());
-</script></body></html>
+</script>
+</body>
+</html>

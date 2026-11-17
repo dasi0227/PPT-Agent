@@ -116,6 +116,10 @@
          领域 model 下按 entity、enumeration 分包，分别存放业务实体与枚举；enum 是 Java 关键字，不能作为包名。
          值对象及业务输入与结果按需放在 model 下，暂不增加其他分包。
          仓储接口位于 domain，仓储实现位于 infrastructure/repository，可组合数据库与文件系统。
+         Repository 和以 Gateway 命名的领域接口统一加 I 前缀，如 IRunRepository、ILlmGateway、IBashGateway；单实现去掉 I，不加 Impl，多个实现按具体实现特征区分。
+         Bash 执行接口 IBashGateway 位于 domain/agent/gateway，单实现 BashGateway 位于 infrastructure/worker，对接 command-worker；CommandService 仍负责产品旁路命令。
+         AgentTool 接口保持无 I 前缀，位于 domain/agent/service/tool；具体工具实现按各自职责命名。
+         EventPublisher 接口保持无 I 前缀，位于 domain/agent/gateway；SseEventPublisher 实现位于 interfaces/sse，由 bootstrap 装配，domain 不依赖 SSE 类型。
          domain 不依赖 interfaces 或 infrastructure；interfaces 不引用 PO，infrastructure 不引用 HTTP DTO、VO。
          infrastructure 至少保留 properties、repository、persistence、filesystem、llm、jev、git、platform、worker。
          properties 当前只设置 JevProperties 与 SandboxProperties，不设置 LlmClientProperties；配置绑定的启用与组件装配仍归 bootstrap/configuration。
@@ -126,7 +130,11 @@
          context 负责提示词与上下文组装、Token 估算及压缩内容处理；tool 负责工具注册与选择、执行前检查、调用去重、执行分发及结果处理。
          interaction 负责提问、审批、答复与候选版本校验、等待唤醒；session 负责会话管理与会话级业务状态；history 负责历史查询、检查点、回退与返回最新。
          command 负责改名、建议、润色、交接、压缩、提交等旁路命令的受理、执行、修订与取消，以及自动命名、自动建议的触发条件。
-         自动压缩由 run 协调，复用 command 的执行记录和 context 的压缩能力；context 不反向调用 command。
+         CommandService 保持具体类，负责自动触发条件并协调公共生命周期；CommandHandler 是无 I 前缀的接口，具体实现按 XxxCommandHandler 命名并放在 command 包。
+         输入受理后调用 CommandService.tryAutoRename，Run 完成收尾后调用 CommandService.tryAutoSuggest；自动入口检查开关、会话状态及必要的 JEV 判定，复用统一命令受理流程与幂等、占用约束。
+         PromptAssembler 是无 I 前缀的接口，具体实现按 XxxPromptAssembler 命名并放在 context 包；各自负责场景的模块选择、材料组织和拼装顺序。
+         Assembler 复用公共模板渲染，仅返回拼装材料；模型调用、执行状态和持久化由调用方负责。
+         自动压缩由 run 协调，经 CommandService、CompactCommandHandler 复用 ContextCompactor；context 不反向调用 command。
          command 指产品旁路命令；模型的 run_command 工具仍归 tool，通过 gateway 使用外部 worker。
          Hook 按需由 run、tool 等提供入口的包管理，具体业务处理归所属服务，装配归 bootstrap/configuration，暂不独立设置 hook 包。
          service 子包不强制配套 Service 接口与 Impl，仅在存在实际多实现或替换需求时引入接口。
@@ -182,6 +190,7 @@
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   ├── </span><span class="tree-name">GlobalExceptionHandler.java</span></code><span class="tree-description">全局异常处理与错误响应映射</span></li>
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   └── </span><span class="tree-name">ErrorResponse.java</span></code><span class="tree-description">统一错误响应对象</span></li>
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       └── </span><span class="tree-name tree-directory">sse/</span></code><span class="tree-description">SSE 连接与事件适配</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│           └── </span><span class="tree-name">SseEventPublisher.java</span></code><span class="tree-description">实现 EventPublisher，按会话发布 SSE 通知</span></li>
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">├── </span><span class="tree-name tree-directory">ppt-agent-domain/</span></code><span class="tree-description">业务规则与用例编排</span></li>
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">│   ├── </span><span class="tree-name">pom.xml</span></code><span class="tree-description">领域模块</span></li>
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">│   └── </span><span class="tree-name tree-directory">src/main/</span></code><span class="tree-description"></span></li>
@@ -192,9 +201,31 @@
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       ├── </span><span class="tree-name tree-directory">run/</span></code><span class="tree-description">Run 生命周期、Harness 主循环、取消与循环保护</span></li>
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       ├── </span><span class="tree-name tree-directory">input/</span></code><span class="tree-description">输入判定、追加输入处理与授权范围处理</span></li>
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       ├── </span><span class="tree-name tree-directory">context/</span></code><span class="tree-description">提示词与上下文组装、Token 估算及压缩内容处理</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       │   ├── </span><span class="tree-name">ContextService.java</span></code><span class="tree-description">按模式选择 Assembler、组织本轮上下文与估算 Token</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       │   ├── </span><span class="tree-name">ContextCompactor.java</span></code><span class="tree-description">由 CompactCommandHandler 调用，组装并调用模型生成压缩结果</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       │   ├── </span><span class="tree-name">PromptAssembler.java</span></code><span class="tree-description">接口；定义场景提示词拼装约定</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       │   ├── </span><span class="tree-name">ChatPromptAssembler.java</span></code><span class="tree-description">Chat 模式提示词拼装</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       │   ├── </span><span class="tree-name">AskPromptAssembler.java</span></code><span class="tree-description">Ask 模式提示词拼装</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       │   ├── </span><span class="tree-name">PlanPromptAssembler.java</span></code><span class="tree-description">Plan 模式提示词拼装</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       │   ├── </span><span class="tree-name">CreatePromptAssembler.java</span></code><span class="tree-description">Create 模式提示词拼装</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       │   ├── </span><span class="tree-name">RenamePromptAssembler.java</span></code><span class="tree-description">命名提示词拼装</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       │   ├── </span><span class="tree-name">SuggestPromptAssembler.java</span></code><span class="tree-description">建议提示词拼装</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       │   ├── </span><span class="tree-name">PolishPromptAssembler.java</span></code><span class="tree-description">润色提示词拼装</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       │   ├── </span><span class="tree-name">HandoffPromptAssembler.java</span></code><span class="tree-description">交接提示词拼装</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       │   ├── </span><span class="tree-name">CompactPromptAssembler.java</span></code><span class="tree-description">压缩提示词拼装</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       │   ├── </span><span class="tree-name">CommitPromptAssembler.java</span></code><span class="tree-description">Git 提交分析提示词拼装</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       │   └── </span><span class="tree-name">ReviewPromptAssembler.java</span></code><span class="tree-description">Reviewer 提示词拼装</span></li>
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       ├── </span><span class="tree-name tree-directory">tool/</span></code><span class="tree-description">工具注册与选择、检查、去重、分发及结果处理</span></li>
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       ├── </span><span class="tree-name tree-directory">interaction/</span></code><span class="tree-description">提问、审批、答复校验与等待唤醒</span></li>
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       ├── </span><span class="tree-name tree-directory">command/</span></code><span class="tree-description">改名、建议、润色、交接、压缩、提交等旁路命令及自动触发条件</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       │   ├── </span><span class="tree-name">CommandService.java</span></code><span class="tree-description">具体类；自动命名 / 建议的触发条件，统一受理、占用、修订、取消、分派与结果保存</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       │   ├── </span><span class="tree-name">CommandHandler.java</span></code><span class="tree-description">接口；定义具体命令的业务执行约定</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       │   ├── </span><span class="tree-name">RenameCommandHandler.java</span></code><span class="tree-description">执行会话命名</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       │   ├── </span><span class="tree-name">SuggestCommandHandler.java</span></code><span class="tree-description">执行下一步建议</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       │   ├── </span><span class="tree-name">PolishCommandHandler.java</span></code><span class="tree-description">执行指令润色与修订</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       │   ├── </span><span class="tree-name">HandoffCommandHandler.java</span></code><span class="tree-description">执行会话交接与修订</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       │   ├── </span><span class="tree-name">CompactCommandHandler.java</span></code><span class="tree-description">委托上下文压缩并交回结果</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       │   └── </span><span class="tree-name">CommitCommandHandler.java</span></code><span class="tree-description">协调 Git、模型分析与提交核实</span></li>
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       ├── </span><span class="tree-name tree-directory">session/</span></code><span class="tree-description">会话管理与会话级业务状态</span></li>
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   │       └── </span><span class="tree-name tree-directory">history/</span></code><span class="tree-description">历史查询、检查点、回退与返回最新</span></li>
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">│       │   ├── </span><span class="tree-name tree-directory">asset/</span></code><span class="tree-description">主题、组件、技能、文本片段与标签</span></li>
@@ -371,8 +402,8 @@
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">│   ├── </span><span class="tree-name tree-directory">entity/</span></code><span class="tree-description">业务实体</span></li>
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">│   └── </span><span class="tree-name tree-directory">enumeration/</span></code><span class="tree-description">业务状态与类型枚举</span></li>
           <li class="tree-row"><code class="tree-path"><span class="tree-branch">├── </span><span class="tree-name tree-directory">service/</span></code><span class="tree-description">业务规则与用例编排</span></li>
-          <li class="tree-row"><code class="tree-path"><span class="tree-branch">├── </span><span class="tree-name tree-directory">repository/</span></code><span class="tree-description">业务数据存取接口</span></li>
-          <li class="tree-row"><code class="tree-path"><span class="tree-branch">└── </span><span class="tree-name tree-directory">gateway/</span></code><span class="tree-description">外部能力接口，按需创建</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">├── </span><span class="tree-name tree-directory">repository/</span></code><span class="tree-description">业务数据存取接口，命名为 IXxxRepository</span></li>
+          <li class="tree-row"><code class="tree-path"><span class="tree-branch">└── </span><span class="tree-name tree-directory">gateway/</span></code><span class="tree-description">外部能力接口，通常命名为 IXxxGateway；EventPublisher 保持原名</span></li>
         </ul>
       </div>
     </article>
