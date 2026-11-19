@@ -420,7 +420,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </g>
 <g id="loop-llm" class="node plain" transform="translate(465 1566)">
 <rect width="310" height="120" rx="10"/>
-<text class="node-tag" x="16" y="25">gateway → infrastructure/llm</text>
+<text class="node-tag" x="16" y="25">gateway → infrastructure/gateway</text>
 <a class="class-link" href="#class-ILlmGateway" aria-label="查看 ILlmGateway 职责">
 <text class="node-name" x="16" y="50">ILlmGateway</text>
 </a>
@@ -1290,7 +1290,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </g>
 <g id="support-notify" class="node plain" transform="translate(900 510)">
 <rect width="316" height="100" rx="10"/>
-<text class="node-tag" x="16" y="25">gateway</text>
+<text class="node-tag" x="16" y="25">shared/sse</text>
 <a class="class-link" href="#class-EventPublisher" aria-label="查看 EventPublisher 职责">
 <text class="node-name" x="16" y="50">EventPublisher</text>
 </a>
@@ -1388,7 +1388,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </g>
 <g id="support-event" class="node plain" transform="translate(900 1172)">
 <rect width="316" height="100" rx="10"/>
-<text class="node-tag" x="16" y="25">gateway</text>
+<text class="node-tag" x="16" y="25">shared/sse</text>
 <a class="class-link" href="#class-EventPublisher" aria-label="查看 EventPublisher 职责">
 <text class="node-name" x="16" y="50">EventPublisher</text>
 </a>
@@ -1813,11 +1813,11 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>新开、追加或取消请求；对话调用用量、已提交修改事实与主循环结束结果</td>
 <td>受理的 Run；状态变化与最终持久结果</td>
-<td>组织受理、模型配置固定、后台执行和统一收尾；协调会话占用与初始检查点。在同一受理临界区将模型配置、执行开关与审查文件基准固定在内存，受理成功后释放锁并调度。收尾时将自动建议所需材料交给异步事件，再释放本 Run 的执行材料。累计并保存主循环对话用量；按本 Run 的成功提交记录汇总净差异，抵消自身撤销的修改。完成条件满足后通过 IRunRepository 将最终回复、净差异与终态一起保存；传播至 Run 边界的异常按具体原因及 HarnessErrorCode 处理；取消独立收尾，保留已确认修改和已发生用量。完成提交成功后调用 afterRunCompleted；Hook 不负责终态提交。</td>
+<td>组织受理、模型配置固定、后台执行和统一收尾；协调会话占用与初始检查点。在同一受理临界区将模型配置、执行开关与审查文件基准固定在内存，受理成功后释放锁并调度。收尾时将自动建议所需材料交给异步事件，再释放本 Run 的执行材料。累计并保存主循环对话用量；通过 <code>RunChangeSet</code> 按本 Run 的成功提交记录汇总净差异，抵消自身撤销的修改。完成条件满足后通过 IRunRepository 将最终回复、净差异与终态一起保存；传播至 Run 边界的异常按具体原因及 HarnessErrorCode 处理；取消独立收尾，保留已确认修改和已发生用量。完成提交成功后调用 afterRunCompleted；Hook 不负责终态提交。</td>
 </tr>
 <tr id="class-RunState">
 <th scope="row"><code>RunState</code><span class="type">Run 内存状态</span></th>
-<td>受理时固定的配置与审查基准，当轮实际路由与完整请求估算</td>
+<td>受理时固定的 <code>RunConfig</code> 与审查基准，当轮实际路由与最近一次完整请求的 <code>ContextEstimate</code></td>
 <td>本次执行材料及最近一次完整的上下文估算</td>
 <td>由 RunService 按 Run 创建并释放。ContextService 按完整请求计算总量与明细并整体替换估算，SessionService 读取该值。</td>
 </tr>
@@ -1856,7 +1856,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>首条指令或追加输入；引用、当前授权与待答状态</td>
 <td>受理回执、已处理输入与授权状态；输入边界控制结果</td>
-<td>校验消息幂等、引用与输入开关，受理落库后在安全边界消费队列；发送前检查是否有新输入待处理。输入开始处理时调用 beforeInputProcessed，应用 Result 并保存处理状态。输入出队、授权变化及实际接入对话由本类负责。按主流程要求封闭或恢复受理；追加授权取并集，引用不扩大范围，首条输入被拒绝后交接已受理的剩余输入。</td>
+<td>校验消息幂等、引用与输入开关，受理落库后在安全边界消费队列；发送前检查是否有新输入待处理。输入开始处理时调用 beforeInputProcessed，应用 Result 并保存处理状态。输入出队、授权变化及实际接入对话由本类负责。按主流程要求封闭或恢复受理；追加授权取并集，引用不扩大范围，首条输入被拒后关闭入口，未处理输入留在原 Run 历史。</td>
 </tr>
 </tbody>
 <tbody>
@@ -1960,7 +1960,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>Run 状态、项目材料、会话上下文与引用；请求准备或会话统计查询</td>
 <td>最终请求材料、Token 估算与校验结果；当前上下文统计</td>
-<td>应用 BeforeModelCallResult 后，选择 PromptAssembler 组装请求并校验。保留 Assistant / Tool 配对与消息顺序，压缩或处理新输入后重新组装。根据完整请求的实际路由、消息及工具估算 Token 总量和分类明细，发布到 RunState。空闲时使用 Create 提示词、工具及当前会话材料估算。</td>
+<td>应用 BeforeModelCallResult 后，选择 PromptAssembler 组装请求并校验。仅使用已有全部配对结果的 Assistant / Tool 轮次，保留消息顺序，压缩或处理新输入后重新组装。根据完整请求的实际路由、消息及工具估算 Token 总量和分类明细，发布到 RunState。空闲时使用 Create 提示词、工具及当前会话材料估算。</td>
 </tr>
 <tr id="class-ContextCompactor">
 <th scope="row">
@@ -1990,7 +1990,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>会话历史、当前输入及必要运行上下文</td>
 <td>Chat 模式或当轮 gossip 的提示词与消息</td>
-<td>task 在 Chat 模式按 ASSEMBLE 的顺序拼装 mode_chat 与上下文。任一模式收到 gossip 时仅拼装 other/reply.md 与该条输入，工具为空。</td>
+<td>task 在 Chat 模式按 ASSEMBLE 的顺序拼装 mode_chat 与上下文。任一模式收到 gossip 时仅拼装 prompts/gossip.md 与该条输入，工具为空。</td>
 </tr>
 <tr id="class-AskPromptAssembler">
 <th scope="row">
@@ -2412,7 +2412,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <code>DeckService</code>
 </th>
 <td>带来源归属的资源修改、读取、渲染结果或遗留事务</td>
-<td>合法候选、带归属的已提交修改事实或一致的项目内容</td>
+<td>已校验的 <code>DeckEditCandidate</code>、带归属的已提交修改事实或读取到的项目内容</td>
 <td>归 domain/project/service；统一资源规则、Schema / 引用校验、内容基准和文件提交，工具与人工保存复用。真实提交时可靠记录来源和实际修改，候选不计入已提交差异；实际变更协调检查点失效。明确业务冲突可抛 BusinessException，由调用边界决定 HTTP 错误响应或失败工具结果；本类不返回工具专属 ToolResult，提交不确定等故障向上传递。</td>
 </tr>
 <tr id="class-AssetService">
@@ -2443,7 +2443,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>Run 受理、输入处理、模型 / 工具消息或收尾业务变更</td>
 <td>持久结果、消息或一致快照</td>
-<td>由 <code>infrastructure/repository/RunRepository</code> 实现。负责 Run 复合提交与查询：起始快照、首条输入、凭据一起受理；对话用量去重累计；最终回复、净差异与终态一起保存；输入移交保留身份与序号。失败、取消或中断保留已确认修改与已发生用量。不是逐表 CRUD 包装。</td>
+<td>由 <code>infrastructure/repository/RunRepository</code> 实现。负责 Run 复合提交与查询：起始快照、首条输入、凭据一起受理；对话用量去重累计；最终回复、净差异与终态一起保存；输入受理后固定归属与序号。失败、取消或中断保留已确认修改与已发生用量。不是逐表 CRUD 包装。</td>
 </tr>
 <tr id="class-ISessionRepository">
 <th scope="row">
@@ -2477,8 +2477,8 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <code>IDeckRepository</code>
 <span class="type">接口</span>
 </th>
-<td>带基准和归属的候选文件集合、提交标识或恢复请求</td>
-<td>一致读取或可确认的文件提交结果及其修改归属</td>
+<td><code>DeckEditCandidate</code> 集合及本次提交的来源归属、提交标识或恢复请求</td>
+<td>文稿内容及各文件哈希，或已确认的文件提交结果及其归属</td>
 <td>由 <code>infrastructure/repository/DeckRepository</code> 实现。归 project/repository。在文稿文件改动前持久化日志。Agent 和人工写入的凭据与业务变更同事务提交，至少保留到日志收尾。普通写入按原凭据及请求摘要核对，历史切换按目标会话版本核对。确认结果后补齐或还原文件，无法确认时保留日志并阻止项目写入。</td>
 </tr>
 </tbody>
@@ -2491,9 +2491,9 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <code>ILlmGateway</code>
 <span class="type">接口</span>
 </th>
-<td>已组装上下文、工具定义、模型配置及取消信号</td>
-<td>文本 / 推理 / 工具请求、逐次可得用量与必要原生回传数据</td>
-<td>由 <code>infrastructure/llm/LlmGateway</code> 实现。抽象一次模型调用并报告各次实际请求的可得用量，包含重试；调用场景决定统计归属，主循环对话用量交给 RunService 累计。业务层只依赖领域类型，不暴露 Spring AI / SDK 类型；不在 gateway 内循环执行工具。</td>
+<td><code>LlmRequest</code>（Spring AI 的 <code>List&lt;Message&gt;</code> 与本次开放的工具定义）、模型配置及取消信号</td>
+<td><code>LlmResponse</code>，含正文、推理、有序工具调用、逐次可得用量与必要协议回传数据</td>
+<td>由 <code>infrastructure/gateway/LlmGateway</code> 实现。网关按目标协议发送已组装的消息，报告每次实际请求（含重试）的可得用量。调用场景决定统计归属，主循环对话用量由 RunService 累计。工具执行由 ToolExecutor 负责。</td>
 </tr>
 <tr id="class-IJevGateway">
 <th scope="row">
@@ -2502,7 +2502,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>结构化问题、提示词材料及输入基准</td>
 <td>Intent、Prune、Rename 或 Preview 判定结果</td>
-<td>由 <code>infrastructure/jev/JevGateway</code> 实现。接收对应 PromptAssembler 组装的材料与问题，封装 JEV 调用与结果解析；Intent、Prune、Rename 的调用归对应 Hook，Preview 仍由 RenderSlideTool 按需发起。HookDispatcher 不对 JEV 调用再次触发生命周期入口。</td>
+<td>由 <code>infrastructure/gateway/JevGateway</code> 实现。网关将拼装器提供的材料和问题发送到同一 HTTP 接口并解析结果。Intent、Prune、Rename 由对应 Hook 发起，发送 JSON。RenderSlideTool 按需发起 Preview，使用 multipart/form-data 上传截图。JEV 调用在主模型 Hook 生命周期之外执行。</td>
 </tr>
 <tr id="class-IBashGateway">
 <th scope="row">
@@ -2511,7 +2511,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>允许的 Bash 命令、沙箱参数与取消信号</td>
 <td>退出结果、输出及沙箱文件候选</td>
-<td>由 <code>infrastructure/worker/BashGateway</code> 实现。对接 command-worker；执行与超时、取消、输出限制属于基础设施，是否允许应用结果由领域决定。</td>
+<td>由 <code>infrastructure/gateway/BashGateway</code> 实现。对接 command-worker；执行与超时、取消、输出限制属于基础设施，是否允许应用结果由领域决定。</td>
 </tr>
 <tr id="class-IRenderGateway">
 <th scope="row">
@@ -2520,7 +2520,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>固定的完整渲染输入与取消信号</td>
 <td>截图及必要版面检查结果</td>
-<td>由 <code>infrastructure/worker/RenderGateway</code> 实现。对接 render-worker；不负责主 Loop、批准或会话历史。</td>
+<td>由 <code>infrastructure/gateway/RenderGateway</code> 实现。对接 render-worker；不负责主 Loop、批准或会话历史。</td>
 </tr>
 <tr id="class-IGitGateway">
 <th scope="row">
@@ -2529,16 +2529,21 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>项目 Git 操作及确定的提交意图</td>
 <td>状态 / 差异或已确认的提交结果</td>
-<td>由 <code>infrastructure/git/GitGateway</code> 实现。执行 Git 能力；项目互斥和命令生命周期由 CommandService 协调。无法确认的提交结果不能假定成功或重复执行。</td>
+<td>由 <code>infrastructure/gateway/GitGateway</code> 实现。执行 Git 能力；项目互斥和命令生命周期由 CommandService 协调。无法确认的提交结果不能假定成功或重复执行。</td>
+</tr>
+</tbody>
+<tbody>
+<tr class="group-heading">
+<th colspan="4" scope="rowgroup">domain/shared/sse · 订阅事件与发布接口</th>
 </tr>
 <tr id="class-EventPublisher">
 <th scope="row">
 <code>EventPublisher</code>
 <span class="type">接口</span>
 </th>
-<td>已可读取的业务变化，或瞬时进度 / 待答变化</td>
+<td>投递目标和具体 <code>SseEvent</code></td>
 <td>面向会话订阅者的通知</td>
-<td>位于 domain/agent/gateway，由 interfaces/sse/SseEventPublisher 实现。持久变化提交成功后发送 changed，进度与待答通知按实际状态发送；通知不承担持久历史。</td>
+<td>项目和 Agent 服务共用的发布接口。持久变化可查询后发布 changed，进度与待答通知按当前状态发布。</td>
 </tr>
 </tbody>
 <tbody>
@@ -2549,14 +2554,14 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <th scope="row">
 <code>SseEventPublisher</code>
 </th>
-<td>会话订阅与 EventPublisher 通知</td>
-<td>SSE changed / reset / 进度 / 交互消息</td>
-<td>实现 EventPublisher，由 bootstrap 装配。按项目向已连接的会话发送共享文稿与外观的 content 通知，按会话发送历史、计划和检查点变化。断线后 Run 继续，重连或 reset 后通过查询重新同步。</td>
+<td>会话订阅、投递目标与 <code>SseEvent</code></td>
+<td>SSE 流中的事件名和 JSON 数据</td>
+<td>实现 EventPublisher，管理订阅连接。共享文稿或外观变化时通知同项目的所有已连接会话，按各接收会话的 revision 发送 changed。历史、计划和检查点变化只通知受影响的会话。断线后 Run 继续，重连或 reset 后通过查询重新同步。</td>
 </tr>
 </tbody>
 <tbody>
 <tr class="group-heading">
-<th colspan="4" scope="rowgroup">infrastructure/llm · 模型实现</th>
+<th colspan="4" scope="rowgroup">infrastructure/gateway · 模型实现</th>
 </tr>
 <tr id="class-LlmGateway">
 <th scope="row">

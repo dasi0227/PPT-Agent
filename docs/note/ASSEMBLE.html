@@ -380,7 +380,7 @@
         <section class="request-section" aria-labelledby="gossip-system-title">
           <h4 class="request-label" id="gossip-system-title">System</h4>
           <ol class="assembly-sequence" role="list">
-            <li><code>other/reply.md</code></li>
+            <li><code>prompts/gossip.md</code></li>
           </ol>
         </section>
         <section class="request-section" aria-labelledby="gossip-user-title">
@@ -630,9 +630,17 @@
           <section class="request-section" aria-labelledby="prune-questions-title">
             <h4 class="request-label" id="prune-questions-title">Questions</h4>
             <ul class="tool-list" aria-label="Prune Questions">
-              <li><code>meta</code> · <code>choice</code></li>
-              <li><code>constraints</code> · <code>choice</code></li>
-              <li><code>outline</code> · <code>choice</code></li>
+              <li><code>meta</code> · <code>choice</code> → <code>edit_meta</code></li>
+              <li><code>constraints</code> · <code>choice</code> → <code>edit_constraints</code></li>
+              <li><code>outline</code> · <code>choice</code> → <code>edit_outline</code></li>
+            </ul>
+          </section>
+          <section class="request-section" aria-labelledby="prune-rule-title">
+            <h4 class="request-label" id="prune-rule-title">裁剪规则</h4>
+            <ul class="tool-list">
+              <li>每题独立选择 <code>needed</code>（任务需要）、<code>possible</code>（可能需要）或 <code>not_needed</code>（整个任务都不需要）。</li>
+              <li>仅当选中 <code>not_needed</code>，且 <code>probabilities.not_needed ≥ 0.95</code>、<code>confidence ≥ 0.85</code> 时，从本轮候选集中移除对应工具。</li>
+              <li>其余情况保留该工具。单题答案缺失或无效时只跳过该题的裁剪，其他题照常处理。整次请求失败时沿用原候选集。</li>
             </ul>
           </section>
         </article>
@@ -653,7 +661,7 @@
           <section class="request-section" aria-labelledby="jev-rename-questions-title">
             <h4 class="request-label" id="jev-rename-questions-title">Questions</h4>
             <ul class="tool-list" aria-label="Rename Questions">
-              <li><code>rename</code> · <code>noul</code></li>
+              <li><code>rename</code> · <code>noul</code>，有效分数 ≥ 0.85 时发起改名。评分缺失、无效或调用失败时跳过。</li>
             </ul>
           </section>
         </article>

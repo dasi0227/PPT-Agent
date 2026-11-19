@@ -13,7 +13,10 @@
 - 项目列表按 `updated_at` 降序、`id` 升序返回，使用 `Cache-Control: no-store`。
 - `POST /api/projects/save` 省略 `project_id` 表示创建，传入则修改已有项目的名称。两者都返回项目 `id`。
 - `GET /api/projects/{project_id}` 一次返回资料、大纲及大纲内各页的规格、HTML 和对应哈希。
+- 普通项目读取允许不同文件来自相邻两次提交。每个文件的正文和哈希取自同一次读取。
 - 规格损坏时正文为 `null`，仍返回其哈希。文件缺失时正文与哈希均为 `null`。
+- 项目内有非终态 Run、正在 Git 提交或历史切换时，人工保存文稿返回 `PROJECT_BUSY`。
+- 导出采集快照时，人工保存等候项目锁。快照固定后即可编辑。
 - 每次保存提交完整正文。保存成功返回新 `hash`，基准不符返回 `CONTENT_CONFLICT` 并保留当前内容。
 - 规格和 HTML 分别使用 `hashes.slides[id].spec` 和 `.html` 作为 `base_hash`。`base_hash=null` 仅在文件尚不存在时匹配。
 - 大纲保存提交整棵树，大纲与相关文件的修改一起生效。
@@ -47,6 +50,7 @@
 - 短语名称须唯一，比较时忽略大小写。
 - `hash` 只随正文变化，`updated_at` 只随资产实际变化。
 - 已被项目引用的主题不能删除，修改其正文会改变引用项目的外观和缩略图。
+- 编辑全局主题正文保留引用项目的检查点。
 
 ## 设置
 
@@ -130,6 +134,10 @@
 - Run 结束时 `activity`、`commentary` 为 `null`，`pending=[]`。
 - `usage` 和历史 `total_tokens` 只统计主循环对话请求及其实际重试。取消保留已发生的用量，`call_count` 包含未报告 Token 数的请求。
 - `run.changes` 只含本 Run 成功提交的净修改。差异接口按相同目标和顺序一次返回明细。
+- 变更目标的 `part` 和 `path` 必返，`path` 为项目内相对路径。
+- `part` 为 `meta / constraint / outline` 时省略 `slide_id`，为 `spec / html` 时返回所属页面的 `slide_id`。
+- Run 变更概况和差异明细通过 `target` 返回目标，工具调用有主要目标时也使用 `target`。
+- 工具结果 `result.targets[]` 与权限审批 `permission.changes[]` 将目标字段直接放在数组项上。
 - 整份清单未知为 `null`，确认无变化为 `[]`，单个目标无法展示时为 `type=unavailable` 并附 `reason`。
 - 工具详情使用 `tool_call` 消息的 `id` 查询。同次调用与结果按 `run_id + tool_call_id` 配对。
 - `arguments` 无公开参数时为 `{}`，`result=null` 表示尚无已记录结果。
@@ -164,18 +172,21 @@
 - 追加时改传 `run_id`，沿用模式和模型。仅 `running`、`waiting` 且输入开放的 Run 接受新追加。
 - 同一会话最多有一个非终态 Run，与该会话的手动压缩互斥。同项目不同会话可以并行。
 - 项目正在历史切换、Git 提交或执行排他命令时拒绝新开。
-- `message_id` 在会话内识别一次输入，新开与追加不能复用同一 ID。
-- 相同请求重发返回消息当前归属的 Run ID，已关闭追加入口也不重复受理。异参返回 `IDEMPOTENCY_CONFLICT`，原 Run 已被回退移除时返回 `RUN_NOT_FOUND`。
+- `message_id` 由客户端生成，全局唯一。新开和追加各使用独立的消息 ID。
+- 同一会话同参重发返回原 Run ID，追加入口关闭后仍可重发。原 Run 已被回退移除时返回 `RUN_NOT_FOUND`。
+- 已使用的 `message_id` 用于其他会话或不同请求时返回 `IDEMPOTENCY_CONFLICT`。
 - `text` 去首尾空白后为空时，有 DOM 选区须至少一条选区注释非空，无 DOM 选区须附图片。
 - 追加仅接受图片和 DOM 引用。附件须属于当前项目，引用的幻灯片和 DOM 源码基准须有效。
-- `scope=null` 授权全项目。传入对象时只含 `current_slide_id`、`slide_ids`、`section_ids` 之一，节按受理时的大纲展开。
+- `scope=null` 授权全项目。范围对象只含 `current_slide_id`、`slide_ids`、`section_ids`、`subsection_ids` 之一。
+- `section_ids` 选章，包含章直属页面和下属各节的页面。`subsection_ids` 选节，只包含所选节的页面。
+- 章、节在受理时按大纲顺序展开为页面 ID。
 - 引用本身不扩大授权。
 - 追加省略 `scope` 沿用当前范围，显式提交与原范围取并集。实际扩大授权后通知 `run`、`history`。
 - `slide_ids=[]` 在新开时表示未授权任何页，在追加时表示不增加范围。
 - 指令 `queued` 表示待处理，`sent` 表示已处理。
 - 闲聊在同一 Run 内答复。
 - `disclosure`、`bypass`、`irrelevant` 拒绝当前输入。
-- 首条被拒时 Run 转为 `rejected`，已受理但尚未处理的追加输入保留消息 ID、`seq`、已受理范围、模式和模型，交给后续 Run。
+- 首条被拒时 Run 转为 `rejected`。已受理但尚未处理的追加输入以 `queued` 留在原 Run 历史，处理到此结束。
 - 追加被拒时，该条在历史中标为 `sent` 并返回 `instruction_decision`。已授权范围保留，后续输入继续在同一 Run 内按序处理。
 - 输入判定失败时 Run 转为 `failed`。
 - 取消仅作用于指定 Run，可重复提交。空响应体表示取消请求已受理或 Run 已终态，最终状态以 Run 详情为准。
@@ -210,7 +221,8 @@
 - `run_ids` 只列当前历史中可回退的 Run。`can_return` 表示能否返回首次回退前的最新状态。
 - 回退预览的 `timestamp` 是目标 Run 的创建时间，返回预览使用返回目标的最后活动时间。
 - 回退和返回都须提交对应预览的 `revision` 作为 `expected_revision`，版本过期返回 `STALE_REVISION`。
-- 文稿基准冲突或历史主题已删除时，整次切换失败。历史主题已停用仍可恢复。
+- 回退和返回按目标快照覆盖文稿文件，外部编辑也会被覆盖。
+- 历史主题已删除时整次切换失败。已停用的主题仍可恢复，主题正文取该资产的当前版本。
 - `rollback` 返回版本及可回填的原始输入。连续回退保留同一返回目标。
 - `return` 成功时响应体为空，随后 `can_return=false`。
 - 回退和返回均恢复目标位置的文稿、外观及本会话数据，附件与历史截图保留。
@@ -233,5 +245,7 @@
 
 ## 其它
 
-- `GET /api/healthz` 就绪时返回 HTTP 200，未就绪时返回 HTTP 503，响应体均为空。
+- `GET /api/healthz` 在启动检查期间或公共数据库不可用时返回 HTTP 503。
+- 启动检查完成且公共数据库可用时返回 HTTP 200，两种状态的响应体均为空。
+- 单个项目有未解决的恢复日志时，该项目暂停写入，其他项目正常使用。
 - `POST /api/files/open` 仅接受同源本地调用。`path` 为指定项目内可打开文件的相对路径，解析后须仍位于项目内。

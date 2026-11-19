@@ -988,7 +988,7 @@
                   <li><code>items[].type</code>：字符串，必返；fields / outline / text / binary / unavailable</li>
                   <li><code>items[].fields</code>：数组，仅 fields 时必返；每项含 field、可选 label、rows；行含 type（added / removed）、value</li>
                   <li><code>items[].groups</code>：数组，仅 outline 时必返；每项含 rows；行含 type（context / added / removed）、node（section / subsection / slide）、depth、title、可选 order</li>
-                  <li><code>items[].hunks</code>：数组，仅 text 时必返；每项含 old_start、old_count、new_start、new_count、rows；行含 type、text、可选 old_line、new_line</li>
+                  <li><code>items[].hunks</code>：数组，仅 text 时必返；每项含 old_start、old_count、new_start、new_count、rows；行含 type（context / added / removed）、text、可选 old_line、new_line</li>
                   <li><code>items[].reason</code>：字符串，仅 unavailable 时必返；无法展示的原因；binary 只展示目标和变更类别</li>
                 </ul>
               </td>
@@ -1139,11 +1139,11 @@
                 <ul class="fields">
                   <li><code>session_id</code>：字符串，新开 Run 时必填。与 run_id 二选一</li>
                   <li><code>run_id</code>：字符串，追加指令时必填。与 session_id 二选一</li>
-                  <li><code>message_id</code>：字符串，必填。客户端生成的消息 ID，同次重发复用</li>
+                  <li><code>message_id</code>：字符串，必填。客户端生成的全局唯一消息 ID，同次重发复用</li>
                   <li><code>text</code>：字符串，必填。只发图片或带非空注释的 DOM 选区时可为空字符串</li>
                   <li><code>mode</code>：新开 Run 时必填，chat / ask / plan / create。追加沿用该模式；gossip 仅切换当轮提示词及工具</li>
                   <li><code>model</code>：字符串，新开 Run 时必填。在受理时解析并固定模型及备用路由，整次 Run 复用</li>
-                  <li><code>scope</code>：新开 Run 时必填。追加时省略则沿用，显式提交则与当前范围合并。null 表示全部，对象只含 current_slide_id、slide_ids、section_ids 之一</li>
+                  <li><code>scope</code>：新开 Run 时必填。追加时省略则沿用，显式提交则与当前范围合并。null 表示全部，对象只含 <code>current_slide_id</code>、<code>slide_ids</code>、<code>section_ids</code>（章）或 <code>subsection_ids</code>（节）之一</li>
                   <li><code>references</code>：可选，有序引用数组，默认 []；顺序与输入框一致</li>
                   <li><code>references[].type</code>：skill / component 用 asset_id，slide 用 slide_id，image 必填 attachment_id 和 original_name（文件显示名），dom 用下列选区字段。追加仅支持 image / dom</li>
                   <li><code>references[].slide_id</code>：幻灯片或 DOM 引用必填；所属项目由会话确定</li>
@@ -1160,7 +1160,7 @@
               </td>
               <td>
                 <ul class="fields">
-                  <li><code>run_id</code>：字符串。新开时返回创建的 Run ID，追加时返回消息当前归属的 Run ID</li>
+                  <li><code>run_id</code>：字符串。新开时返回创建的 Run ID，追加及同参重发时返回受理该消息的 Run ID</li>
                 </ul>
               </td>
             </tr>
