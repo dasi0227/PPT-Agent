@@ -197,7 +197,9 @@
       <h1>提示词拼装</h1>
     </header>
 
-    <!-- Add future assembly cases as sibling cards in the corresponding group. -->
+    <!-- 每条输入先做意图判定。task 按本 Run 当前模式拼装；gossip 使用下方闲聊分支。两者共用主循环和受理时的模型配置。
+         追加输入被拒时，其正文和引用只留在历史中，不拼入主模型的 user_addition 或后续上下文。后续追加仍在原 Run 中依次判定，通过后按各自意图拼装。
+         task 的 run_command 工具说明随当前模式给出权限。Chat、Ask、Plan 只读，Create 执行阶段可在授权范围内提交 STRUCTURE.html 列明的文稿文件，普通文件不写回项目。 -->
     <section class="assembly-group" aria-label="主 Agent 提示词拼装">
       <div class="assembly-grid">
       <article class="assembly-card" data-case="create" aria-labelledby="create-title">
@@ -237,6 +239,7 @@
         </section>
         <section class="request-section" aria-labelledby="create-user-title">
           <h4 class="request-label" id="create-user-title">User</h4>
+          <!-- 空闲会话的 context 估算复用 Create 的 System 和模式工具，使用当前项目材料、会话计划、摘要和仍在上下文的消息。Run 首次组装完成前沿用该估算。此后每轮按实际路由、消息和裁剪后的工具完整组装后，才更新 RunState 内的总量与分类明细。 -->
           <ol class="assembly-sequence" role="list" aria-label="User 拼装顺序">
             <li class="sequence-group">
               <div>
@@ -282,7 +285,7 @@
             <li><code>edit_spec</code></li>
             <li><code>edit_html</code></li>
             <li><code>ask_user</code></li>
-            <li><code>update_plan</code></li>
+            <li><code>update_plan</code> · <code>steps</code> 必传。有序非空数组替换计划，每步含 title 和 status（pending / processing / completed），最多一步 processing。<code>steps=null</code> 清空计划。</li>
             <li><code>request_privilege</code></li>
             <li><code>review_ppt</code></li>
           </ul>
@@ -369,12 +372,37 @@
           </ul>
         </section>
       </article>
+
+      <article class="assembly-card" data-case="gossip" aria-labelledby="gossip-title">
+        <header class="card-header">
+          <h3 id="gossip-title">Gossip（任一模式的闲聊输入）</h3>
+        </header>
+        <section class="request-section" aria-labelledby="gossip-system-title">
+          <h4 class="request-label" id="gossip-system-title">System</h4>
+          <ol class="assembly-sequence" role="list">
+            <li><code>other/reply.md</code></li>
+          </ol>
+        </section>
+        <section class="request-section" aria-labelledby="gossip-user-title">
+          <h4 class="request-label" id="gossip-user-title">User</h4>
+          <ol class="assembly-sequence" role="list">
+            <li><code>current_user_input</code></li>
+          </ol>
+        </section>
+        <section class="request-section" aria-labelledby="gossip-tools-title">
+          <h4 class="request-label" id="gossip-tools-title">Tools</h4>
+          <ul class="tool-list">
+            <li><code>[]</code></li>
+          </ul>
+        </section>
+      </article>
       </div>
     </section>
 
     <section class="assembly-group" aria-label="Reviewer 提示词拼装">
       <div class="assembly-grid">
         <article class="assembly-card" data-case="reviewer" aria-labelledby="reviewer-title">
+          <!-- review_ppt 独立组装审查请求，使用本 Run 固定的主模型和主路备用配置。该请求的用量不计入主循环。 -->
           <header class="card-header">
             <h3 id="reviewer-title">Reviewer</h3>
           </header>
@@ -390,7 +418,7 @@
               <li><code>user_instruction</code></li>
               <li><code>review_demand</code></li>
               <li><code>current_sources</code></li>
-              <li><code>diff_changes</code></li>
+              <li><div><code>diff_changes</code> · 对照 Run 受理时固定的内存文件基准，列出本 Run 已成功提交的净差异。</div></li>
             </ol>
           </section>
         </article>
@@ -466,7 +494,7 @@
           <section class="request-section" aria-labelledby="rename-user-title">
             <h4 class="request-label" id="rename-user-title">User</h4>
             <ol class="assembly-sequence" role="list" aria-label="Rename 输入拼装顺序">
-              <li><code>current_title</code></li>
+              <li><div><code>current_title</code> · 命令受理时的标题，同时用于写回核对。</div></li>
               <li><code>conversation_history</code></li>
               <li><code>user_instruction</code></li>
             </ol>
@@ -495,7 +523,7 @@
               <li><code>project_context</code></li>
               <li><code>current_plan</code></li>
               <li><code>conversation_history</code></li>
-              <li><code>user_instruction</code></li>
+              <li><div><code>user_instruction</code> · 固定所依据的用户输入正文。写回时由命令服务核对输入 ID 和 suggest 的受理顺序。</div></li>
             </ol>
           </section>
           <section class="request-section" aria-labelledby="suggest-tools-title">
@@ -582,7 +610,7 @@
               <li><code>disclosure</code> · <code>noul</code></li>
               <li><code>bypass</code> · <code>noul</code></li>
               <li><code>irrelevant</code> · <code>noul</code></li>
-              <li><code>intent</code> · <code>choice</code></li>
+              <li><code>intent</code> · <code>choice</code>（task / gossip）。命中 disclosure、bypass、irrelevant 时直接拒绝。</li>
             </ul>
           </section>
         </article>

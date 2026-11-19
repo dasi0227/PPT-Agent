@@ -88,14 +88,14 @@ initialize_project() {
     cd "$SQL_DIR" || exit 1
     [ -r init.sql ] || { printf '缺少 init.sql\n' >&2; exit 1; }
     if [ "$create_schema" = "1" ]; then
-      [ -r table.sql ] || { printf '缺少 table.sql\n' >&2; exit 1; }
+      [ -r schema.sql ] || { printf '缺少 schema.sql\n' >&2; exit 1; }
     fi
     mkdir -p "$WORK_ROOT/db" || exit 1
     touch "$WORK_ROOT/.desktop-initializing" || exit 1
     {
       printf '.timeout 5000\nPRAGMA foreign_keys = ON;\nBEGIN IMMEDIATE;\n'
       if [ "$create_schema" = "1" ]; then
-        printf '.read table.sql\n'
+        printf '.read schema.sql\n'
       fi
       printf '.read init.sql\nCOMMIT;\n'
     } | sqlite3 -batch -bail "$DB_PATH" || exit 1

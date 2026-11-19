@@ -152,11 +152,9 @@
 <body>
   <main>
     <header class="page-header">
-      <h1>数据库设计</h1>
+      <h1 id="database-heading">数据库设计</h1>
     </header>
 
-    <!-- 业务字符串枚举使用现有 TEXT 列，合法取值由后端校验，不设置枚举 CHECK。
-         布尔字段沿用 INTEGER 和 0/1，并保留数据库 CHECK；非空、唯一、外键及其他数据一致性约束保持不变。 -->
     <article class="database-card" id="projects" aria-labelledby="projects-heading">
       <header class="card-header">
         <div>
@@ -208,7 +206,7 @@
               <td class="nullable">否</td>
               <td>无</td>
               <td>当前选中的主题 ID；不保存主题 CSS。</td>
-              <td class="decision">外键 <code>assets.id</code>；目标 <code>kind</code> 为 <code>theme</code>。</td>
+              <td class="decision">外键 <code>assets.id</code>；目标 <code>type</code> 为 <code>theme</code>。</td>
             </tr>
             <tr id="projects-logo">
               <th scope="row"><code>logo</code></th>
@@ -263,10 +261,6 @@
       </div>
     </article>
 
-    <!-- sessions.revision 是唯一的会话提交版本；业务记录、检查点的增删改及历史恢复与版本递增同事务提交，每个受影响会话在同一事务内只递增一次。
-         业务数据与 sessions.revision 在同一读事务取得；版本不从业务记录推导，历史恢复不覆盖当前版本。
-         plan 仅保存已生效计划，JSON 为 {run_id, steps}；steps 每项为 {title, status}，状态为 pending/processing/completed，同时最多一步 processing。NULL 表示无生效计划。
-         计划、相关业务结果及对应 Run 模式的变更在同一事务提交。 -->
     <article class="database-card" id="sessions" aria-labelledby="sessions-heading">
       <header class="card-header">
         <div>
@@ -334,7 +328,7 @@
               <td class="nullable">是</td>
               <td><code>NULL</code></td>
               <td>会话当前生效的执行计划。</td>
-              <td class="decision">JSON 对象 <code>{run_id, steps}</code>；<code>NULL</code> 表示无生效计划。</td>
+              <td class="decision"><code>{run_id, steps}</code>，每步为 <code>pending / processing / completed</code>，最多一步 processing。<code>update_plan(steps=null)</code> 清空整项。</td>
             </tr>
             <tr id="sessions-updated-at">
               <th scope="row"><code>updated_at</code></th>
@@ -348,12 +342,7 @@
         </table>
       </div>
     </article>
-    <!-- runs 对 session_id 在 status 为 pending/running/waiting/cancelling 时建立部分唯一索引，保证同一会话最多一个非终态 Run。
-         changes 的目标以 slide_id 与资源部位或项目内相对路径表示，保存新增/修改/删除类别及文本、结构化字段、大纲或二进制差异。
-         净差异仅包含本 Run 已成功提交且未被自身撤销的修改；排除其他 Run、人工写入、未提交或已回滚的修改。
-         失败、取消和中断也可存在已提交差异；无法可靠归属的目标标记差异不可用，整体不可得时为 NULL，不能以 [] 表示。
-         已确定的 changes 与 Run 终态同事务保存，历史差异不随当前项目文件变化。
-         error 仅记录导致整个 Run 失败的错误；可继续执行的单次工具失败存入 tool_result，正常取消、中断和拒绝由 status 表达。 -->
+
     <article class="database-card" id="runs" aria-labelledby="runs-heading">
       <header class="card-header">
         <div>
@@ -452,7 +441,7 @@
               <td><code>INTEGER</code></td>
               <td class="nullable">否</td>
               <td><code>0</code></td>
-              <td>累计已报告的输入 Token 数。</td>
+              <td>累计主循环对话已报告的输入 Token 数。</td>
               <td class="decision">非负整数；同一次调用的用量不重复累计。</td>
             </tr>
             <tr id="runs-output-tokens">
@@ -460,7 +449,7 @@
               <td><code>INTEGER</code></td>
               <td class="nullable">否</td>
               <td><code>0</code></td>
-              <td>累计已报告的输出 Token 数。</td>
+              <td>累计主循环对话已报告的输出 Token 数。</td>
               <td class="decision">非负整数；同一次调用的用量不重复累计。</td>
             </tr>
             <tr id="runs-total-tokens">
@@ -468,7 +457,7 @@
               <td><code>INTEGER</code></td>
               <td class="nullable">否</td>
               <td><code>0</code></td>
-              <td>累计已报告的总 Token 数。</td>
+              <td>累计主循环对话已报告的总 Token 数。</td>
               <td class="decision">使用供应商报告的总量。</td>
             </tr>
             <tr id="runs-call-count">
@@ -476,7 +465,7 @@
               <td><code>INTEGER</code></td>
               <td class="nullable">否</td>
               <td><code>0</code></td>
-              <td>累计模型调用次数。</td>
+              <td>累计主循环对话的实际模型请求次数，含重试。</td>
               <td class="decision">非负整数；包含未报告 Token 用量的调用。</td>
             </tr>
             <tr id="runs-active-duration">
@@ -515,18 +504,7 @@
         </table>
       </div>
     </article>
-    <!-- messages 与 commands 的 seq 在会话内共同唯一；同一事务内的新记录逐条分配序号，创建后不变。
-         重复用户消息 ID 须校验原始正文、引用和显式范围一致；变更消息归属保留原 id、seq 和内容，并与相关 Run 创建或终态变更同事务提交。
-         对 run_id 非空且 kind = 'response' 建立 Run 内唯一约束；response 与 done 或 rejected 同事务保存，失败、取消和中断可以没有 response。
-         tool_call 保留模型原始请求；tool_result 保存最终用户决定、必要定稿内容、实际执行结果及单次修改差异，不保存逐次编辑历史。结果须对应同 Run 的调用。
-         已确认成功的工具结果不因后续取消改写；缺少 tool_result 仅表示没有已记录结果，不表示未执行或执行失败。
-         instruction.content 为 {text, references}，references 为有序数组；显式提交的 scope 原样保存，省略与 null 区分。消息写入与实际授权范围 runs.scope 的变更同事务提交。
-         DOM 引用保存 type=dom、slide_id、提交时的选区 html、comment 及必要定位信息；图片引用保存 type=image、attachment_id。其他引用保留稳定 ID 与必要信息，正文及附件字节由各自存储管理。
-         response/thinking/commentary/summary 的正文保存为 JSON 字符串；tool_call 保存 {name, arguments}，tool_result 保存实际结果，图文结果保留内容顺序。
-         raw 只保存后续模型调用必需的原生协议数据及来源信息；同一次原始输出不向拆分后的消息重复复制，不保存完整 HTTP 响应、日志或执行快照。
-         instruction_status 的 queued 表示尚未处理，包含等待判定；sent 表示信箱处理完成，包含直接答复或拒绝，不保证已发送给模型或任务已完成。处理结果与状态变化同事务提交。
-         sent 不随 Run 失败或取消回退；任务取消或异常结束时，尚未处理的输入保持 queued。
-         压缩只调整 context_position 表示的当前上下文成员及顺序，不删除聊天历史；摘要写入与位置调整同事务提交，已有正文与原始引用不覆盖。 -->
+
     <article class="database-card" id="messages" aria-labelledby="messages-heading">
       <header class="card-header">
         <div>
@@ -588,8 +566,8 @@
               <td>消息在会话中的固定顺序。</td>
               <td class="decision">与 <code>commands.seq</code> 在会话内共同唯一，创建后不变。</td>
             </tr>
-            <tr id="messages-kind">
-              <th scope="row"><code>kind</code></th>
+            <tr id="messages-type">
+              <th scope="row"><code>type</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
               <td>无</td>
@@ -602,7 +580,7 @@
               <td class="nullable">否</td>
               <td>无</td>
               <td>正文、引用及工具内容。</td>
-              <td class="decision">合法 JSON；<code>instruction</code> 保存 <code>text</code>、有序 <code>references</code> 及可选 <code>scope</code>。</td>
+              <td class="decision">合法 JSON。<code>instruction</code> 保存 <code>text</code>、有序 <code>references</code> 及可选 <code>scope</code>。DOM 引用保存 <code>type=dom、slide_id、html、comment</code> 和必要定位信息；图片引用保存 <code>type=image、attachment_id</code>；其他引用保留稳定 ID 及必要信息。引用的正文和附件字节由各自存储管理。<code>response / thinking / commentary / summary</code> 保存 JSON 字符串，<code>tool_call</code> 保存 <code>{name, arguments}</code>，<code>tool_result</code> 保存实际结果，保持图文顺序。</td>
             </tr>
             <tr id="messages-raw">
               <th scope="row"><code>raw</code></th>
@@ -610,7 +588,7 @@
               <td class="nullable">是</td>
               <td><code>NULL</code></td>
               <td>后续模型调用要求携带的原生协议数据。</td>
-              <td class="decision">合法 JSON。</td>
+              <td class="decision">合法 JSON，含必要的原生协议数据和来源信息。</td>
             </tr>
             <tr id="messages-tool-call-id">
               <th scope="row"><code>tool_call_id</code></th>
@@ -626,7 +604,7 @@
               <td class="nullable">是</td>
               <td><code>NULL</code></td>
               <td>JEV 对用户输入的分类结果。</td>
-              <td class="decision">仅 <code>instruction</code> 使用：<code>task / chat / disclosure / bypass / irrelevant</code>；未判定或检测失败时为空。</td>
+              <td class="decision">仅 <code>instruction</code> 使用：<code>task / gossip / disclosure / bypass / irrelevant</code>；task 使用 Run 模式，gossip 切换当轮提示词、工具为空，其余三类拒绝。未判定或检测失败时为空。</td>
             </tr>
             <tr id="messages-instruction-status">
               <th scope="row"><code>instruction_status</code></th>
@@ -634,7 +612,7 @@
               <td class="nullable">是</td>
               <td><code>NULL</code></td>
               <td>用户输入的信箱处理状态。</td>
-              <td class="decision">仅 <code>instruction</code> 使用：<code>queued / sent</code>，初始为 <code>queued</code>；其他消息为 <code>NULL</code>。</td>
+              <td class="decision">仅 <code>instruction</code> 使用：<code>queued / sent</code>，初始为 <code>queued</code>（尚待处理，包含等待判定）。<code>sent</code> 表示信箱处理完成。其他消息为 <code>NULL</code>。</td>
             </tr>
             <tr id="messages-context-position">
               <th scope="row"><code>context_position</code></th>
@@ -656,11 +634,7 @@
         </table>
       </div>
     </article>
-    <!-- 同一 operation_id 的记录须属于同一会话与 kind，每次执行保留独立 id、seq 和固定终态；同一操作最多一个非终态执行。
-         同一会话最多一个非终态手动 compact；其受理与会话占用校验同事务提交。
-         input 按 kind 保存实际参数，无参数时为 {}；首次润色保存 text，修订保存 base_id 与 feedback，base_id 指向同组最近成功执行，不复制基础文稿。
-         result 按 kind 保存业务结果：handoff 为 title/content；compact 为摘要消息引用、标题、压缩前后 Token 数及当时窗口上限；commit 为已确认提交的 hash、说明及业务结果。
-         摘要正文仅存 messages；命令结果、相关业务记录变更和 done 在同一事务提交，后续修订不覆盖已有执行结果。 -->
+
     <article class="database-card" id="commands" aria-labelledby="commands-heading">
       <header class="card-header">
         <div>
@@ -704,7 +678,7 @@
               <td class="nullable">否</td>
               <td>无</td>
               <td>同一次操作的标识，关联首次执行与修订。</td>
-              <td class="decision">同组会话与 <code>kind</code> 一致；同组最多一条非终态记录。</td>
+              <td class="decision">同组会话与 <code>type</code> 一致；同组最多一条非终态记录。</td>
             </tr>
             <tr id="commands-session-id">
               <th scope="row"><code>session_id</code></th>
@@ -730,8 +704,8 @@
               <td>本次执行在会话中的创建顺序。</td>
               <td class="decision">与 <code>messages.seq</code> 在会话内共同唯一，创建后不变。</td>
             </tr>
-            <tr id="commands-kind">
-              <th scope="row"><code>kind</code></th>
+            <tr id="commands-type">
+              <th scope="row"><code>type</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
               <td>无</td>
@@ -752,7 +726,7 @@
               <td class="nullable">否</td>
               <td>无</td>
               <td>本次命令的业务输入。</td>
-              <td class="decision">合法 JSON；无参数时为 <code>{}</code>。</td>
+              <td class="decision">合法 JSON，无参数时为 <code>{}</code>。首次润色保存 <code>text</code>，修订保存 <code>base_id、feedback</code>。</td>
             </tr>
             <tr id="commands-result">
               <th scope="row"><code>result</code></th>
@@ -760,7 +734,7 @@
               <td class="nullable">是</td>
               <td><code>NULL</code></td>
               <td>本次执行成功后的业务结果。</td>
-              <td class="decision">合法 JSON；压缩结果引用摘要消息，不复制摘要正文。</td>
+              <td class="decision">合法 JSON。交接保存标题及文稿，压缩保存摘要引用、标题、压缩前后 Token 数和当时的窗口上限，Git 提交保存已确认的哈希、说明与业务结果。rename 保存 title，suggest 保存 requests。写回依据过期时执行记 cancelled，结果为 SQL NULL。压缩结果引用摘要消息。</td>
             </tr>
             <tr id="commands-error">
               <th scope="row"><code>error</code></th>
@@ -782,17 +756,7 @@
         </table>
       </div>
     </article>
-    <!-- checkpoints 对 (session_id, run_id) WHERE run_id IS NOT NULL 建立唯一索引，对 session_id WHERE run_id IS NULL 建立唯一索引。
-         run_id 不设外键；回退移除 Run 后，其检查点仍须保留以支持返回最新，写入时校验 Run 归属。Run 已不存在的普通检查点不作为当前回退目标。
-         snapshot 保存本会话 messages/runs/commands、sessions.plan、相关 commit_files 凭据及恢复范围内的文件清单和实际内容；普通检查点另含原始输入正文、引用及初始模式和范围。
-         文本文件存为 JSON 字符串，二进制内容使用 Base64；其他会话数据、全局资产和设置、临时文件事务及 checkpoints 表不进入快照，sessions.revision 不进入恢复正文。
-         普通检查点保存 Run 创建前一致的业务与文件基准；检查点正文、Run、初始消息和受理凭据在同一数据库事务提交。
-         首次回退前保存 run_id 为 NULL 的返回快照，连续回退不覆盖该行；返回最新成功后删除返回行，保留原有普通检查点。
-         恢复保持快照中的消息身份、seq、输入处理状态、上下文位置和计划，移除该会话之后新增的业务记录；快照中 pending/running/cancelling 命令按 interrupted 恢复，保留原身份与业务输入。
-         新 Run 或 rename/handoff/compact/commit/suggest 执行（含修订）落库时，同事务删除返回行及已不在当前历史中的普通检查点；polish 保留返回入口。
-         实际文件提交（含历史恢复）清除同项目其他会话的全部检查点，包括返回快照；无会话归属的人工文件修改清除该项目全部检查点，不删除其他会话的业务记录。
-         无变化、失败或已回滚的写入不触发清理；之后将文件改回原样也不恢复已失效检查点。检查点失效与文件提交凭据及业务写入协调提交。
-         历史恢复后的项目文件与本会话数据须对应同一恢复结果，不覆盖其他会话数据；会话删除按 session_id 级联清理检查点。 -->
+
     <article class="database-card" id="checkpoints" aria-labelledby="checkpoints-heading">
       <header class="card-header">
         <div>
@@ -844,19 +808,13 @@
               <td class="nullable">否</td>
               <td>无</td>
               <td>该检查点的完整恢复数据。</td>
-              <td class="decision">JSON 对象；保存会话业务记录、文件内容及普通检查点的原始输入。</td>
+              <td class="decision">JSON 对象；含会话标题、计划、消息、Run、命令及 agent 凭据，项目文稿文件、主题 ID、四项装饰位置、Logo 字节。普通检查点另含原始输入正文、引用、最初的模型名、模式及范围。文本文件用 JSON 字符串，二进制内容用 Base64。</td>
             </tr>
           </tbody>
         </table>
       </div>
     </article>
-    <!-- receipts 的 owner_id 按 kind 校验归属：create_run/create_command 为 sessions.id，commit_files 为 runs.id。
-         create_run 的 request_id 复用初始消息的稳定提交标识；commit_files 可使用所属 Run 内稳定的 tool_call_id，Git 辅助命令受理归 create_command。
-         request_hash 取自规范化的原始业务参数，不随后续 Run 状态或授权范围变化重新计算；相同请求标识必须对应相同参数。
-         成功凭据与相关业务写入同事务提交；记录存在仅表示成功受理或文件提交，不表示任务执行完成，不保存失败或执行中凭据。
-         result 按 kind 保存：create_run 为 {run_id}，create_command 为 {id} 并指向 commands.id，commit_files 为 SQL NULL；不复制业务产物或完整响应。
-         create_run/create_command 凭据保留至所属会话删除，不随回退或返回最新备份、恢复或删除；目标业务记录被回退移除后，原凭据仍保留且不能复用为新的执行。
-         commit_files 凭据随所属 Run 清理，历史恢复仅恢复本会话相关的 commit_files 凭据。 -->
+
     <article class="database-card" id="receipts" aria-labelledby="receipts-heading">
       <header class="card-header">
         <div>
@@ -886,21 +844,21 @@
             </tr>
           </thead>
           <tbody>
-            <tr id="receipts-kind">
-              <th scope="row"><code>kind</code></th>
+            <tr id="receipts-type">
+              <th scope="row"><code>type</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
               <td>无</td>
               <td>需要识别重复提交的操作类别。</td>
-              <td class="decision"><code>create_run / create_command / commit_files</code>。</td>
+              <td class="decision"><code>create_run / create_command / agent / manual</code>。</td>
             </tr>
             <tr id="receipts-owner-id">
               <th scope="row"><code>owner_id</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
               <td>无</td>
-              <td>请求所属的会话或 Run。</td>
-              <td class="decision">创建 Run、受理命令用会话 ID；文件提交用 Run ID。</td>
+              <td>本次受理或文件提交所属的会话、Run 或项目。</td>
+              <td class="decision"><code>create_run / create_command</code> 用会话 ID，<code>agent</code> 用 Run ID，<code>manual</code> 用项目 ID。</td>
             </tr>
             <tr id="receipts-request-id">
               <th scope="row"><code>request_id</code></th>
@@ -908,7 +866,7 @@
               <td class="nullable">否</td>
               <td>无</td>
               <td>一次请求的稳定提交标识。</td>
-              <td class="decision">与 <code>kind</code>、<code>owner_id</code> 组合唯一。</td>
+              <td class="decision"><code>create_run</code> 用初始消息的稳定提交标识，<code>agent</code> 用所属 Run 内的 <code>tool_call_id</code>，<code>manual</code> 用后端操作 ID。与 <code>type、owner_id</code> 组合唯一。</td>
             </tr>
             <tr id="receipts-request-hash">
               <th scope="row"><code>request_hash</code></th>
@@ -916,7 +874,7 @@
               <td class="nullable">否</td>
               <td>无</td>
               <td>原始业务参数的摘要。</td>
-              <td class="decision">同一请求标识对应的参数摘要须一致。</td>
+              <td class="decision">按规范化的原始业务参数计算。同一请求标识对应的参数摘要须一致。</td>
             </tr>
             <tr id="receipts-result">
               <th scope="row"><code>result</code></th>
@@ -924,16 +882,13 @@
               <td class="nullable">是</td>
               <td><code>NULL</code></td>
               <td>成功受理后关联的业务记录。</td>
-              <td class="decision"><code>create_run</code> 为 <code>{run_id}</code>；<code>create_command</code> 为 <code>{id}</code>；<code>commit_files</code> 为 <code>NULL</code>。</td>
+              <td class="decision"><code>create_run</code> 为 <code>{run_id}</code>；<code>create_command</code> 为 <code>{id}</code>；<code>agent / manual</code> 为 SQL <code>NULL</code>。</td>
             </tr>
           </tbody>
         </table>
       </div>
     </article>
-    <!-- assets.content 是四类资产正文的唯一持久化来源，直接保存原文。
-         名称唯一性校验采用去首尾空白及现有 Unicode 小写规则；snippet 名称不区分大小写唯一，标签名称在 kind 内不区分大小写唯一，其余资产名称允许重复。
-         projects.theme 在写事务内校验目标 kind 为 theme；被项目引用的主题不得删除。tags.id 与 kind 保持稳定，关联写入须校验标签存在、类别一致且不重复。
-         正文、元数据、标签关系及 updated_at 的变更在同一事务提交；同值保存不更新 updated_at。 -->
+
     <article class="database-card" id="assets" aria-labelledby="assets-heading">
       <header class="card-header">
         <div>
@@ -971,8 +926,8 @@
               <td>资产的稳定标识。</td>
               <td class="decision">全资产库唯一。</td>
             </tr>
-            <tr id="assets-kind">
-              <th scope="row"><code>kind</code></th>
+            <tr id="assets-type">
+              <th scope="row"><code>type</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
               <td>无</td>
@@ -1061,8 +1016,8 @@
               <td>标签的稳定标识。</td>
               <td class="decision">全标签库唯一。</td>
             </tr>
-            <tr id="tags-kind">
-              <th scope="row"><code>kind</code></th>
+            <tr id="tags-type">
+              <th scope="row"><code>type</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
               <td>无</td>
@@ -1075,7 +1030,7 @@
               <td class="nullable">否</td>
               <td>无</td>
               <td>标签展示名称，如“极简”。</td>
-              <td class="decision">非空；同一 <code>kind</code> 内不区分大小写唯一。</td>
+              <td class="decision">非空；同一 <code>type</code> 内不区分大小写唯一。</td>
             </tr>
           </tbody>
         </table>
@@ -1125,17 +1080,13 @@
               <td class="nullable">否</td>
               <td>无</td>
               <td>资产使用的标签。</td>
-              <td class="decision">外键关联 <code>tags.id</code>，随标签删除；组合唯一，两侧 <code>kind</code> 须一致。</td>
+              <td class="decision">外键关联 <code>tags.id</code>，随标签删除；组合唯一，两侧 <code>type</code> 须一致。</td>
             </tr>
           </tbody>
         </table>
       </div>
     </article>
-    <!-- settings_* 保存应用全局配置；初始化不覆盖已有设置，恢复预置时保留已有配置。
-         custom_apps 按添加顺序保存规范化的应用绝对路径，去重且不含内置应用；各打开方式引用的自定义路径必须存在于该数组。
-         删除自定义应用时，引用它的 default_open 改为 system，json_open/html_open 改为 inherit，与数组更新同事务提交。
-         快捷键按 Primary、Alt、Shift、KeyboardEvent.code 的固定顺序用 + 连接，省略未启用修饰键，不存空格或平台显示文案；Primary 表示 Command/Ctrl，Alt 表示 Option/Alt。
-         多项设置交换和重置原子提交；重置将操作字段恢复为默认值，不删除设置记录。 -->
+
     <article class="database-card" id="settings-fileopen" aria-labelledby="settings-fileopen-heading">
       <header class="card-header">
         <div>
@@ -1396,9 +1347,6 @@
       </div>
     </article>
 
-    <!-- settings_llm 与 settings_route 在同一事务校验并保存，模型配置至少一项，路由引用须完整有效。
-         路由外键随配置名变更更新；删除被引用配置前须改配相关路由。runs.model 不设模型配置外键，也不因配置改名改写历史记录。
-         每条模型配置必须有非空密钥，仅空白字符串无效。 -->
     <article class="database-card" id="settings-llm" aria-labelledby="settings-llm-heading">
       <header class="card-header">
         <div>
@@ -1595,7 +1543,6 @@
       </div>
     </article>
 
-    <!-- show_tool_failures 不影响失败 tool_result 的持久化。 -->
     <article class="database-card" id="settings-behavior" aria-labelledby="settings-behavior-heading">
       <header class="card-header">
         <div>
@@ -1603,7 +1550,7 @@
             <h2 id="settings-behavior-heading"><code>settings_behavior</code></h2>
             <span class="table-label">智能体设置</span>
           </div>
-          <p class="table-purpose">保存应用全局的自动行为、工具展示和审批设置。</p>
+          <p class="table-purpose">自动命名、建议与两项审批开关在 Run 受理时固定；工具失败的展示开关即时生效。</p>
         </div>
         <span class="status">已确定</span>
       </header>

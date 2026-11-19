@@ -131,21 +131,8 @@
 <body>
   <main>
     <header class="page-header">
-      <h1>API 设计</h1>
+      <h1 id="api-heading">API 设计</h1>
     </header>
-
-    <!-- 接口通用约定：
-         后端接口统一使用 /api 前缀，无版本段。仅使用 GET 与 POST；GET 通过路径定位对象、查询参数承载读取选项，不使用请求体。
-         POST 的业务参数（含目标 ID、版本校验与幂等标识）全部放请求体，不使用路径参数或业务查询参数。普通 POST 使用 JSON；上传使用 multipart/form-data。
-         统一使用 sessions、slides、assets；页面定位为 project_id + slide_id。JSON 字段使用 snake_case，ID 使用 string，时间为毫秒时间戳；revision、seq 使用十进制字符串。
-         会话相关读取响应的 revision 表示本次返回数据对应的会话版本，不表示单条记录最近修改的版本。写操作返回的 revision 与 changed 事件版本对应本次成功提交，不包含稍后发生的其他变更。
-         普通 JSON 接口的成功与错误响应统一使用 HTTP 200。成功直接返回业务对象，列表使用 items；错误返回 {"error":{"code":"…","message":"…"}}，code 用于识别错误，message 为可展示原因。
-         文件下载、图片、静态资源、SSE 建连和健康检查按各自的 HTTP 语义返回状态码。
-         路径占位符必填，其他 GET 字段为查询参数。字段除标注可选、按类型适用或有省略默认值外均必填。枚举和哈希为字符串。
-         无响应字段的成功请求返回 HTTP 200 和空响应体；二进制、HTML、CSS 与 JS 原文直接作为响应体；SSE 的事件名对应 event，data 为 UTF-8 JSON。
-         错误附加数据仅在表单修复、重试或定位失败幻灯片需要时返回 error.details、error.retryable。成功对象中的执行失败使用 failure，导出任务使用 error_message。
-         update 默认局部更新：省略不修改；null 只允许明确可空的字段；[] 表示空集合。设置保存提交完整配置，具体必填项以对应接口为准。
-         实时订阅采用 SSE，不补放历史事件；全局设置接口不使用 revision。 -->
 
     <article class="api-card" id="projects" aria-labelledby="projects-heading">
       <header class="card-header">
@@ -193,11 +180,11 @@
                 <ul class="fields">
                   <li><code>meta</code>：基本信息对象，含 title、language、count、audience、goal 五个字符串；未建立为 null</li>
                   <li><code>constraint</code>：约束对象，content 与 visual 各含 requirements、prohibitions 字符串数组；未建立为 null</li>
-                  <li><code>outline</code>：大纲对象，含 sections 有序章数组，按章、节、幻灯片组织，节点包含 id、title；未建立为 null</li>
-                  <!-- outline.sections 为有序章数组。章含 id、title、slides、subsections；节含 id、title、slides；幻灯片含 id、title。空列表为 []。 -->
-                  <li><code>slides</code>：按 slide_id 索引，每项含沿用现有文件格式的完整 spec 对象和 html 源码字符串；没有幻灯片时为 {}，文件缺失时对应值为 null</li>
-                  <li><code>hashes</code>：含 meta、constraint、outline 的内容哈希，以及按 slide_id 索引的 spec、html 哈希；文件缺失时对应哈希为 null</li>
-                  <!-- spec 沿用 {slide_id}.json 的现有文件格式，含 purpose、core、elements、layout；文件格式错误时 spec 为 null，仍保留其哈希。hashes.slides 的键集合与 slides 相同，空映射为 {}。 -->
+                  <li><code>outline</code>：大纲对象，未建立为 null。<code>sections</code> 为有序章数组，章含 <code>id、title、slides、subsections</code>，节含 <code>id、title、slides</code>，幻灯片含 <code>id、title</code>。空列表为 <code>[]</code></li>
+
+                  <li><code>slides</code>：按 <code>slide_id</code> 索引，每项包含 <code>spec</code> 与 <code>html</code>。<code>spec</code> 沿用 <code>{slide_id}.json</code>，含 <code>purpose、core、elements、layout</code>；格式错误时返回 null。<code>html</code> 为源码字符串，已存在的空 HTML 返回空串。文件缺失时对应值为 null，没有幻灯片时为 <code>{}</code></li>
+                  <li><code>hashes</code>：含 <code>meta、constraint、outline</code> 的哈希及 <code>hashes.slides</code>，其中页键与 <code>slides</code> 相同。缺失文件的哈希为 null；损坏的规格保留原始文件哈希</li>
+
                 </ul>
               </td>
             </tr>
@@ -212,8 +199,8 @@
               <td>
                 <ul class="fields">
                   <li><code>theme_id</code>：当前主题资产 ID</li>
-                  <li><code>positions</code>：四个位置字段 slide_pagination、deck_title、section_title、logo</li>
-                  <!-- positions 的值为 none / top-left / top-center / top-right / bottom-left / bottom-center / bottom-right。 -->
+                  <li><code>positions</code>：四个位置字段 <code>slide_pagination、deck_title、section_title、logo</code>，取值为 <code>none / top-left / top-center / top-right / bottom-left / bottom-center / bottom-right</code>，<code>none</code> 表示隐藏</li>
+
                   <li><code>logo</code>：布尔值，已上传为 true，未上传为 false</li>
                 </ul>
               </td>
@@ -393,44 +380,6 @@
 
     </article>
 
-    <!-- 项目管理接口约定：
-         列表按 updated_at 降序、id 升序排列，使用 Cache-Control: no-store。
-         updated_at 创建时初始化；项目名称、资料、大纲、幻灯片 spec/HTML、主题、装饰或 Logo 实际变化时更新，同值保存不更新；人工保存和 Agent 写入使用同一规则。
-         save 省略 project_id 时创建，传入时修改已有项目；拒绝 null、空 ID 及类型不符的值，不存在的项目返回 PROJECT_NOT_FOUND。名称去首尾空白后为 1–60 个字符，允许同名；改名只修改项目管理名称。
-         创建要求默认主题存在、已启用且正文有效；Logo 初始未上传，装饰使用默认位置。创建请求不自动重发；改名失败后重新读取项目状态。
-         删除成功表示项目相关执行已停止、关联数据与文件已清理；清理失败不得返回成功。项目已经不存在时也成功。
-         INVALID_ARGUMENT 用于参数或名称校验失败，PROJECT_NOT_FOUND 用于改名时项目已不存在，PROJECT_BUSY 表示改名时项目被占用，DEFAULT_THEME_UNAVAILABLE 表示创建所需的默认主题不可用，INTERNAL_ERROR 表示内部操作失败。 -->
-
-    <!-- 项目内容接口约定：
-         GET /api/projects/{project_id} 一次返回项目资料和大纲内全部幻灯片的规格、HTML 原文；正文与对应哈希反映同一份内容。
-         slides 与 hashes.slides 的键集合相同，无幻灯片时均为 {}。各字段必返；缺失文件的正文和哈希均为 null。格式错误的规格正文为 null，保留原始文件哈希；已存在的空 HTML 返回空串和对应字节哈希。
-         资料、大纲和规格保存提交完整对象；大纲创建、初始化和节点增删改移均使用 outline/save。spec 沿用现有 {slide_id}.json 文件格式及校验，HTML 源码单独保存。
-         规格和 HTML 保存时的 base_hash 分别取自 hashes.slides[id].spec 和 .html。有效规格按规范化 JSON 计算，损坏规格和 HTML 按原始字节计算，缺失为 null；base_hash 为 null 仅匹配文件缺失。
-         大纲每个节点必传 id；新节点由客户端生成正式 ID，已有节点沿用原 ID。节点种类、ID 格式、整棵树内的 ID 唯一性和父子关系须有效；原大纲中不存在的合法 ID 按新增处理。
-         大纲改名、重排和跨父节点移动保留 slide 文件。直接删除非空章须拒绝；删除含幻灯片的节，仅允许移除章内唯一的节且其幻灯片全部保留为章直属节点。
-         仅删除从整棵树中移除的 slide 对应的规格及 HTML；大纲更新与相关文件删除全部成功或全部失败，基准冲突或校验失败不改变原大纲及文件。
-         实际外部修改会使旧内容哈希失效；人工实际修改共享文件使该项目受影响的检查点失效，并通知对应会话。Run 实际提交项目文件改动后发送所属会话的 content 通知。
-         INVALID_ARGUMENT、PROJECT_BUSY、RESOURCE_NOT_FOUND、CONTENT_CONFLICT。 -->
-
-    <!-- 项目外观接口约定：
-         保存时 theme_id、positions 至少提交一个；省略不修改，不接受 null。positions 提交时须包含完整四项，none 表示隐藏。
-         启用位置不能重叠，多个位置可以在同一次保存中交换；关闭 Logo 位置不删除图片。一次保存中的主题和位置全部成功或全部失败。
-         新选择的主题须为已启用的主题资产；原项目已引用的停用主题仍能渲染。
-         保存成功为空响应体，不使用外观 hash 或 base_hash。
-         INVALID_ARGUMENT、POSITION_CONFLICT、ASSET_NOT_FOUND、ASSET_DISABLED、PROJECT_BUSY。 -->
-
-    <!-- Logo 接口约定：
-         上传使用 multipart/form-data，project_id、file 均必填；空文件拒绝，校验失败保留原图，成功时上传或替换图片。
-         删除使用 JSON 请求体；图片已不存在时也成功。上传、替换和删除均不改变 Logo 位置。
-         外观响应的 logo 仅表示是否已上传图片，与位置是否启用无关；替换图片不改变读取地址，logo 仍为 true。
-         图片使用 Cache-Control: private, no-cache 与 ETag，上传、替换或删除后反映最新图片状态；不接收 version，不在业务响应中返回图片 hash。
-         INVALID_ARGUMENT、PROJECT_BUSY、INVALID_IMAGE、FILE_TOO_LARGE；图片不存在返回 HTTP 404。 -->
-
-    <!-- 缩略图接口约定：
-         返回当前源码、外观和渲染依赖对应的 WebP 缩略图。
-         使用 Cache-Control: private, no-cache 与 ETag；当前图片匹配 If-None-Match 时返回 HTTP 304。
-         幻灯片或 HTML 缺失返回 HTTP 404，渲染服务不可用返回 HTTP 503。 -->
-
     <article class="api-card" id="assets" aria-labelledby="assets-heading">
       <header class="card-header">
         <h2 id="assets-heading">资产</h2>
@@ -449,10 +398,10 @@
           <tbody>
             <tr>
               <th scope="row">读取资产内容</th>
-              <td><code>GET /api/assets?kind={kind}&amp;query={query}</code></td>
+              <td><code>GET /api/assets?type={type}&amp;query={query}</code></td>
               <td>
                 <ul class="fields">
-                  <li><code>kind</code>：theme / component / skill / snippet</li>
+                  <li><code>type</code>：theme / component / skill / snippet</li>
                   <li><code>query</code>：可选，按名称、描述或标签名搜索；短语同时匹配正文</li>
                 </ul>
               </td>
@@ -460,7 +409,7 @@
                 <ul class="fields">
                   <li><code>items</code>：资产摘要数组，包含启用和停用资产，统一按 updated_at 降序、name 升序、id 升序排列；无结果为 []</li>
                   <li><code>items[].id</code>：稳定资产 ID</li>
-                  <li><code>items[].kind</code>：theme / component / skill / snippet</li>
+                  <li><code>items[].type</code>：theme / component / skill / snippet</li>
                   <li><code>items[].name</code>：显示名</li>
                   <li><code>items[].description</code>：描述</li>
                   <li><code>items[].disabled</code>：布尔值，是否停用</li>
@@ -471,10 +420,10 @@
             </tr>
             <tr>
               <th scope="row">读取标签字典</th>
-              <td><code>GET /api/tags?kind={kind}</code></td>
+              <td><code>GET /api/tags?type={type}</code></td>
               <td>
                 <ul class="fields">
-                  <li><code>kind</code>：theme / component / skill / snippet</li>
+                  <li><code>type</code>：theme / component / skill / snippet</li>
                 </ul>
               </td>
               <td>
@@ -506,7 +455,7 @@
               <td>
                 <ul class="fields">
                   <li><code>asset_id</code>：可选，省略创建资产，传入则更新已有资产</li>
-                  <li><code>kind</code>：创建时必填，theme / component / skill / snippet；更新时省略</li>
+                  <li><code>type</code>：创建时必填，theme / component / skill / snippet；更新时省略</li>
                   <li><code>name</code>：创建时必填，更新时可选；名称去首尾空白后 1–80 字符</li>
                   <li><code>description</code>：创建时必填，更新时可选；描述去首尾空白后 1–500 字符</li>
                   <li><code>content</code>：创建时必填，更新时可选；该类型的完整原文字符串，可由前端读取文件获得，更新时省略不修改</li>
@@ -537,16 +486,6 @@
         </table>
       </div>
     </article>
-    <!-- 资产接口约定：
-         列表包含符合筛选条件的启用和停用资产；disabled 表示该资产是否可供选择或 Agent 加载。query 匹配名称、描述或标签名，短语同时匹配正文。
-         所有资产列表及搜索结果统一按 updated_at 降序、name 升序、id 升序排列；搜索仅筛选匹配项，不另设匹配优先级。
-         save 通过 asset_id 是否省略区分创建和更新，拒绝 null、空 ID 及类型不符的字段。新建由后端生成 ID，默认启用；更新目标须存在，kind 创建后固定。
-         更新可提交 name、description、tag_ids、disabled、content，至少一项；省略不修改。更新正文须提供读取时的 base_hash，冲突返回 CONTENT_CONFLICT，整次保存失败；创建或仅修改摘要时省略 base_hash。
-         updated_at 创建时初始化；名称、描述、正文、标签集合或启停状态实际变化时更新，同值保存不更新，不接受客户端指定时间。
-         hash 仅根据 content 计算，摘要字段变化不影响正文哈希；保存响应的 id、hash、updated_at 对应本次保存结果，正文读取的 content 与 hash 对应同一份内容。保存正文后使用返回的 hash 作为下次 base_hash。
-         导入使用 save 创建资产，content 提交 UTF-8 原文字符串。各类正文非空，主题 CSS 最多 64 KiB 且须通过主题样式校验，短语最多 16 KiB。
-         标签须存在、同类且不重复；snippet 名称大小写不敏感唯一。已被项目引用的主题不可删除；停用不破坏已有项目渲染。主题正文变更会影响引用它的项目外观与缩略图。
-         ASSET_NOT_FOUND、ASSET_IN_USE、DUPLICATE_NAME、INVALID_TAG、INVALID_CONTENT、CONTENT_CONFLICT。 -->
 
     <article class="api-card" id="settings" aria-labelledby="settings-heading">
       <header class="card-header">
@@ -738,17 +677,6 @@
         </table>
       </div>
     </article>
-    <!-- 设置接口约定：
-         四组 save 均提交对应组的完整配置，不允许省略必填字段；不接收 null，明确可空的路由除外。默认值不表示保存时可以省略字段。
-         保存成功返回 HTTP 200 和空响应体；保存后的读取失败只重试 GET，不重复提交保存。
-         supported 为只读平台能力，不作为保存参数。fileopen/pick 返回规范化应用绝对路径，取消返回 path: null；选择应用不修改文件打开设置。
-         文件设置保存会校验路径、去重并过滤内置应用；移除被引用的自定义应用时，default_open 改为 system，json_open / html_open 改为 inherit，与应用列表修改一并生效。custom_apps: [] 清空列表。
-         快捷键的 18 个字段均为字符串，完整保存、恢复默认与撤销共用 save；五个行为字段均为布尔值。
-         模型与路由整组保存，全部成功或全部失败；models 至少一项，每项 name、protocol、base_url、model 必填，routes 的十个字段全部必填，可空项显式传 null。
-         已有模型通过 previous_name 定位原配置，新增项省略；原条目未列入即删除。路由引用保存后的配置名，删除配置前须改配全部引用。
-         key 新增必填，修改时省略保留、提供非空字符串则替换；不接受 null、空串或仅空白字符串。密钥只写不回传，查询不返回 has_key；provider 为只读品牌名。
-         当前模型读图能力统一开启，查询不返回固定的 vision 字段。新模型配置不改变已运行任务使用的配置；行为开关的生效时机遵循 DATABASE.html。
-         INVALID_BINDING、DUPLICATE_BINDING、INVALID_APPLICATION、OPEN_UNSUPPORTED、INVALID_ROUTE、DUPLICATE_NAME、KEY_REQUIRED。 -->
 
     <article class="api-card" id="exports" aria-labelledby="exports-heading">
       <header class="card-header">
@@ -792,7 +720,7 @@
               </td>
               <td>
                 <ul class="fields">
-                  <li><code>status</code>：字符串，snapshotting / rendering / packaging / ready / failed / canceled</li>
+                  <li><code>status</code>：字符串，<code>snapshotting</code> 准备输入，<code>rendering</code> 渲染，<code>packaging</code> 生成成品，<code>ready</code> 可下载，<code>failed</code> 失败，<code>canceled</code> 已取消</li>
                   <li><code>completed_slides</code>：非负整数，已处理幻灯片数，初始为 0</li>
                   <li><code>total_slides</code>：正整数，本次导出的幻灯片总数，创建任务时确定</li>
                   <li><code>filename</code>：字符串或 null；ready 时为导出文件名，其余状态为 null</li>
@@ -829,25 +757,6 @@
         </table>
       </div>
     </article>
-    <!-- 导出接口约定：
-         导出通过创建、状态读取、取消、下载四个接口完成，进度通过状态接口轮询读取。
-         导出使用本次固定的已保存文稿，包含一致的幻灯片顺序、HTML、主题、装饰和 Logo；后续项目变化不影响本次导出内容。
-         HTML 成品为单个 .html 文件，包含全部 slide、播放器、基础与主题样式、字体、装饰和 Logo，保留翻页和缩放；PNG 成品为图片 ZIP，PDF 成品为 PDF 文件。
-         不支持幻灯片 HTML 引用会话附件或其他用户本地文件，发现此类引用时校验失败。PNG/PDF 沿用现有外部资源限制和完整性校验；HTML 允许保留外部资源，不返回联网依赖警告。
-         创建要求大纲有效且至少有一张幻灯片；返回 id 时已确定本次幻灯片清单、顺序和 total_slides，任务期间总数不变，completed_slides 初始为 0。
-         同项目只允许一个活动导出；采集导出内容时，项目任一会话存在非终态 Run，或正在 Git 提交、历史恢复，返回 PROJECT_BUSY。
-         status 中 snapshotting 表示准备输入，rendering 表示渲染，packaging 表示生成成品，ready 表示可下载，failed 表示失败，canceled 表示已取消。packaging 对 PNG 为打包 ZIP，对 PDF 为合成，对 HTML 为组装单文件；HTML 可从 snapshotting 直接进入 packaging，组装时同样更新 completed_slides。
-         filename、filesize 仅 ready 时非 null。请求本身失败使用 error.code、error.message；任务执行失败通过成功读取的 status: failed 与 error_message 表达。两类失败均不附幻灯片列表或可重试标志，任务不另返错误码。
-         创建按 project_id + request_id 识别存活任务；同参重发返回原 id，不替换旧任务；同一标识更换 format 拒绝，主动重新导出使用新 request_id。
-         新 request_id 通过新建校验后替换同项目已 ready 且未下载中的旧任务，旧任务随之失效；旧任务处于 snapshotting、rendering、packaging 或正在下载时返回 EXPORT_ACTIVE。failed、canceled 不阻止新建。
-         生成阶段超时为 30 分钟，超时后标记 failed；ready 文件与下载不受此上限约束，等待下载的成品不因时间流逝失效。
-         同一任务同时只允许一个下载请求；下载期间状态仍为 ready。服务端完整发送文件后任务失效，不能再次下载；完整发送不保证用户已经保存到磁盘。
-         传输失败或中断时，完整成品仍在则保留 ready 供重试，否则转 failed；服务端已完整发送并使任务失效时，重试只能得到已失效结果，需重新导出。
-         取消会停止生成或使 ready 成品失效；已经清理或不存在时也成功，返回 HTTP 200 空响应体。下载期间拒绝取消清理。
-         项目删除、后端退出或重启使相关导出任务失效，重启后不恢复任务。客户端未成功取消时，未领取成品可保留至新导出替换、显式取消、项目删除或后端退出/重启。
-         下载未就绪或正在传输返回 HTTP 409；任务不存在或已清理返回 HTTP 410。响应使用 Cache-Control: no-store、Content-Type、Content-Length、Content-Disposition；HTML 为 text/html; charset=utf-8，附件文件名以 .html 结尾。
-         状态读取不命中返回 HTTP 200 与 EXPORT_GONE；任务消失不表示客户端已成功接收文件。
-         EXPORT_ACTIVE、EXPORT_GONE、EXPORT_NOT_READY、EXPORT_DOWNLOADING、REQUEST_CONFLICT、PROJECT_BUSY。 -->
 
     <article class="api-card" id="files" aria-labelledby="files-heading">
       <header class="card-header">
@@ -892,7 +801,7 @@
               </td>
               <td>
                 <ul class="fields">
-                  <li><code>响应体</code>：缩略图为 image/webp，原图为 image/png</li>
+                  <li><code>响应体</code>：缩略图为 image/webp，原图为 image/png，两者均保留至项目删除</li>
                 </ul>
               </td>
             </tr>
@@ -907,7 +816,7 @@
               </td>
               <td>
                 <ul class="fields">
-                  <li><code>响应体</code>：image/png，调用当时的截图</li>
+                  <li><code>响应体</code>：image/png，调用当时的截图，保留至项目删除</li>
                 </ul>
               </td>
             </tr>
@@ -915,12 +824,7 @@
         </table>
       </div>
     </article>
-    <!-- 附件与截图接口约定：
-         上传成功仅返回 id，文件格式和尺寸须通过校验；读取附件时按项目校验归属。thumbnail 的最长边为 512，original 返回上传的原始 PNG 字节。
-         发送消息时，图片引用携带 attachment_id 与 original_name；original_name 为历史展示名称，不用于定位图片路径。
-         附件供会话消息和 Agent 读取；幻灯片 HTML 暂不支持引用会话附件或其他用户本地文件。
-         工具截图按 project_id 与 screenshot_id 定位，返回调用当时的截图，不依赖 Run 是否仍存在或当前幻灯片内容。过期或丢失图片返回 HTTP 404，不以当前页面重新渲染替代历史截图。
-         INVALID_IMAGE、FILE_TOO_LARGE、FILE_NOT_FOUND。 -->
+
     <article class="api-card" id="sessions" aria-labelledby="sessions-heading">
       <header class="card-header">
         <h2 id="sessions-heading">会话</h2>
@@ -967,11 +871,15 @@
               <td>
                 <ul class="fields">
                   <li><code>revision</code>：本次读取的会话版本，十进制字符串</li>
-                  <li><code>plan</code>：生效的计划或 null；含 run_id 和有序 steps，每步有 title、status（pending / processing / completed）</li>
-                  <li><code>context</code>：{current, total, threshold_min, threshold_max, details}</li>
+                  <li><code>plan</code>：生效的计划或 null；含 run_id 和有序 steps，每步有 title、status（pending / processing / completed），最多一步 processing；update_plan 的 steps=null 清空计划</li>
+                  <li><code>context</code>：对象，含 <code>current、total、threshold_min、threshold_max、details</code>，均必返且非 null</li>
+                  <li><code>context.current</code>：非负整数，各明细项 Token 数之和</li>
+                  <li><code>context.total</code>：正整数，总窗口 200000 Token</li>
+                  <li><code>context.threshold_min / threshold_max</code>：正整数，分别为 12000 和 170000 Token</li>
+                  <li><code>context.details</code>：含 <code>system_prompt、runtime、chat_history、read_file、other</code>。各类为有序 <code>{name, tokens}</code> 数组，name 为字符串，tokens 为非负整数，无明细为 []</li>
                   <li><code>active_run_id</code>：当前会话的非终态 Run ID，无则 null；据此读取状态、进度与待答事项</li>
                   <li><code>active_command_ids</code>：当前会话非终态旁路命令的 id 数组，无则 []</li>
-                  <li><code>suggestions</code>：当前有效建议字符串数组，无则 []</li>
+                  <li><code>suggestions</code>：当前会话最后一条用户输入之后最近成功的 suggest 结果。无用户输入时取最近成功结果，无匹配则为 []</li>
                 </ul>
               </td>
             </tr>
@@ -983,6 +891,7 @@
                   <li><code>session_id</code>：字符串，可选；省略创建会话，传入则修改已有会话名称</li>
                   <li><code>project_id</code>：字符串，创建时必填；修改时省略</li>
                   <li><code>title</code>：字符串，创建时可选，省略使用「新会话」；修改时必填，去首尾空白后非空</li>
+                  <li><code>expected_revision</code>：十进制字符串。可返回最新且标题实际改变时必填，取检查点列表的 revision。</li>
                 </ul>
               </td>
               <td>
@@ -1020,22 +929,6 @@
         </table>
       </div>
     </article>
-    <!-- 会话接口约定：
-         updated_at 创建时初始化；列表按 updated_at 降序、id 升序排列。
-         save 省略 session_id 时创建，project_id 必填；提供 session_id 时仅修改已有会话名称，title 必填且不接收 project_id，不允许更换所属项目。拒绝 null、空 ID、空白标题及类型不符的值；会话不存在返回 SESSION_NOT_FOUND，不转为新建。
-         创建时 title 省略使用「新会话」，提供时去首尾空白并校验非空。保存成功只返回 id，标题、更新时间和排序通过会话列表读取；后续读取失败只重试 GET，不重复创建。
-         手动改名使用 sessions/save，模型命名使用 rename 命令。会话状态不返回标题，标题由会话列表提供；can_return 由检查点列表提供，active_run_id 用于读取 Run 详情。
-         run_status 为当前非终态 Run 的状态，无活动 Run 时为 null；has_active_commands 表示是否存在 pending / running / cancelling 的命令。同项目其他会话的活动 Run 不阻止当前会话发起 Run。
-         Git 提交的进度与取消使用命令接口，项目级冲突返回 PROJECT_BUSY；会话列表不提供 Git 占用状态。
-         会话删除成功表示该会话活动已停止且清理完成，不停止同项目其他会话的 Run；重复删除成功。
-         删除计划要求 expected_revision 有效；版本过期不执行。当前会话有非终态 Run 时返回 SESSION_BUSY，其他会话的 Run 不影响此操作。
-         删除计划成功后 plan 为 null；若处于回退位置，同时放弃返回最新及已脱离当前历史的回退入口，无需另传 branch_revision。操作失败不改变计划或返回能力；成功按实际变化发送 plan、context、checkpoints 通知。
-         context 不接收 model、details 查询参数，分类明细始终随统计返回；表示当前上下文估算量，不是历史 Run 用量之和，与其余会话持久状态对应同一 revision。
-         context 的 current、total、threshold_min、threshold_max、details 必返且非 null。current 为非负整数，total 为正整数，当前固定为 200000，单位均为 Token。
-         details 包含 system_prompt、runtime、chat_history、read_file、other 五个键，每类为有序 {name, tokens} 数组，name 为字符串、tokens 为非负整数，无明细为 []；current 等于全部明细 tokens 之和。
-         threshold_min、threshold_max 为固定 Token 数正整数，当前分别为 12000、170000；current >= threshold_min 满足手动压缩用量条件，否则返回 CONTEXT_TOO_SMALL；current >= threshold_max 触发自动压缩。
-         压缩状态与取消目标由 active_command_ids 对应的 compact 命令详情提供，context 不重复返回命令 ID；压缩占用规则见命令接口。
-         INVALID_ARGUMENT、PROJECT_NOT_FOUND、SESSION_NOT_FOUND、SESSION_BUSY、PROJECT_BUSY、STALE_REVISION。 -->
 
     <article class="api-card" id="history" aria-labelledby="history-heading">
       <header class="card-header">
@@ -1070,8 +963,12 @@
                   <li><code>items</code>：当前批次的分组，按创建 seq 升序展示，首次取最新一批；无历史为 []</li>
                   <li><code>items[].seq</code>：分组首条记录的序号，十进制字符串</li>
                   <li><code>items[].created_at</code>：分组开始时间，毫秒时间戳</li>
-                  <li><code>items[].run</code>：对象，仅 Run 分组返回；含 id、status、scope、instructions、response、active_duration_ms、total_tokens、changes、failure</li>
-                  <li><code>items[].command</code>：对象，仅命令分组返回；含 id、operation_id、kind、status、phase、failure、last_success_id、result</li>
+                  <li><code>items[].run</code>：对象，仅 Run 分组返回。含字符串 <code>id、status</code>，<code>scope</code> 为幻灯片 ID 数组或 null（全部），<code>[]</code> 表示无授权。<code>active_duration_ms、total_tokens</code> 为非负整数，<code>failure</code> 为 <code>{code, message}</code> 或 null</li>
+                  <li><code>items[].run.instructions</code>：全部指令，按 <code>seq</code> 升序，无时为 <code>[]</code>。每项含字符串 <code>id、text</code>、毫秒时间戳 <code>created_at</code>、<code>instruction_status</code>（queued / sent）和有序公开 <code>references</code>（无时为 <code>[]</code>）。被拒输入另含 <code>instruction_decision</code>（disclosure / bypass / irrelevant）</li>
+                  <li><code>items[].run.response</code>：最终回复，最多一条。含字符串 <code>id、text</code> 和毫秒时间戳 <code>created_at</code>，未生成时为 null。指令和回复均返回原消息 ID 和完整正文</li>
+                  <li><code>items[].run.changes</code>：净差异概况，每项含 <code>target、status</code>（added / modified / deleted）。已知时含增删行数 <code>insertions、deletions</code>。未生成或不可得为 null，确认无变化为 <code>[]</code></li>
+                  <li><code>items[].command</code>：对象，仅命令分组返回。含 <code>id、operation_id、type、status、phase、failure、last_success_id、result</code>。<code>type</code> 可为 polish / handoff / compact / commit，<code>status</code> 同命令详情，<code>phase</code> 为非负整数或 null，<code>failure</code> 为 <code>{code, message}</code> 或 null</li>
+                  <li><code>items[].command.result</code>：<code>polish / handoff</code> 含字符串 <code>title</code>。<code>compact</code> 含 <code>title</code> 和非负整数 <code>before_tokens、after_tokens、max_tokens</code>。<code>commit</code> 为空时仅为 <code>{empty: true}</code>，否则另含字符串 <code>title、hash、branch</code> 和非负整数 <code>files_changed、insertions、deletions</code></li>
                 </ul>
               </td>
             </tr>
@@ -1088,10 +985,10 @@
                   <li><code>items</code>：数组或 null，必返；一次返回该 Run 的全部变更差异，无变化为 []，清单尚未生成或不可得为 null</li>
                   <li><code>items[].target</code>：对象，必返；变更目标，含 part、可选 slide_id、path，与历史 run.changes 的目标一致</li>
                   <li><code>items[].status</code>：字符串，必返；added / modified / deleted</li>
-                  <li><code>items[].kind</code>：字符串，必返；fields / outline / text / binary / unavailable</li>
-                  <li><code>items[].fields</code>：数组，仅 fields 时必返；每项含 field、可选 label、rows；行含 kind（added / removed）、value</li>
-                  <li><code>items[].groups</code>：数组，仅 outline 时必返；每项含 rows；行含 kind（context / added / removed）、node（section / subsection / slide）、depth、title、可选 order</li>
-                  <li><code>items[].hunks</code>：数组，仅 text 时必返；每项含 old_start、old_count、new_start、new_count、rows；行含 kind、text、可选 old_line、new_line</li>
+                  <li><code>items[].type</code>：字符串，必返；fields / outline / text / binary / unavailable</li>
+                  <li><code>items[].fields</code>：数组，仅 fields 时必返；每项含 field、可选 label、rows；行含 type（added / removed）、value</li>
+                  <li><code>items[].groups</code>：数组，仅 outline 时必返；每项含 rows；行含 type（context / added / removed）、node（section / subsection / slide）、depth、title、可选 order</li>
+                  <li><code>items[].hunks</code>：数组，仅 text 时必返；每项含 old_start、old_count、new_start、new_count、rows；行含 type、text、可选 old_line、new_line</li>
                   <li><code>items[].reason</code>：字符串，仅 unavailable 时必返；无法展示的原因；binary 只展示目标和变更类别</li>
                 </ul>
               </td>
@@ -1117,13 +1014,13 @@
                   <li><code>created_at</code>：受理时间，毫秒时间戳</li>
                   <li><code>updated_at</code>：最近状态更新时间，毫秒时间戳</li>
                   <li><code>failure</code>：Run 失败原因 {code, message}，没有为 null</li>
-                  <li><code>activity</code>：字符串或 null，当前活动标识；无活动或 Run 结束为 null</li>
+                  <li><code>activity</code>：字符串或 null，无活动或 Run 结束为 null。取值为 <code>run.preparing、run.analyzing、run.retrying、run.canceling、model.fallback、plan.preparing、presentation.meta.reading/updating、presentation.structure.reading/updating、presentation.constraint.reading/updating、slide.content.reading、reference.inspecting、slide.updating、slide.layout.checking、resource.preparing、command.executing、presentation.reviewing</code>，斜线两侧是独立后缀</li>
                   <li><code>commentary</code>：字符串或 null，当前进度说明；无说明或 Run 结束为 null</li>
-                  <li><code>pending</code>：待答项数组，每项含 tool_call_id、kind（question / plan / permission / scope / resource）、version；按 ID 读取表单，无待答项或 Run 结束为 []</li>
+                  <li><code>pending</code>：待答项数组，每项含 tool_call_id、type（question / plan / permission / scope / resource）、version；按 ID 读取表单，无待答项或 Run 结束为 []</li>
                   <li><code>messages</code>：完整过程消息数组，按 seq 升序；无记录为 []，不分页</li>
                   <li><code>messages[].id</code>：消息 ID</li>
                   <li><code>messages[].seq</code>：会话内创建顺序，十进制字符串</li>
-                  <li><code>messages[].kind</code>：thinking / commentary / tool_call / tool_result</li>
+                  <li><code>messages[].type</code>：thinking / commentary / tool_call / tool_result</li>
                   <li><code>messages[].created_at</code>：创建时间，毫秒时间戳</li>
                   <li><code>messages[].text</code>：字符串，仅 thinking / commentary 返回完整正文，不截断</li>
                   <li><code>messages[].name</code>：字符串，仅工具消息返回工具名称</li>
@@ -1147,13 +1044,13 @@
                   <li><code>revision</code>：本次读取的会话版本，十进制字符串</li>
                   <li><code>operation_id</code>：同一次操作的 ID，修订时沿用</li>
                   <li><code>run_id</code>：所依赖的 Run ID，无则 null</li>
-                  <li><code>kind</code>：rename / polish / handoff / compact / commit / suggest</li>
+                  <li><code>type</code>：rename / polish / handoff / compact / commit / suggest</li>
                   <li><code>status</code>：pending / running / cancelling / done / failed / interrupted / cancelled</li>
                   <li><code>created_at</code>：本次执行的毫秒时间戳</li>
                   <li><code>phase</code>：运行中的阶段序号，从 0 起；无活动阶段为 null</li>
                   <li><code>input</code>：首次润色含 text，修订含 base_id、feedback；无额外参数为 {}</li>
                   <li><code>last_success_id</code>：同组最近成功执行的 ID，无则 null</li>
-                  <li><code>result</code>：此次已完成的产物对象，未成功为 null，按下列 kind 返回</li>
+                  <li><code>result</code>：此次已完成的产物对象，未成功为 null，按下列 type 返回</li>
                   <li><code>result.title</code>：rename 为生成的会话名；polish / handoff / compact / 非空 commit 为标题</li>
                   <li><code>result.content</code>：字符串，polish / handoff 的完整文稿，compact 的完整摘要正文</li>
                   <li><code>result.changed</code>：仅 polish，原文是否被修改，布尔值</li>
@@ -1180,15 +1077,19 @@
                   <li><code>arguments</code>：对象，必返；可向用户展示的调用参数，无参数为 {}</li>
                   <li><code>result</code>：对象或 null，必返；对应的已保存工具结果，尚无结果记录为 null</li>
                   <li><code>result.status</code>：字符串，result 非 null 时必返；completed / blocked / failed</li>
+                  <li><code>result.content</code>：三种资料编辑工具成功保存的完整定稿。edit_meta、edit_constraints 为对象，edit_outline 为含正式节点 ID 的大纲 JSON 字符串</li>
                   <li><code>result.text</code>：字符串，可选；工具输出、检查结论或失败原因</li>
-                  <li><code>result.targets</code>：数组，可选。每项含 part、path、diff，可选 slide_id。发生变更的目标必返 status（added / modified / deleted）。diff 复用「读取变更差异」每项的 kind 与对应差异字段</li>
+                  <li><code>result.targets</code>：数组，可选。每项含 part、path、diff，可选 slide_id。发生变更的目标必返 status（added / modified / deleted）。diff 复用「读取变更差异」每项的 type 与对应差异字段</li>
                   <li><code>result.image</code>：对象，可选；含 source（render / attachment）、url 与可选 slide_id，定位调用当时的图片</li>
-                  <li><code>result.resources</code>：数组，可选；已加载资产的 {kind, id, name} 数组</li>
+                  <li><code>result.resources</code>：数组，可选；已加载资产的 {type, id, name} 数组</li>
                   <li><code>result.command</code>：对象，可选；含 text；已知时含 exit_code、duration_ms、stdout_preview、stderr_preview</li>
-                  <li><code>result.interaction</code>：对象，可选；含 kind、request、answer。kind 与人工模块一致，request 为当时展示的表单内容</li>
+                  <li><code>result.interaction</code>：对象，可选；含 type、request、answer。type 与人工模块一致，request 为当时展示的表单内容</li>
                   <li><code>result.interaction.answer</code>：对象或 null，有 interaction 时必返。提问为 {answers}，审批为 {decision, feedback?}，无人工答复为 null</li>
                   <li><code>result.interaction.applied_scope</code>：仅 scope，处理完成时返回最终允许的幻灯片 ID 数组；null 表示全部，[] 表示未授权幻灯片</li>
                   <li><code>result.preview</code>：对象，可选；含 slide_id、status（completed / unavailable / stale），完成时含 scores、judges，无法取得时含 reason</li>
+                  <li><code>result.preview.scores</code>：<code>content_coverage、expression_clarity、requirement_adherence</code> 均为 0 至 3 的有限数值，允许小数</li>
+                  <li><code>result.preview.judges.mismatch</code>：meta_mismatch / content_mismatch / spec_mismatch / visual_mismatch / none</li>
+                  <li><code>result.preview.judges.issue</code>：expression_issue / layout_issue / visual_issue / none</li>
                 </ul>
               </td>
             </tr>
@@ -1214,45 +1115,6 @@
         </table>
       </div>
     </article>
-    <!-- 历史与详情接口约定：
-         历史列表不返回 rename/suggest 分组，压缩摘要只通过 compact 命令结果提供。每项外层保留 seq、created_at；run、command 仅返回一个非 null 对象，另一对象省略，不增加外层 id、kind 或 summary。
-         run.id 为原 Run ID；command.id 为同一操作最新一次执行的 ID，operation_id 为修订期间不变的操作标识。command_id 定位单次执行，不接受 operation_id 代替。
-         Run 与命令详情只接收路径 ID，不接收 before、limit、revision，不分页；revision 表示本次持久数据对应的会话版本。activity、commentary、pending、phase 为实时状态，相同 revision 不表示这些字段没有变化。
-         Run 详情始终返回 activity、commentary、pending；终态时前两项为 null，pending 为 []。活动 Run 的进度、计时段、待答项及完整过程消息由详情提供。
-         历史 run 的所有列出字段均返回。id、status 为字符串；scope 为幻灯片 ID 数组或 null，null 表示全部，[] 表示未授权。active_duration_ms、total_tokens 为非负整数，failure 为 {code, message} 或 null。
-         run.instructions 为该 Run 全部 instruction，按 seq 升序，无则 []；每项 id、text 为字符串，created_at 为毫秒时间戳，instruction_status 为 queued / sent，references 为有序公开引用数组，无则 []。
-         历史图片引用含 type=image、attachment_id、original_name；DOM 引用含 type=dom、slide_id、comment、marker_no；其余引用保留 type 与稳定 ID。历史与工具详情不返回 DOM 原始 HTML、内部定位、供应商 raw 或内部提示。
-         run.response 至多一条，含字符串 id、text 及毫秒时间戳 created_at；尚无最终回复或失败、取消、中断时未生成回复则为 null。instructions 与 response 均返回完整正文和原消息 ID。
-         历史 run.changes 仅返回净修改概况：每项含 target、status，可选 insertions、deletions；后两项为已知增删行数，status 为 added / modified / deleted，target 的 part、slide_id、path 与工具目标一致。
-         changes 只表示本 Run 成功提交的自身净修改，不含其他 Run 或人工写入；null 表示尚未生成或不可得，[] 表示确认无变化。具体差异通过 runs/{run_id}/changes 一次读取，不分页。
-         差异 items 与历史 run.changes 顺序相同，通过 target 对应目标，不返回 index。单个目标差异不可得时 kind=unavailable 并提供 reason；整体不可得时 items=null，无变化时为 []。
-         工具 result.targets[].diff 复用 kind、fields、groups、hunks、reason 的差异结构，不含 items 包装；target.path 为交给 files/open 的项目内相对路径。
-         历史 command 的所有列出字段均返回。kind 仅 polish / handoff / compact / commit，status 与命令详情一致；phase 为非负整数或 null，终态或无活动阶段时为 null；failure 为最新执行的 {code, message} 或 null。
-         command.id、status、phase、failure 对应按 seq 确定的最新执行；last_success_id 为同组最近成功执行的 ID，result 为该次成功产物的首屏字段，两者同时为空或同时有值。最新执行失败、取消或修订中时仍返回已有成功产物。
-         历史 command.result 中，polish / handoff 仅返回字符串 title；compact 返回 title 及非负整数 before_tokens、after_tokens、max_tokens；commit 在 empty=true 时仅返回 {empty: true}，否则另返回字符串 title、hash、branch 和非负整数 files_changed、insertions、deletions。
-         成功产物通过 last_success_id 读取命令详情，polish / handoff / compact 的完整正文使用 result.content，commit 的说明使用 result.items。读取最新状态和取消使用 command.id，修订使用最近成功执行 ID 作为 base_id。
-         命令详情的 result 仅属于指定执行，未成功为 null，不以最近成功产物替代。不存在或已由回退移除的 Run/命令分别返回 RUN_NOT_FOUND、COMMAND_NOT_FOUND，不自动改查同组其他执行。
-         Run 详情的 messages 包含已保存的全部 thinking、commentary、tool_call、tool_result，按 seq 升序，无则 []，不分页；不重复包含 instruction、response 或 summary。
-         messages 中 id、kind 为字符串，seq 为十进制字符串，created_at 为毫秒时间戳；thinking / commentary 返回完整 text。工具消息返回 name、tool_call_id、has_detail，tool_result 另返回 status；tool_call 有可公开主要目标时返回 target，不适用字段省略。
-         同一工具调用与结果按 run_id + tool_call_id 对应，name 相同；has_detail 表示该调用是否有可公开参数或结果。工具详情使用 tool_call 消息的 messages[].id，一次返回参数和结果，不接受 tool_result 消息 ID。
-         工具详情 arguments 必为对象，无可展示参数时为 {}；result 必返，尚无已保存结果时为 null。缺少结果不能说明仍在执行、未执行或执行失败，活动状态以 Run 当前状态为准。
-         非 null 的 result 必返 status；其他字段按实际内容返回，不适用时省略，适用但无条目的数组为 []，空输出可为 ""。工具详情不返回 raw、内部提示或 DOM 原始 HTML，不重复返回请求 ID 或工具名称。
-         历史 interaction.request 使用相应待答表单字段，去掉 kind 和 version；answer 使用对应答复字段。范围由追加指令满足且无人工答复时 answer=null，applied_scope 表示实际范围；资料执行结果见 result.status、result.targets。
-         preview.scores 的 content_coverage、expression_clarity、requirement_adherence 均为数值；judges 包含 mismatch 与 issue 枚举。当前待答表单通过人工接口读取，工具详情仅提供已保存的调用与结果。
-         工具消息不存在返回 TOOL_CALL_NOT_FOUND，kind 不是 tool_call 返回 INVALID_ARGUMENT；调用存在但尚无结果仍成功返回 result=null，后续结果通过 run 变化通知后重读取得。
-         历史 before 省略时取最新 limit 组；提供时取分组首条 seq 严格小于 before 的最近 limit 组，批内按 seq 升序。仍有更早记录时 next_before 为本批最小分组 seq，否则及空批次为 null。
-         before 必须是有效十进制字符串，空值或 null 返回 INVALID_ARGUMENT。分页数据、是否有更早记录与 revision 对应同一次读取；各页可来自不同会话版本。history 通知可能更新已加载的旧分组，不能只追加新分组。
-         实时订阅约定：
-         订阅以会话为单位，活动后台会话通过自身订阅提供通知；先建立订阅再读取会话状态与 Run 快照，读取期间接收的通知仍须处理。建立连接后重读项目会话列表，以补齐建连前后的变化。
-         Run 收尾时已受理的后续 Run 或命令须能从会话列表和状态中读到。changed 在变更生效且可读取后发送；revision 属于订阅对应的会话，areas 必填、非空、无重复，顺序无业务含义。
-         各变化区域均须同步，分别按区域或对象识别过期读取；不能因其他区域已收到更高版本而忽略通知，读取期间相关通知到达时须重新同步。不同会话的 revision 独立，不能相互比较。
-         完整消息可读取后按实际变化通知；仅新增工具过程且历史分组未变时通知 run，最终回复、变更概况及 Run 终态更新时同时通知 history、run，其他变化区域一并列入 areas。
-         history 对应历史列表；run 对应 Run 详情，活动 ID 未知或原 Run 已结束时先通过会话状态定位当前 Run；commands 对应活动命令 ID 与相关详情，修订或结果影响历史分组时同时通知 history。
-         plan、suggestions、context 对应会话状态，checkpoints 对应检查点列表；content 对应项目内容变化，sessions 对应会话标题、活动状态或排序变化并读取项目会话列表。项目共享变更通知由产生变更的会话发出。
-         重连或 reset 后，旧读取结果和分页游标失效；重新同步项目会话列表与内容、会话状态及所需活动详情，当前查看会话的历史和检查点重新读取。会话已删除时结束订阅。
-         订阅不提供持久游标或历史事件补放；进度与待答项仅在任务执行期间可读取，待答 version 独立于会话 revision。
-         activity 的值为 run.preparing、run.analyzing、run.retrying、run.canceling、model.fallback、plan.preparing、presentation.meta.reading/updating、presentation.structure.reading/updating、presentation.constraint.reading/updating、slide.content.reading、reference.inspecting、slide.updating、slide.layout.checking、resource.preparing、command.executing、presentation.reviewing；斜线两侧各为独立后缀。
-         INVALID_ARGUMENT、SESSION_NOT_FOUND、RUN_NOT_FOUND、COMMAND_NOT_FOUND、TOOL_CALL_NOT_FOUND。 -->
 
     <article class="api-card" id="runs" aria-labelledby="runs-heading">
       <header class="card-header">
@@ -1279,8 +1141,8 @@
                   <li><code>run_id</code>：字符串，追加指令时必填。与 session_id 二选一</li>
                   <li><code>message_id</code>：字符串，必填。客户端生成的消息 ID，同次重发复用</li>
                   <li><code>text</code>：字符串，必填。只发图片或带非空注释的 DOM 选区时可为空字符串</li>
-                  <li><code>mode</code>：新开 Run 时必填，chat / ask / plan / create。追加时沿用</li>
-                  <li><code>model</code>：字符串，新开 Run 时必填。追加时沿用当前 Run 的配置</li>
+                  <li><code>mode</code>：新开 Run 时必填，chat / ask / plan / create。追加沿用该模式；gossip 仅切换当轮提示词及工具</li>
+                  <li><code>model</code>：字符串，新开 Run 时必填。在受理时解析并固定模型及备用路由，整次 Run 复用</li>
                   <li><code>scope</code>：新开 Run 时必填。追加时省略则沿用，显式提交则与当前范围合并。null 表示全部，对象只含 current_slide_id、slide_ids、section_ids 之一</li>
                   <li><code>references</code>：可选，有序引用数组，默认 []；顺序与输入框一致</li>
                   <li><code>references[].type</code>：skill / component 用 asset_id，slide 用 slide_id，image 必填 attachment_id 和 original_name（文件显示名），dom 用下列选区字段。追加仅支持 image / dom</li>
@@ -1290,7 +1152,7 @@
                   <li><code>references[].html</code>：DOM 必填，提交时的选区 HTML 原文</li>
                   <li><code>references[].comment</code>：DOM 必填，关联注释，可为空串</li>
                   <li><code>references[].html_hash</code>：DOM 必填，选区所属幻灯片的源码哈希</li>
-                  <li><code>references[].region</code>：DOM 选区定位对象，含 kind（element / region）及画布坐标 rect（x、y、width、height）；targets 为元素定位数组，decorations 为装饰定位数组；两者至少一项非空</li>
+                  <li><code>references[].region</code>：DOM 选区定位对象，含 type（element / region）及画布坐标 rect（x、y、width、height）；targets 为元素定位数组，decorations 为装饰定位数组；两者至少一项非空</li>
                   <li><code>references[].region.targets</code>：元素含 target_id、tag、fingerprint、rect；fingerprint 含 tag、sibling_index，可附 stable_id、classes、ancestors。坐标以 1920 × 1080 为基准</li>
                   <li><code>references[].region.decorations</code>：每项含 type（slide_pagination / deck_title / section_title / logo）、placement、text、rect；未选择装饰时为 []</li>
                   <li><code>branch_revision</code>：十进制字符串，可返回最新时新开 Run 必填。用户确认放弃「返回最新」时的会话版本</li>
@@ -1318,7 +1180,7 @@
               <td>
                 <ul class="fields">
                   <li><code>session_id</code>：字符串，仅首次发起时必填。会话 ID</li>
-                  <li><code>kind</code>：字符串，仅首次发起时必填。rename / polish / handoff / compact / commit / suggest</li>
+                  <li><code>type</code>：字符串，仅首次发起时必填。rename / polish / handoff / compact / commit / suggest</li>
                   <li><code>request_id</code>：字符串，必填。客户端生成，网络重发复用。每次发起或修订生成新 ID</li>
                   <li><code>text</code>：字符串，仅首次 polish 时必填。原始指令</li>
                   <li><code>base_id</code>：字符串，仅修订 polish 或 handoff 时必填。同一操作最近成功的执行 ID</li>
@@ -1346,34 +1208,6 @@
         </table>
       </div>
     </article>
-    <!-- Run 接口约定：
-         同一会话最多一个非终态 Run，pending / running / waiting / cancelling 均占用会话；同项目不同会话允许并行。
-         新开和追加共用 runs/append。session_id 与 run_id 必须且只能提供一个非空字符串；新开须提交 mode、model、scope，回退位置按 branch_revision 规则确认。追加沿用目标 Run 的 mode、model，省略 mode、model、branch_revision。
-         新开按会话和 message_id 识别重复请求；相同标识与规范化参数返回原 Run ID，不受后续分支或占用变化影响；原 Run 已被回退移除时返回 RUN_NOT_FOUND，异参返回 IDEMPOTENCY_CONFLICT。
-         新开请求所在会话已有非终态 Run 或手动 compact 时返回 SESSION_BUSY；其他会话的活动 Run 和手动 compact 不阻止新开。项目正在历史切换、Git 提交或排他命令执行时，新开受项目占用限制，返回 PROJECT_BUSY。
-         text 必须为字符串；去首尾空白后为空时，无 DOM 选区则须有图片，有 DOM 选区则至少一条注释非空。新开时 model 必须显式提交非空配置名。
-         scope 为 null 表示全项目；对象只允许 current_slide_id、slide_ids、section_ids 之一，分别为字符串、字符串数组、字符串数组。section_ids 按受理时的大纲展开，所选 ID 须有效；新开时 scope 缺失、形状或 ID 无效返回 INVALID_SCOPE。
-         slide_ids=[] 在新开时不授权任何幻灯片，在追加时不增加范围。引用不会扩大授权；首条指令点名的幻灯片已删除时返回 REFERENCE_NOT_FOUND，不受理请求。授权范围、必需附件与 DOM 基准仍须有效。
-         追加按所属会话和 message_id 识别重复请求，核对原文、引用及显式 scope，重放返回消息当前归属的 Run ID，不重复接收输入或扩大授权。相同消息 ID 不得跨新开和追加复用，异参返回 IDEMPOTENCY_CONFLICT。
-         新的追加仅接受 running / waiting 且仍开放输入的目标 Run，已关闭输入返回 INPUT_CLOSED；已受理消息的同参重放不受输入关闭影响。
-         追加仅在用户明确选定范围时提交 scope；提交即授权，与当前范围取并集。省略沿用，显式 null 放开本项目全部幻灯片；实际扩大时通知 run、history。追加交接到新 Run 时继承已受理授权范围、原模式和模型。
-         图片引用的 attachment_id、original_name 均为必填非空字符串；original_name 仅为显示名称，不用于路径定位，附件须存在且属于当前项目。
-         instruction_status 为 queued 表示尚未处理，sent 表示已处理，不承诺输入已进入模型。
-         首条输入被判为闲聊时 Run 进入 rejected 并关闭输入；关闭前已受理但未处理的追加输入保留消息 ID 和 seq，转交后续 Run。关闭后的首次追加返回 INPUT_CLOSED。
-         取消可重复；请求已受理或 Run 已终态时返回 HTTP 200 空响应体，实际状态通过详情或 SSE 的 run 通知读取。取消只作用于指定 Run，不停止同项目其他 Run；后端重启不续跑原 Run。
-         INVALID_ARGUMENT、SESSION_BUSY、PROJECT_BUSY、CONTENT_CONFLICT、INVALID_SCOPE、REFERENCE_NOT_FOUND、MODEL_UNAVAILABLE、VISION_REQUIRED、INPUT_CLOSED、RUN_NOT_FOUND、IDEMPOTENCY_CONFLICT、BRANCH_CONFIRMATION_REQUIRED、STALE_REVISION。 -->
-    <!-- 命令接口约定：
-         首次发起与修订共用 commands/append，每次执行有独立 ID。详情的 command_id、active_command_ids、进度事件 id、base_id、last_success_id 和取消目标均指向单次执行；operation_id 首次生成，修订沿用。
-         首次提交 session_id、kind，只有 polish 提交 text；修订提交 base_id、feedback，由基础执行确定会话、类型和操作。两种形式互斥，均须 request_id；polish 省略 branch_revision，其余命令按检查点接口的确认规则提交。
-         base_id 必须指向 polish 或 handoff 操作最近成功的执行；不存在返回 COMMAND_NOT_FOUND，已非最近成功返回 STALE_BASE，同一操作有活动执行返回 COMMAND_BUSY。
-         重复请求按会话和 request_id 识别；相同标识及规范化参数返回原 id，不因修订基础、分支或占用随后变化而重新执行；原执行已被回退移除返回 COMMAND_NOT_FOUND，异参返回 IDEMPOTENCY_CONFLICT。
-         同一 operation_id 最多一个非终态执行；最新状态通过最新执行 ID 读取，成功产物通过 last_success_id 读取，取消只作用于指定执行。
-         手动改名使用 sessions/save；rename 更新仍适用的会话标题，suggest 更新当前建议，均不进入历史分组。polish / handoff 返回文稿，compact 更新摘要和上下文，commit 返回已确认的 Git 提交结果。
-         取消可重复，请求已受理或执行已结束时返回 HTTP 200 空响应体，实际状态通过详情或 commands 通知读取。
-         同一会话的手动 compact 与新开 Run 互斥，且最多一个非终态手动 compact，占用返回 SESSION_BUSY；不阻止其他会话运行。
-         commit 要求项目所有会话均无非终态 Run；Git 提交期间与项目新 Run、历史切换、导出输入采集互斥，冲突返回 PROJECT_BUSY。
-         运行阶段通过命令详情和 command_progress 事件提供；Git 的 phase 0/1/2 分别表示暂存、分析、提交。已确认的 Git 提交保持 done，无法确认执行结果时标记 interrupted。
-         INVALID_ARGUMENT、SESSION_NOT_FOUND、COMMAND_NOT_FOUND、COMMAND_BUSY、SESSION_BUSY、STALE_BASE、IDEMPOTENCY_CONFLICT、CONTEXT_TOO_SMALL、PROJECT_BUSY、BRANCH_CONFIRMATION_REQUIRED、STALE_REVISION。 -->
 
     <article class="api-card" id="interactions" aria-labelledby="interactions-heading">
       <header class="card-header">
@@ -1402,7 +1236,7 @@
               </td>
               <td>
                 <ul class="fields">
-                  <li><code>kind</code>：question / plan / permission / scope / resource</li>
+                  <li><code>type</code>：question / plan / permission / scope / resource</li>
                   <li><code>version</code>：当前待答版本，使用读取表单时得到的不透明字符串</li>
                   <li><code>questions</code>：仅 question，有序题目数组；每题含 id、question、reason、options；选项含 id、label、可选 description</li>
                   <li><code>plan</code>：仅 plan，含 content（计划正文）、steps（有序步骤标题数组）</li>
@@ -1493,16 +1327,6 @@
         </table>
       </div>
     </article>
-    <!-- 人工交互接口约定：
-         以 run_id、tool_call_id 定位待答事项；version 绑定当前待答内容，提交时须与 Run、调用、表单种类及当前版本一致。答复只受理一次，已关闭或已受理返回 INTERACTION_CLOSED，仍待答但版本变化返回 STALE_INTERACTION。
-         计划批准生效后，当前 Run 从 plan 切换为 create，更新会话计划及对应工具结果，并发送 run、plan 的 changed 通知；这些结果与本次会话版本一致。拒绝时保留 plan 模式和已有生效计划，同一 Run 继续规划。
-         命令权限的 version 绑定展示的命令和候选变更；allow_once 仅批准该候选变更。实际应用时文件基准或权限策略变化则拒绝应用，最终结果通过工具结果读取。
-         资料批准使用原 proposal 或答复中提交的完整 draft，须符合资料结构；实际应用仍须匹配申请时的文件基准。省略 draft 使用原提案，draft=null 或拒绝时携带 draft 返回 INVALID_ANSWER。未提交的编辑不改变 proposal。
-         范围审批生效时与当前授权合并，不覆盖期间接受的追加授权；追加授权已满足提议时事项关闭并采用最新范围，仍有未授权部分时更新提议与 version。
-         待答项创建、答复受理、取消、范围已满足或提议更新时发送 interaction，通过 Run 详情读取最新 pending。受理后事项移出待答列表，同一 Run 继续执行。
-         空响应体表示答复已受理，不表示实际工具执行成功；提交超时先读取 Run 和待答状态，最终结果通过工具详情读取。结果可读取后发送 run 的 changed 通知，其他业务变化一并通知。
-         审批拒绝或失败不覆盖已有资料。
-         INTERACTION_CLOSED、STALE_INTERACTION、CONTENT_CONFLICT、INVALID_ANSWER、RUN_NOT_FOUND。 -->
 
     <article class="api-card" id="checkpoints" aria-labelledby="checkpoints-heading">
       <header class="card-header">
@@ -1590,20 +1414,6 @@
         </table>
       </div>
     </article>
-    <!-- 检查点接口约定：
-         run_ids 只列出仍在当前会话历史中的可回退 Run；can_return 表示能否返回首次回退前的最新状态。
-         回退预览的 timestamp 为目标 Run 的 created_at，返回最新预览为返回目标的最后一次活动时间。执行使用相应预览的 revision，过期返回 STALE_REVISION，须重新读取预览。
-         rollback 通过 run_id 确定所属会话并返回原始输入；return 通过 session_id 定位，成功返回 HTTP 200 空响应体。完成后的 can_return 通过检查点列表读取。
-         回退和返回要求目标、版本与文件基准有效；项目有非终态 Run、目标会话有非终态旁路命令或存在项目级互斥操作时返回 PROJECT_BUSY。切换期间不受理该项目的新 Run 和目标会话的新旁路命令。
-         切换只恢复目标会话及其可撤销文件，其他会话消息保留；恢复后的非终态旁路命令为 interrupted，保留身份，不重新执行。
-         连续回退仍以首次回退前的最新状态为返回目标；返回成功后 can_return 为 false。
-         任一会话实际改变共享文件（含回退或返回）会使同项目其他会话的回退位置和返回最新能力失效，并推进其会话版本；不停止其活动 Run，也不自动恢复已失效入口。人工修改的检查点影响见项目内容接口。
-         可返回最新时，新开 Run、发起 rename / handoff / compact / commit / suggest 或修订 handoff，须确认并提交检查点列表的 revision 作为 branch_revision；缺少确认返回 BRANCH_CONFIRMATION_REQUIRED，版本过期返回 STALE_REVISION。
-         上述操作受理成功即放弃返回最新及已脱离当前历史的回退入口，并通知 checkpoints；受理失败不改变这些能力。发起或修订 polish 保留返回入口；可返回最新期间不自动发起旁路命令，其他会话改名和纯读取无需分支确认。
-         历史位置删除计划只校验 expected_revision，不要求另行分支确认；成功后直接放弃返回最新，具体规则见会话接口。
-         历史切换后须按 SSE 的 reset 约定重新同步，项目内容与外观需重新读取，其他受影响会话收到 reset。
-         回退返回原始输入但不自动提交或续跑；请求超时先读取当前状态，不自动重试。
-         CHECKPOINT_NOT_FOUND、RETURN_UNAVAILABLE、PROJECT_BUSY、STALE_REVISION、CONTENT_CONFLICT。 -->
 
     <article class="api-card" id="runtime" aria-labelledby="runtime-heading">
       <header class="card-header">
@@ -1687,10 +1497,7 @@
         </table>
       </div>
     </article>
-    <!-- 预览资源接口约定：
-         资源文件和样例名称仅接受表中允许的值，未知资源返回 HTTP 404；fonts.css 引用固定的字体地址。
-         资源使用 Cache-Control: no-cache 与按响应内容生成的 ETag；If-None-Match 匹配返回 HTTP 304，否则返回当前资源原文或二进制。
-         两个 /slide-runtime/ 地址由前端静态服务提供，/api/runtime/ 地址由后端提供。 -->
+
     <article class="api-card" id="other" aria-labelledby="other-heading">
       <header class="card-header">
         <h2 id="other-heading">其它</h2>
@@ -1728,10 +1535,7 @@
         </table>
       </div>
     </article>
-    <!-- 健康检查约定：就绪返回 HTTP 200，未就绪返回 HTTP 503，两者均为空响应体。 -->
-    <!-- 文件打开接口约定：
-         仅接受同源的本地调用；path 限于该项目允许打开的真实文件，拒绝绝对路径、越界路径和符号链接逃逸。
-         FILE_NOT_FOUND、INVALID_PATH、OPEN_UNSUPPORTED、OPEN_FAILED。 -->
+
   </main>
   <script>
     (() => {

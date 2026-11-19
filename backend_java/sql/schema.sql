@@ -2,7 +2,7 @@ PRAGMA foreign_keys = ON;
 
 CREATE TABLE assets (
     id TEXT NOT NULL PRIMARY KEY,
-    kind TEXT NOT NULL,
+    type TEXT NOT NULL,
     name TEXT NOT NULL,
     description TEXT NOT NULL,
     content TEXT NOT NULL,
@@ -15,7 +15,7 @@ CREATE TABLE assets (
 
 CREATE TABLE tags (
     id TEXT NOT NULL PRIMARY KEY,
-    kind TEXT NOT NULL,
+    type TEXT NOT NULL,
     name TEXT NOT NULL,
     CHECK (length(trim(name)) > 0)
 );
@@ -82,7 +82,7 @@ CREATE TABLE messages (
     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     run_id TEXT DEFAULT NULL,
     seq INTEGER NOT NULL,
-    kind TEXT NOT NULL,
+    type TEXT NOT NULL,
     content TEXT NOT NULL,
     raw TEXT DEFAULT NULL,
     tool_call_id TEXT DEFAULT NULL,
@@ -91,9 +91,9 @@ CREATE TABLE messages (
     context_position INTEGER DEFAULT NULL,
     created_at INTEGER NOT NULL,
     FOREIGN KEY (run_id, session_id) REFERENCES runs(id, session_id),
-    CHECK (run_id IS NOT NULL OR kind = 'summary'),
-    CHECK (((kind = 'tool_call' OR kind = 'tool_result') AND tool_call_id IS NOT NULL) OR ((kind <> 'tool_call' AND kind <> 'tool_result') AND tool_call_id IS NULL)),
-    CHECK ((kind = 'instruction' AND instruction_status IS NOT NULL) OR (kind <> 'instruction' AND instruction_status IS NULL AND instruction_decision IS NULL)),
+    CHECK (run_id IS NOT NULL OR type = 'summary'),
+    CHECK (((type = 'tool_call' OR type = 'tool_result') AND tool_call_id IS NOT NULL) OR ((type <> 'tool_call' AND type <> 'tool_result') AND tool_call_id IS NULL)),
+    CHECK ((type = 'instruction' AND instruction_status IS NOT NULL) OR (type <> 'instruction' AND instruction_status IS NULL AND instruction_decision IS NULL)),
     CHECK (json_valid(content)),
     CHECK (raw IS NULL OR (json_valid(raw)))
 );
@@ -104,7 +104,7 @@ CREATE TABLE commands (
     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     run_id TEXT DEFAULT NULL,
     seq INTEGER NOT NULL,
-    kind TEXT NOT NULL,
+    type TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',
     input TEXT NOT NULL,
     result TEXT DEFAULT NULL,
@@ -124,14 +124,14 @@ CREATE TABLE checkpoints (
 );
 
 CREATE TABLE receipts (
-    kind TEXT NOT NULL,
+    type TEXT NOT NULL,
     owner_id TEXT NOT NULL,
     request_id TEXT NOT NULL,
     request_hash TEXT NOT NULL,
     result TEXT DEFAULT NULL,
-    PRIMARY KEY (kind, owner_id, request_id),
-    CHECK (kind <> 'commit_files' OR result IS NULL),
-    CHECK ((kind <> 'create_run' AND kind <> 'create_command') OR result IS NOT NULL),
+    PRIMARY KEY (type, owner_id, request_id),
+    CHECK (type NOT IN ('agent', 'manual') OR result IS NULL),
+    CHECK ((type <> 'create_run' AND type <> 'create_command') OR result IS NOT NULL),
     CHECK (result IS NULL OR (json_valid(result) AND json_type(result) = 'object'))
 );
 
@@ -239,9 +239,9 @@ CREATE UNIQUE INDEX idx_runs_active_session ON runs(session_id)
 CREATE UNIQUE INDEX idx_messages_session_seq ON messages(session_id, seq);
 CREATE INDEX idx_messages_run ON messages(run_id, seq);
 CREATE UNIQUE INDEX idx_messages_response ON messages(run_id)
-    WHERE run_id IS NOT NULL AND kind = 'response';
-CREATE UNIQUE INDEX idx_messages_tool ON messages(run_id, tool_call_id, kind)
-    WHERE kind IN ('tool_call', 'tool_result');
+    WHERE run_id IS NOT NULL AND type = 'response';
+CREATE UNIQUE INDEX idx_messages_tool ON messages(run_id, tool_call_id, type)
+    WHERE type IN ('tool_call', 'tool_result');
 CREATE UNIQUE INDEX idx_messages_context ON messages(session_id, context_position)
     WHERE context_position IS NOT NULL;
 CREATE UNIQUE INDEX idx_commands_session_seq ON commands(session_id, seq);
@@ -250,7 +250,7 @@ CREATE INDEX idx_commands_operation ON commands(operation_id, seq);
 CREATE UNIQUE INDEX idx_commands_active_operation ON commands(operation_id)
     WHERE status IN ('pending', 'running', 'cancelling');
 CREATE UNIQUE INDEX idx_commands_manual_compact ON commands(session_id)
-    WHERE kind = 'compact' AND run_id IS NULL AND status IN ('pending', 'running', 'cancelling');
+    WHERE type = 'compact' AND run_id IS NULL AND status IN ('pending', 'running', 'cancelling');
 CREATE UNIQUE INDEX idx_checkpoints_run ON checkpoints(session_id, run_id)
     WHERE run_id IS NOT NULL;
 CREATE UNIQUE INDEX idx_checkpoints_return ON checkpoints(session_id)

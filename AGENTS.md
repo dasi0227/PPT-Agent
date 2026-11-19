@@ -14,9 +14,10 @@
 
 - [DESIGN.md](docs/note/DESIGN.md)：全局 UI 设计规范，统一布局、配色、字体、间距、交互状态及公共组件用法。
 - [ICON.html](docs/note/ICON.html)：界面对象与图标的对应规范，统一各模块的图标选择与语义。
-- [API.html](docs/note/API.html)：前后端接口契约，明确接口路径、请求方法、请求与响应字段及实时事件。
-- [DATABASE.html](docs/note/DATABASE.html)：数据库设计规范，明确表结构、字段含义、关联约束及数据一致性规则。
-- [STRUCTURE.html](docs/note/STRUCTURE.html)：项目工作目录规范，明确文稿源文件、运行数据、附件、截图及导出产物的存放位置。
+- [API.html](docs/note/API.html) 汇总接口和字段，[API_SPEC.md](docs/note/API_SPEC.md) 规定请求处理、历史查询与实时通知行为。
+- [DATABASE.html](docs/note/DATABASE.html) 定义表和字段，[DATABASE_SPEC.md](docs/note/DATABASE_SPEC.md) 规定持久化、事务与一致性约束。
+- [STRUCTURE.html](docs/note/STRUCTURE.html) 列出模块和目录，[STRUCTURE_SPEC.md](docs/note/STRUCTURE_SPEC.md) 规定职责、文件提交与导出生命周期。
+- [WORKFLOW.html](docs/note/WORKFLOW.html) 展示流程图与类职责，[WORKFLOW_SPEC.md](docs/note/WORKFLOW_SPEC.md) 规定 Run、Hook、工具提交、命令与恢复的执行规则。
 - [ASSEMBLE.html](docs/note/ASSEMBLE.html)：Agent 提示词拼装规范，明确各模式与任务的提示词模块、上下文组成及可用工具。
 
 ## 执行规范
