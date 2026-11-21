@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ppt-agent.local/schemas/constraints.schema.json",
+  "title": "PPT Constraints",
+  "description": "Presentation-wide content and visual requirements and prohibitions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "content",
+    "visual"
+  ],
+  "properties": {
+    "content": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requirements",
+        "prohibitions"
+      ],
+      "properties": {
+        "requirements": {
+          "$ref": "#/$defs/contentRules",
+          "description": "Additional required content, examples, evidence and wording conventions. Do not repeat title, language, count, audience or goal; exclude visual direction, layout and theme settings. Preserve any extra actionable detail when separating mixed requirements. Supplying this list replaces it completely; [] clears it."
+        },
+        "prohibitions": {
+          "$ref": "#/$defs/contentRules",
+          "description": "Explicit content exclusions and prohibitions. Do not restate the basics or positive requirements, and do not store visual or theme settings here. Supplying this list replaces it completely; [] clears it."
+        }
+      }
+    },
+    "visual": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requirements",
+        "prohibitions"
+      ],
+      "properties": {
+        "requirements": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 600
+          }
+        },
+        "prohibitions": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 600
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "contentRules": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "string",
+        "description": "One concrete content requirement or exclusion, according to the containing field; do not put visual settings here.",
+        "minLength": 1,
+        "maxLength": 300
+      }
+    }
+  }
+}

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.dasi.ppt.agent.infrastructure.persistence.database.mapper.AssetMapper">
+    <resultMap id="assetPo" type="com.dasi.ppt.agent.infrastructure.persistence.database.po.AssetPo">
+        <id column="id" property="id"/>
+        <result column="type" property="type"/>
+        <result column="name" property="name"/>
+        <result column="description" property="description"/>
+        <result column="content" property="content"/>
+        <result column="disabled" property="disabled"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+</mapper>

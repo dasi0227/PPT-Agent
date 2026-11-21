@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.dasi.ppt.agent.infrastructure.persistence.database.mapper.ShortcutSettingsMapper">
+    <resultMap id="shortcutSettingsPo" type="com.dasi.ppt.agent.infrastructure.persistence.database.po.ShortcutSettingsPo">
+        <id column="id" property="id"/>
+        <result column="command_trigger" property="commandTrigger"/>
+        <result column="reference_trigger" property="referenceTrigger"/>
+        <result column="component_trigger" property="componentTrigger"/>
+        <result column="slide_trigger" property="slideTrigger"/>
+        <result column="snippet_trigger" property="snippetTrigger"/>
+        <result column="previous_slide" property="previousSlide"/>
+        <result column="next_slide" property="nextSlide"/>
+        <result column="zoom_in" property="zoomIn"/>
+        <result column="zoom_out" property="zoomOut"/>
+        <result column="toggle_overview" property="toggleOverview"/>
+        <result column="export_deck" property="exportDeck"/>
+        <result column="toggle_view" property="toggleView"/>
+        <result column="toggle_source" property="toggleSource"/>
+        <result column="switch_theme" property="switchTheme"/>
+        <result column="submit_request" property="submitRequest"/>
+        <result column="suggestion_1" property="suggestion1"/>
+        <result column="suggestion_2" property="suggestion2"/>
+        <result column="suggestion_3" property="suggestion3"/>
+    </resultMap>
+</mapper>

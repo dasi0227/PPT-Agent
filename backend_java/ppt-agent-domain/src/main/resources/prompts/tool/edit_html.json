@@ -1,0 +1,7 @@
+{
+  "content": "Complete HTML document, without Markdown fences.",
+  "edits": "Ordered exact text replacements in the saved HTML.",
+  "edits.new_text": "Literal replacement; an empty string deletes the match.",
+  "edits.old_text": "Exact, non-empty source text, including whitespace.",
+  "slide_id": "Slide ID from the current outline."
+}

@@ -1,0 +1,33 @@
+package com.dasi.ppt.agent.domain.agent.service.command.handler;
+
+import com.dasi.ppt.agent.domain.agent.gateway.IGitGateway;
+import com.dasi.ppt.agent.domain.agent.gateway.ILlmGateway;
+import com.dasi.ppt.agent.domain.agent.model.entity.Command;
+import com.dasi.ppt.agent.domain.agent.model.enumeration.CommandType;
+import com.dasi.ppt.agent.domain.agent.service.command.CommandHandler;
+import com.dasi.ppt.agent.domain.agent.service.context.assembler.CommitPromptAssembler;
+import com.dasi.ppt.agent.domain.setting.model.RunConfig;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
+import tools.jackson.databind.JsonNode;
+
+import java.util.function.BooleanSupplier;
+
+@Component
+@RequiredArgsConstructor
+public class CommitCommandHandler implements CommandHandler {
+
+    private final CommitPromptAssembler commitPromptAssembler;
+    private final ILlmGateway llmGateway;
+    private final IGitGateway gitGateway;
+
+    @Override
+    public CommandType type() {
+        return CommandType.COMMIT;
+    }
+
+    @Override
+    public JsonNode execute(Command command, RunConfig config, BooleanSupplier cancelled) {
+        throw new UnsupportedOperationException();
+    }
+}

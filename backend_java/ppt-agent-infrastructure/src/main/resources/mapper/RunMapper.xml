@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.dasi.ppt.agent.infrastructure.persistence.database.mapper.RunMapper">
+    <resultMap id="runPo" type="com.dasi.ppt.agent.infrastructure.persistence.database.po.RunPo">
+        <id column="id" property="id"/>
+        <result column="session_id" property="sessionId"/>
+        <result column="mode" property="mode"/>
+        <result column="model" property="model"/>
+        <result column="scope" property="scope"/>
+        <result column="status" property="status"/>
+        <result column="changes" property="changes"/>
+        <result column="error" property="error"/>
+        <result column="input_tokens" property="inputTokens"/>
+        <result column="output_tokens" property="outputTokens"/>
+        <result column="total_tokens" property="totalTokens"/>
+        <result column="call_count" property="callCount"/>
+        <result column="active_duration" property="activeDuration"/>
+        <result column="active_since" property="activeSince"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+</mapper>

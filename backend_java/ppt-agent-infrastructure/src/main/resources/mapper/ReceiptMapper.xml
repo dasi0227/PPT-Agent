@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.dasi.ppt.agent.infrastructure.persistence.database.mapper.ReceiptMapper">
+    <resultMap id="receiptPo" type="com.dasi.ppt.agent.infrastructure.persistence.database.po.ReceiptPo">
+        <id column="type" property="type"/>
+        <id column="owner_id" property="ownerId"/>
+        <id column="request_id" property="requestId"/>
+        <result column="request_hash" property="requestHash"/>
+        <result column="result" property="result"/>
+    </resultMap>
+</mapper>

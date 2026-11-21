@@ -1,0 +1,4 @@
+{
+  "items": "Distinct change summaries, one sentence per coherent change.",
+  "title": "Single-line plain-text summary in the format `<feat|fix|refactor|perf|chore|docs>: <primary change>`."
+}

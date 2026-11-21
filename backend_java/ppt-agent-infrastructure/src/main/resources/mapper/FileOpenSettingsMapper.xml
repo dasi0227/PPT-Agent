@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.dasi.ppt.agent.infrastructure.persistence.database.mapper.FileOpenSettingsMapper">
+    <resultMap id="fileOpenSettingsPo" type="com.dasi.ppt.agent.infrastructure.persistence.database.po.FileOpenSettingsPo">
+        <id column="id" property="id"/>
+        <result column="default_open" property="defaultOpen"/>
+        <result column="json_open" property="jsonOpen"/>
+        <result column="html_open" property="htmlOpen"/>
+        <result column="custom_apps" property="customApps"/>
+    </resultMap>
+</mapper>

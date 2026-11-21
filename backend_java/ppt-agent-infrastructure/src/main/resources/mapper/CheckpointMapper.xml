@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.dasi.ppt.agent.infrastructure.persistence.database.mapper.CheckpointMapper">
+    <resultMap id="checkpointPo" type="com.dasi.ppt.agent.infrastructure.persistence.database.po.CheckpointPo">
+        <id column="session_id" property="sessionId"/>
+        <id column="run_id" property="runId"/>
+        <result column="snapshot" property="snapshot"/>
+    </resultMap>
+</mapper>

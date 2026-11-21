@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.dasi.ppt.agent.infrastructure.persistence.database.mapper.MessageMapper">
+    <resultMap id="messagePo" type="com.dasi.ppt.agent.infrastructure.persistence.database.po.MessagePo">
+        <id column="id" property="id"/>
+        <result column="session_id" property="sessionId"/>
+        <result column="run_id" property="runId"/>
+        <result column="seq" property="seq"/>
+        <result column="type" property="type"/>
+        <result column="content" property="content"/>
+        <result column="raw" property="raw"/>
+        <result column="tool_call_id" property="toolCallId"/>
+        <result column="instruction_decision" property="instructionDecision"/>
+        <result column="instruction_status" property="instructionStatus"/>
+        <result column="context_position" property="contextPosition"/>
+        <result column="created_at" property="createdAt"/>
+    </resultMap>
+</mapper>

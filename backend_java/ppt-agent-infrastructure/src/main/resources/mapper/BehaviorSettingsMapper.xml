@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.dasi.ppt.agent.infrastructure.persistence.database.mapper.BehaviorSettingsMapper">
+    <resultMap id="behaviorSettingsPo" type="com.dasi.ppt.agent.infrastructure.persistence.database.po.BehaviorSettingsPo">
+        <id column="id" property="id"/>
+        <result column="auto_rename_enabled" property="autoRenameEnabled"/>
+        <result column="auto_suggest_enabled" property="autoSuggestEnabled"/>
+        <result column="show_tool_failures" property="showToolFailures"/>
+        <result column="require_resource_approval" property="requireResourceApproval"/>
+        <result column="require_high_risk_approval" property="requireHighRiskApproval"/>
+    </resultMap>
+</mapper>

@@ -1,0 +1,8 @@
+{
+  "questions": "Ordered questions, each addressing one fact or decision.",
+  "questions.options": "Up to three single-choice answers. Omit this field or use [] for free-text only.",
+  "questions.options.description": "Concrete meaning, effect or tradeoff of this option.",
+  "questions.options.label": "Distinct option label; append `(Recommended)` if strongly recommended.",
+  "questions.question": "Complete user-visible question.",
+  "questions.reason": "Brief user-visible explanation of why the answer is needed and what it affects."
+}

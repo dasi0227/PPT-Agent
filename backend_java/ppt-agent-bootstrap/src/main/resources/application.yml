@@ -1,0 +1,40 @@
+server:
+  address: 127.0.0.1
+  port: 8787
+
+spring:
+  application:
+    name: ppt-agent
+  config:
+    import: optional:file:.env[.properties]
+  profiles:
+    active: dev
+  datasource:
+    url: "jdbc:sqlite:file:${ppt.database}?mode=rw"
+    driver-class-name: org.sqlite.JDBC
+    hikari:
+      connection-init-sql: PRAGMA foreign_keys = ON
+      connection-timeout: 1500
+      initialization-fail-timeout: -1
+      minimum-idle: 0
+
+mybatis:
+  mapper-locations: classpath*:mapper/*Mapper.xml
+
+logging:
+  level:
+    root: info
+  config: classpath:logback-spring.xml
+
+ppt:
+  root: ${PPT_AGENT_ROOT}
+  database: ${PPT_AGENT_DB}
+  jev:
+    model: ${PPT_AGENT_JEV_MODEL}
+    key: ${PPT_AGENT_JEV_KEY}
+  sandbox:
+    allowed-filepaths: ${PPT_AGENT_SANDBOX_ALLOWED_FILEPATHS}
+    allowed-domains: ${PPT_AGENT_SANDBOX_ALLOWED_DOMAINS}
+    execution:
+      timeout: 120s
+      max-output-bytes: 8388608

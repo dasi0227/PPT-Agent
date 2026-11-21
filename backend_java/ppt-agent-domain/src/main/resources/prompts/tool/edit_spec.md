@@ -1,0 +1,1 @@
+Create or update an existing slide's content and composition plan. New specs require `core`, `purpose` and `layout`. Omitted fields remain unchanged. Supplied `elements` replace the entire saved list; `[]` clears it. Returns the complete saved spec as a JSON object in `content`.

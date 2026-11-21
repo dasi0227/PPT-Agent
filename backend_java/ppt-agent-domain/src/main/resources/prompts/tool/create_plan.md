@@ -1,0 +1,1 @@
+Submit a complete proposal for user approval in Plan Mode. Submit this call alone. When revisions are requested, resubmit the full plan and all steps.

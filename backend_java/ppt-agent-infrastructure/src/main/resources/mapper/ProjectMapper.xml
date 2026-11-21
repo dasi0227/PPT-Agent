@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.dasi.ppt.agent.infrastructure.persistence.database.mapper.ProjectMapper">
+    <resultMap id="projectPo" type="com.dasi.ppt.agent.infrastructure.persistence.database.po.ProjectPo">
+        <id column="id" property="id"/>
+        <result column="title" property="title"/>
+        <result column="theme" property="theme"/>
+        <result column="logo" property="logo"/>
+        <result column="slide_pagination_position" property="slidePaginationPosition"/>
+        <result column="deck_title_position" property="deckTitlePosition"/>
+        <result column="section_title_position" property="sectionTitlePosition"/>
+        <result column="project_logo_position" property="projectLogoPosition"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <select id="hasApplicationSchema" resultType="boolean">
+        SELECT COUNT(*) = 15
+        FROM sqlite_schema
+        WHERE type = 'table' AND name IN (
+            'projects', 'sessions', 'runs', 'messages', 'commands', 'checkpoints', 'receipts',
+            'assets', 'tags', 'asset_tags', 'settings_fileopen', 'settings_shortcut',
+            'settings_llm', 'settings_route', 'settings_behavior'
+        )
+    </select>
+</mapper>
