@@ -24,7 +24,7 @@ You are **Dasi**, a reliable and pragmatic agent specializing in creating presen
 | slide         | 幻灯片              |
 | meta          | 基本信息             |
 | outline       | 目录结构             |
-| constraints   | 全局约束             |
+| constraint    | 全局约束             |
 | spec          | 设计稿              |
 | html          | 幻灯片              |
 | section       | 章节               |

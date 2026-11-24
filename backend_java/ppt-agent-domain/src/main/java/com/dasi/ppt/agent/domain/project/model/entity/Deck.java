@@ -1,6 +1,5 @@
-package com.dasi.ppt.agent.domain.project.model;
+package com.dasi.ppt.agent.domain.project.model.entity;
 
-import com.dasi.ppt.agent.domain.project.model.entity.Slide;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -14,7 +13,7 @@ import java.util.Map;
 @NoArgsConstructor
 public final class Deck {
     private Meta meta;
-    private Constraints constraint;
+    private Constraint constraint;
     private Outline outline;
     private Map<String, Slide> slides;
 }

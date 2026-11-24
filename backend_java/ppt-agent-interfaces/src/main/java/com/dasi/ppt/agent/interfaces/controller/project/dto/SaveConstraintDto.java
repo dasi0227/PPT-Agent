@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.interfaces.controller.project.dto;
 
-import com.dasi.ppt.agent.domain.project.model.Constraints;
+import com.dasi.ppt.agent.domain.project.model.entity.Constraint;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -10,8 +10,8 @@ import lombok.NoArgsConstructor;
 @Getter
 @AllArgsConstructor
 @NoArgsConstructor
-public final class SaveConstraintsDto {
+public final class SaveConstraintDto {
     private String projectId;
     private String baseHash;
-    private Constraints constraint;
+    private Constraint constraint;
 }

@@ -1,8 +1,8 @@
 package com.dasi.ppt.agent.interfaces.controller.setting.dto;
 
 import com.dasi.ppt.agent.domain.setting.model.enumeration.ModelRoute;
-import com.dasi.ppt.agent.interfaces.controller.dto.StrictRequestDto;
-import com.dasi.ppt.agent.interfaces.validation.NotBlankIfPresent;
+import com.dasi.ppt.agent.interfaces.controller.StrictRequestDto;
+import com.dasi.ppt.agent.interfaces.controller.NotBlankIfPresent;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

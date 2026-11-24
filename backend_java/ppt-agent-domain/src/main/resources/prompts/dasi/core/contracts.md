@@ -86,7 +86,7 @@ desc: Specify the contracts of the html.
 
 ### Typography
 
-- `--font-sans`, `--font-display`, `--font-mono`: Body, display, and technical fonts.
+- `--font-sans`, `--font-display`, `--font-mono`: Body, display, and technical fonts. Let the theme assign system font families such as `sans-serif`, `serif`, and `monospace` to these roles.
 - `--text-title`, `--text-section`, `--text-subtitle`, `--text-body`, `--text-caption`, `--text-metric`: Font sizes by role.
 - `--weight-body`, `--weight-title`, `--weight-emphasis`: Body, heading, and emphasis weights.
 - `--leading-title`, `--leading-body`, `--leading-caption`: Heading, body, and supporting-text line heights.

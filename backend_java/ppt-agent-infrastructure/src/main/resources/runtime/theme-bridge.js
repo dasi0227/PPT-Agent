@@ -83,7 +83,6 @@
     }
     try {
       await ready;
-      await window.PPTFonts.prepare();
       if (request !== latest) {
         if (!reuse) { base.remove(); link.remove(); }
         return;

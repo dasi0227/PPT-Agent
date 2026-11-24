@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.infrastructure.repository;
 
-import com.dasi.ppt.agent.domain.project.model.Deck;
+import com.dasi.ppt.agent.domain.project.model.entity.Deck;
 import com.dasi.ppt.agent.domain.project.repository.IDeckRepository;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.CheckpointMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.MessageMapper;

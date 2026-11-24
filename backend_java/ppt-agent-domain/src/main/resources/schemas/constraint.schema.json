@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ppt-agent.local/schemas/constraints.schema.json",
-  "title": "PPT Constraints",
+  "$id": "https://ppt-agent.local/schemas/constraint.schema.json",
+  "title": "PPT Constraint",
   "description": "Presentation-wide content and visual requirements and prohibitions.",
   "type": "object",
   "additionalProperties": false,

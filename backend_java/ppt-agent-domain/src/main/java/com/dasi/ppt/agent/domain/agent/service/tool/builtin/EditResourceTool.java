@@ -23,7 +23,7 @@ public class EditResourceTool implements AgentTool {
     public Set<ToolName> names() {
         return Set.of(
                 ToolName.EDIT_META,
-                ToolName.EDIT_CONSTRAINTS,
+                ToolName.EDIT_CONSTRAINT,
                 ToolName.EDIT_OUTLINE,
                 ToolName.EDIT_SPEC,
                 ToolName.EDIT_HTML

@@ -7,9 +7,9 @@ import com.dasi.ppt.agent.domain.agent.model.result.ToolResult;
 import com.dasi.ppt.agent.domain.agent.service.context.assembler.PreviewPromptAssembler;
 import com.dasi.ppt.agent.domain.agent.service.run.RunState;
 import com.dasi.ppt.agent.domain.agent.service.tool.AgentTool;
-import com.dasi.ppt.agent.domain.project.model.Constraints;
-import com.dasi.ppt.agent.domain.project.model.Meta;
-import com.dasi.ppt.agent.domain.project.model.Spec;
+import com.dasi.ppt.agent.domain.project.model.entity.Constraint;
+import com.dasi.ppt.agent.domain.project.model.entity.Meta;
+import com.dasi.ppt.agent.domain.project.model.entity.Spec;
 import com.dasi.ppt.agent.domain.project.service.SlidePreviewService;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -44,7 +44,7 @@ public class RenderSlideTool implements AgentTool {
     @NoArgsConstructor
     public static final class PreviewInput {
         private Meta meta;
-        private Constraints constraints;
+        private Constraint constraint;
         private Spec spec;
         private String html;
         private byte[] screenshot;

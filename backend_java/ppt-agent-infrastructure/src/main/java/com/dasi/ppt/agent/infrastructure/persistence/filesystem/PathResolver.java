@@ -28,6 +28,19 @@ public class PathResolver {
         this.projectsRoot = root.resolve("projects");
     }
 
+    public Path projectsRoot() {
+        return projectsRoot;
+    }
+
+    public Path projectDirectory(String projectId) {
+        Path id = Path.of(projectId);
+        if (id.isAbsolute() || id.getNameCount() != 1 || projectId.startsWith(".")
+                || !id.getFileName().toString().equals(projectId)) {
+            throw invalid("项目 ID 无效");
+        }
+        return projectsRoot.resolve(id);
+    }
+
     public Path resolveOpenFile(String projectId, String relativePath) {
         try {
             Path id = Path.of(projectId);

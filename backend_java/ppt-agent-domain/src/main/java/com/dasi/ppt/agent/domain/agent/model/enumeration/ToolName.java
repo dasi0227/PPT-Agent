@@ -14,7 +14,7 @@ public enum ToolName {
     LOAD_SKILL("load_skill"),
     LOAD_COMPONENT("load_component"),
     EDIT_META("edit_meta"),
-    EDIT_CONSTRAINTS("edit_constraints"),
+    EDIT_CONSTRAINT("edit_constraint"),
     EDIT_OUTLINE("edit_outline"),
     EDIT_SPEC("edit_spec"),
     EDIT_HTML("edit_html"),

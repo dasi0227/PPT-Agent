@@ -13,6 +13,10 @@ public final class IdUtil {
     private static final String ID_CHARACTERS = "abcdefghijklmnopqrstuvwxyz0123456789";
     private static final int ID_LENGTH = 8;
 
+    public static String genProjectId() {
+        return genRandomId();
+    }
+
     public static String genAssetId() {
         return genRandomId();
     }

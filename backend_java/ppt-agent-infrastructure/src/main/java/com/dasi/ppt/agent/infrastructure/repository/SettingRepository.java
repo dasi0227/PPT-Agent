@@ -219,7 +219,7 @@ public class SettingRepository implements ISettingRepository {
                     .key(row.getKey())
                     .build();
         } catch (InvalidEnumValueException ex) {
-            throw new DataRetrievalFailureException("settings_llm 包含无效的枚举值", ex);
+            throw new DataRetrievalFailureException("settings_models 包含无效的枚举值", ex);
         }
     }
 

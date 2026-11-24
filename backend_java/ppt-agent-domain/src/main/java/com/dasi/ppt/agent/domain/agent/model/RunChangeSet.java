@@ -1,7 +1,7 @@
 package com.dasi.ppt.agent.domain.agent.model;
 
-import com.dasi.ppt.agent.domain.project.model.ChangeTarget;
-import com.dasi.ppt.agent.domain.project.model.DeckChange;
+import com.dasi.ppt.agent.domain.project.model.entity.ChangeTarget;
+import com.dasi.ppt.agent.domain.project.model.entity.DeckChange;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;

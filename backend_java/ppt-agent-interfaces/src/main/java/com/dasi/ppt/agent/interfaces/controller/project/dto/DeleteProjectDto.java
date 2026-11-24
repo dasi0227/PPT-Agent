@@ -1,5 +1,6 @@
 package com.dasi.ppt.agent.interfaces.controller.project.dto;
 
+import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -10,5 +11,6 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public final class DeleteProjectDto {
+    @NotBlank
     private String projectId;
 }

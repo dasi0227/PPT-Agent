@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# restart.sh - 重启 Web 或 macOS App；首次建库，reset=1 恢复预置，默认保留已有数据。
+# restart.sh - 重启 Web 或 macOS App；默认保留已有数据库，reset=1 清空数据库并按当前 SQL 重建。
 # 用法:./restart.sh --reset 0 --mode web
 #       ./restart.sh --reset 1 --mode app
 set -euo pipefail
@@ -7,7 +7,7 @@ set -euo pipefail
 RESET_MODE="0"
 RUN_MODE="web"
 usage() {
-  printf '用法:./restart.sh [--reset 0|1] [--mode app|web]\n默认:--reset 0 --mode web\n'
+  printf '用法:./restart.sh [--reset 0|1] [--mode app|web]\n默认:--reset 0 --mode web\n--reset 1 会清空数据库，重新建表并载入预置数据。\n'
 }
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -76,9 +76,7 @@ wait_for_url() {
 }
 
 initialize_project() {
-  local create_schema=0
-  [ -s "$DB_PATH" ] || create_schema=1
-  if [ "$create_schema" = "0" ] && [ "$RESET_MODE" = "0" ]; then
+  if [ "$RESET_MODE" = "0" ] && [ -s "$DB_PATH" ]; then
     print_result "$STEP_2" '✅' '保留已有数据库'
     return 0
   fi
@@ -86,24 +84,19 @@ initialize_project() {
     command -v sqlite3 >/dev/null 2>&1 || { printf '缺少 sqlite3\n' >&2; exit 1; }
     cd "$SQL_DIR" || exit 1
     [ -r init.sql ] || { printf '缺少 init.sql\n' >&2; exit 1; }
-    if [ "$create_schema" = "1" ]; then
-      [ -r schema.sql ] || { printf '缺少 schema.sql\n' >&2; exit 1; }
-    fi
+    [ -r schema.sql ] || { printf '缺少 schema.sql\n' >&2; exit 1; }
     mkdir -p "$WORK_ROOT/db" || exit 1
-    touch "$WORK_ROOT/.desktop-initializing" || exit 1
+    fresh_db="$(mktemp "$DB_PATH.new.XXXXXX")" || exit 1
+    trap 'rm -f "$fresh_db" "$fresh_db-journal" "$fresh_db-wal" "$fresh_db-shm"' EXIT
     {
       printf '.timeout 5000\nPRAGMA foreign_keys = ON;\nBEGIN IMMEDIATE;\n'
-      if [ "$create_schema" = "1" ]; then
-        printf '.read schema.sql\n'
-      fi
-      printf '.read init.sql\nCOMMIT;\n'
-    } | sqlite3 -batch -bail "$DB_PATH" || exit 1
+      printf '.read schema.sql\n.read init.sql\nCOMMIT;\n'
+    } | sqlite3 -batch -bail "$fresh_db" || exit 1
+    # 服务已停止；替换前清除旧库的 SQLite 辅助文件，避免旧日志应用到新库。
+    rm -f "$DB_PATH-wal" "$DB_PATH-shm" "$DB_PATH-journal" || exit 1
+    mv -f "$fresh_db" "$DB_PATH" || exit 1
     rm -f "$WORK_ROOT/.desktop-initializing"
   ) >"$LOG_DIR/init-database.log" 2>&1; then
-    if [ "$create_schema" = "1" ]; then
-      rm -f "$DB_PATH" "$DB_PATH-wal" "$DB_PATH-shm" "$DB_PATH-journal"
-    fi
-    rm -f "$WORK_ROOT/.desktop-initializing"
     print_result "$STEP_2" '❌' '数据库初始化失败（日志:tmp/run/init-database.log）'
     return 1
   fi

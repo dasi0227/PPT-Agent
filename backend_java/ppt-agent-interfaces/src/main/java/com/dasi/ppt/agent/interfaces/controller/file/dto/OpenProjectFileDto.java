@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.interfaces.controller.file.dto;
 
-import com.dasi.ppt.agent.interfaces.controller.dto.StrictRequestDto;
+import com.dasi.ppt.agent.interfaces.controller.StrictRequestDto;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ppt-agent.local/schemas/meta.schema.json",
   "title": "Presentation Meta",
-  "description": "Presentation basics. Store each requirement in its owning field without repeating the basics in constraints.",
+  "description": "Presentation basics. Store each requirement in its owning field without repeating the basics in constraint.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -20,7 +20,7 @@
     },
     "language": {
       "type": "string",
-      "description": "The presentation language, such as zh-CN. Do not repeat it in constraints.content.requirements.",
+      "description": "The presentation language, such as zh-CN. Do not repeat it in constraint.content.requirements.",
       "anyOf": [
         {
           "maxLength": 0
@@ -33,7 +33,7 @@
     },
     "count": {
       "type": "string",
-      "description": "Desired slide count, such as 10, 11-12 or 约10; may be empty when unresolved. This is a planning requirement, not the actual count derived from Outline. Do not repeat it in constraints.content.requirements.",
+      "description": "Desired slide count, such as 10, 11-12 or 约10; may be empty when unresolved. This is a planning requirement, not the actual count derived from Outline. Do not repeat it in constraint.content.requirements.",
       "maxLength": 32
     },
     "audience": {
@@ -43,7 +43,7 @@
     },
     "goal": {
       "type": "string",
-      "description": "The intended audience outcome: what they should understand, decide or be able to do. Keep detailed content coverage in constraints.content.requirements.",
+      "description": "The intended audience outcome: what they should understand, decide or be able to do. Keep detailed content coverage in constraint.content.requirements.",
       "maxLength": 1200
     }
   }

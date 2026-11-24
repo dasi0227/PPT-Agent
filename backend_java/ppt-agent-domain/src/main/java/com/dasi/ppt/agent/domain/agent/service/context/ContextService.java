@@ -10,7 +10,7 @@ import com.dasi.ppt.agent.domain.agent.service.context.assembler.CreatePromptAss
 import com.dasi.ppt.agent.domain.agent.service.context.assembler.PlanPromptAssembler;
 import com.dasi.ppt.agent.domain.agent.service.run.RunState;
 import com.dasi.ppt.agent.domain.asset.service.AssetService;
-import com.dasi.ppt.agent.domain.project.model.Deck;
+import com.dasi.ppt.agent.domain.project.model.entity.Deck;
 import com.dasi.ppt.agent.domain.project.service.DeckService;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

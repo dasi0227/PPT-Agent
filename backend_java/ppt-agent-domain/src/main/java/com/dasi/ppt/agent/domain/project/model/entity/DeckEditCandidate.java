@@ -1,4 +1,4 @@
-package com.dasi.ppt.agent.domain.project.model;
+package com.dasi.ppt.agent.domain.project.model.entity;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

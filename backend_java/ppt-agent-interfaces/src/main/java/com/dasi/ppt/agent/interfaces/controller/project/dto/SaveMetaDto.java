@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.interfaces.controller.project.dto;
 
-import com.dasi.ppt.agent.domain.project.model.Meta;
+import com.dasi.ppt.agent.domain.project.model.entity.Meta;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;

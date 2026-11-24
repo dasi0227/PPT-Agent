@@ -12,12 +12,12 @@
     </resultMap>
 
     <select id="list" resultMap="llmConfigPo">
-        SELECT * FROM settings_llm ORDER BY name
+        SELECT * FROM settings_models ORDER BY name
     </select>
 
     <select id="nameExists" resultType="boolean">
         SELECT EXISTS (
-            SELECT 1 FROM settings_llm
+            SELECT 1 FROM settings_models
             WHERE name = #{name}
             <if test="excludeId != null">
                 AND id != #{excludeId}
@@ -26,20 +26,20 @@
     </select>
 
     <select id="exists" resultType="boolean">
-        SELECT EXISTS (SELECT 1 FROM settings_llm WHERE id = #{id})
+        SELECT EXISTS (SELECT 1 FROM settings_models WHERE id = #{id})
     </select>
 
     <select id="count" resultType="int">
-        SELECT COUNT(*) FROM settings_llm
+        SELECT COUNT(*) FROM settings_models
     </select>
 
     <insert id="insert">
-        INSERT INTO settings_llm (id, name, protocol, provider, base_url, model, key)
+        INSERT INTO settings_models (id, name, protocol, provider, base_url, model, key)
         VALUES (#{id}, #{name}, #{protocol}, #{provider}, #{baseUrl}, #{model}, #{key})
     </insert>
 
     <select id="update" resultMap="llmConfigPo" affectData="true" flushCache="true" useCache="false">
-        UPDATE settings_llm SET
+        UPDATE settings_models SET
             name = COALESCE(#{name}, name),
             protocol = COALESCE(#{protocol}, protocol),
             provider = COALESCE(#{provider}, provider),
@@ -51,6 +51,6 @@
     </select>
 
     <delete id="delete">
-        DELETE FROM settings_llm WHERE id = #{id}
+        DELETE FROM settings_models WHERE id = #{id}
     </delete>
 </mapper>

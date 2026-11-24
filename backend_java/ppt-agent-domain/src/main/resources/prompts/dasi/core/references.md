@@ -7,7 +7,7 @@ desc: Specify the significances of the references.
 
 - `meta`: Presentation basics, used to define the title, language, slide count, audience, and goal.
 - `outline`: Ordered sections, subsections, and slides with stable IDs, used to determine the hierarchy and pagination.
-- `constraints`: Presentation-wide content and visual requirements and restrictions, used to guide content selection and slide design.
+- `constraint`: Presentation-wide content and visual requirements and restrictions, used to guide content selection and slide design.
 - `spec`: An individual slide’s intended message, content, and composition, used to guide its creation and revision.
 - `html`: Slide HTML source, used to edit, render, and inspect the slide.
 

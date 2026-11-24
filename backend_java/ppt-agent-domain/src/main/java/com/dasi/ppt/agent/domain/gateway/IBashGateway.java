@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.domain.gateway;
 
-import com.dasi.ppt.agent.domain.project.model.DeckEditCandidate;
+import com.dasi.ppt.agent.domain.project.model.entity.DeckEditCandidate;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;

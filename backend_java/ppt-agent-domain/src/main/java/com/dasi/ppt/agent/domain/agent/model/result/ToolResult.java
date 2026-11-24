@@ -1,7 +1,7 @@
 package com.dasi.ppt.agent.domain.agent.model.result;
 
 import com.dasi.ppt.agent.domain.agent.model.enumeration.ToolResultStatus;
-import com.dasi.ppt.agent.domain.project.model.DeckChange;
+import com.dasi.ppt.agent.domain.project.model.entity.DeckChange;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;

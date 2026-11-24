@@ -1,4 +1,4 @@
-package com.dasi.ppt.agent.domain.project.model;
+package com.dasi.ppt.agent.domain.project.model.entity;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -11,7 +11,7 @@ import java.util.List;
 @Getter
 @AllArgsConstructor
 @NoArgsConstructor
-public final class Constraints {
+public final class Constraint {
     private Rules content;
     private Rules visual;
 

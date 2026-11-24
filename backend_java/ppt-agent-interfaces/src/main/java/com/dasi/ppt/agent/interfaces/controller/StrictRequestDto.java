@@ -1,4 +1,4 @@
-package com.dasi.ppt.agent.interfaces.controller.dto;
+package com.dasi.ppt.agent.interfaces.controller;
 
 import com.fasterxml.jackson.annotation.JsonAnySetter;
 

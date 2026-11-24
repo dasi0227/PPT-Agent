@@ -7,7 +7,7 @@ import com.dasi.ppt.agent.domain.agent.model.result.ToolResult;
 import com.dasi.ppt.agent.domain.agent.service.context.assembler.ReviewPromptAssembler;
 import com.dasi.ppt.agent.domain.agent.service.run.RunState;
 import com.dasi.ppt.agent.domain.agent.service.tool.AgentTool;
-import com.dasi.ppt.agent.domain.project.model.Deck;
+import com.dasi.ppt.agent.domain.project.model.entity.Deck;
 import com.dasi.ppt.agent.domain.project.service.DeckService;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

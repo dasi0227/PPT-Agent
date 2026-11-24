@@ -7,6 +7,8 @@ import java.util.List;
 
 public interface ISessionRepository {
 
+    boolean exists(String sessionId);
+
     Session findSession(String sessionId);
 
     List<Message> listMessages(String sessionId);

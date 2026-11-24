@@ -1,9 +1,9 @@
 package com.dasi.ppt.agent.interfaces.controller.project.vo;
 
-import com.dasi.ppt.agent.domain.project.model.Constraints;
-import com.dasi.ppt.agent.domain.project.model.Meta;
-import com.dasi.ppt.agent.domain.project.model.Outline;
-import com.dasi.ppt.agent.domain.project.model.Spec;
+import com.dasi.ppt.agent.domain.project.model.entity.Constraint;
+import com.dasi.ppt.agent.domain.project.model.entity.Meta;
+import com.dasi.ppt.agent.domain.project.model.entity.Outline;
+import com.dasi.ppt.agent.domain.project.model.entity.Spec;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -17,7 +17,7 @@ import java.util.Map;
 @NoArgsConstructor
 public final class DeckVo {
     private Meta meta;
-    private Constraints constraint;
+    private Constraint constraint;
     private Outline outline;
     private Map<String, SlideContentVo> slides;
     private DeckHashesVo hashes;

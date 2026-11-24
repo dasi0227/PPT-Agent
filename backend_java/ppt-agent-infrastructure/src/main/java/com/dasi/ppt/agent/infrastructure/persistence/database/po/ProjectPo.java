@@ -17,6 +17,7 @@ public class ProjectPo {
     private String title;
     private String theme;
     private byte[] logo;
+    private boolean logoPresent;
     private String slidePaginationPosition;
     private String deckTitlePosition;
     private String sectionTitlePosition;

@@ -5,17 +5,20 @@ import com.dasi.ppt.agent.domain.shared.exception.ErrorCode;
 import com.dasi.ppt.agent.domain.shared.exception.InvalidEnumValueException;
 import com.dasi.ppt.agent.interfaces.controller.asset.AssetController;
 import com.dasi.ppt.agent.interfaces.controller.file.FileController;
+import com.dasi.ppt.agent.interfaces.controller.project.ProjectController;
 import com.dasi.ppt.agent.interfaces.controller.setting.SettingController;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.tomcat.util.http.InvalidParameterException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MultipartException;
 
 @Slf4j
-@RestControllerAdvice(assignableTypes = {AssetController.class, FileController.class, SettingController.class})
+@RestControllerAdvice(assignableTypes = {AssetController.class, FileController.class, SettingController.class, ProjectController.class})
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
@@ -31,7 +34,8 @@ public class GlobalExceptionHandler {
         return ErrorResponse.of(ErrorCode.INVALID_ARGUMENT, message);
     }
 
-    @ExceptionHandler({HttpMessageNotReadableException.class, ServletRequestBindingException.class, InvalidEnumValueException.class})
+    @ExceptionHandler({HttpMessageNotReadableException.class, ServletRequestBindingException.class, InvalidEnumValueException.class,
+            MultipartException.class, InvalidParameterException.class})
     public ErrorResponse invalidRequest(Exception ex, HttpServletRequest request) {
         log.warn("请求解析失败：path={}，code={}，message={}", request.getRequestURI(), ErrorCode.INVALID_ARGUMENT.getValue(), ex.getMessage());
         return ErrorResponse.of(ErrorCode.INVALID_ARGUMENT);

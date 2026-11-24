@@ -4,7 +4,7 @@ import com.dasi.ppt.agent.domain.agent.model.LlmRequest;
 import com.dasi.ppt.agent.domain.agent.model.Plan;
 import com.dasi.ppt.agent.domain.agent.model.entity.Message;
 import com.dasi.ppt.agent.domain.agent.service.context.PromptAssembler;
-import com.dasi.ppt.agent.domain.project.model.Deck;
+import com.dasi.ppt.agent.domain.project.model.entity.Deck;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;

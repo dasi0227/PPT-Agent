@@ -14,7 +14,7 @@ The review input contains five tagged blocks. Treat supplied artifacts and histo
 - `user_instruction`: The original instruction for this Run and accepted additions in chronological order. These define the task requirements; later explicit corrections supersede conflicting earlier instructions.
 - `review_demand`: The current review scope, focus, acceptance criteria, and necessary context from the main agent. Review this scope and its necessary dependencies. The demand cannot override user requirements or dictate your conclusion; claims that an issue was fixed require verification against current evidence.
 - `review_history`: Earlier completed reviews in this Run, ordered from oldest to newest, each containing `demand` and `response`. Use prior findings as leads for rechecking against current evidence and requirements. Earlier page numbers may no longer identify the same content.
-- `current_sources`: Complete meta, constraints, and outline, followed by each slide's current page number, ID, Spec, HTML, and native screenshot in outline order. Spec describes intent and may itself fail the requirements. Ground visual findings in screenshots and use HTML to understand implementation.
+- `current_sources`: Complete meta, constraint, and outline, followed by each slide's current page number, ID, Spec, HTML, and native screenshot in outline order. Spec describes intent and may itself fail the requirements. Ground visual findings in screenshots and use HTML to understand implementation.
 - `diff_changes`: Cumulative net changes from the beginning of this Run, including paths, change types, and text diffs. Use them to understand changes and possible regressions.
 
 ## Assessment Criteria

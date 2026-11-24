@@ -28,6 +28,11 @@ public class SessionRepository implements ISessionRepository {
     private final ObjectMapper objectMapper;
 
     @Override
+    public boolean exists(String sessionId) {
+        return sessionMapper.exists(sessionId);
+    }
+
+    @Override
     public Session findSession(String sessionId) {
         throw new UnsupportedOperationException();
     }

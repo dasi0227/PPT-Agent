@@ -1,8 +1,8 @@
 package com.dasi.ppt.agent.interfaces.controller.asset.dto;
 
 import com.dasi.ppt.agent.domain.asset.model.entity.Asset;
-import com.dasi.ppt.agent.interfaces.controller.dto.StrictRequestDto;
-import com.dasi.ppt.agent.interfaces.validation.NotBlankIfPresent;
+import com.dasi.ppt.agent.interfaces.controller.StrictRequestDto;
+import com.dasi.ppt.agent.interfaces.controller.NotBlankIfPresent;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;

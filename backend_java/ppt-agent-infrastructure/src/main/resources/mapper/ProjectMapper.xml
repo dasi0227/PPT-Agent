@@ -5,7 +5,8 @@
         <id column="id" property="id"/>
         <result column="title" property="title"/>
         <result column="theme" property="theme"/>
-        <result column="logo" property="logo"/>
+        <result column="logo" property="logo" typeHandler="org.apache.ibatis.type.ByteArrayTypeHandler"/>
+        <result column="has_logo" property="logoPresent"/>
         <result column="slide_pagination_position" property="slidePaginationPosition"/>
         <result column="deck_title_position" property="deckTitlePosition"/>
         <result column="section_title_position" property="sectionTitlePosition"/>
@@ -13,14 +14,48 @@
         <result column="updated_at" property="updatedAt"/>
     </resultMap>
 
-    <select id="hasApplicationSchema" resultType="boolean">
-        SELECT COUNT(*) = 15 AND EXISTS (SELECT 1 FROM pragma_table_info('assets') WHERE name = 'enabled')
-            AND EXISTS (SELECT 1 FROM pragma_table_info('settings_llm') WHERE name = 'id' AND pk = 1)
-        FROM sqlite_schema
-        WHERE type = 'table' AND name IN (
-            'projects', 'sessions', 'runs', 'messages', 'commands', 'checkpoints', 'receipts',
-            'assets', 'tags', 'asset_tags', 'settings_fileopen', 'settings_shortcut',
-            'settings_llm', 'settings_route', 'settings_behavior'
-        )
+    <select id="list" resultMap="projectPo">
+        SELECT id, title, updated_at FROM projects ORDER BY updated_at DESC, id ASC
     </select>
+
+    <select id="exists" resultType="boolean">
+        SELECT EXISTS (SELECT 1 FROM projects WHERE id = #{id})
+    </select>
+
+    <select id="findAppearance" resultMap="projectPo">
+        SELECT id, theme, logo IS NOT NULL AS has_logo, slide_pagination_position,
+               deck_title_position, section_title_position, project_logo_position
+        FROM projects WHERE id = #{id}
+    </select>
+
+    <select id="findLogo" resultMap="projectPo">
+        SELECT id, logo FROM projects WHERE id = #{id}
+    </select>
+
+    <insert id="insert">
+        INSERT INTO projects (id, title, theme, updated_at)
+        VALUES (#{id}, #{title}, #{theme}, #{updatedAt})
+    </insert>
+
+    <update id="updateTitle">
+        UPDATE projects SET updated_at = CASE WHEN title = #{title} THEN updated_at
+                            ELSE MAX(updated_at + 1, #{updatedAt}) END, title = #{title}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateAppearance">
+        UPDATE projects SET theme = #{theme}, slide_pagination_position = #{slidePaginationPosition},
+               deck_title_position = #{deckTitlePosition}, section_title_position = #{sectionTitlePosition},
+               project_logo_position = #{projectLogoPosition}, updated_at = MAX(updated_at + 1, #{updatedAt})
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateLogo">
+        UPDATE projects SET logo = #{logo}, updated_at = MAX(updated_at + 1, #{updatedAt})
+        WHERE id = #{id} AND logo IS NOT #{logo}
+    </update>
+
+    <delete id="delete">
+        DELETE FROM projects WHERE id = #{id}
+    </delete>
 </mapper>

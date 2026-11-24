@@ -5,7 +5,7 @@ import com.dasi.ppt.agent.domain.agent.model.RunScope;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.InstructionDecision;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.RunMode;
 import com.dasi.ppt.agent.domain.agent.model.result.PreviewAssessment;
-import com.dasi.ppt.agent.domain.project.model.DeckChange;
+import com.dasi.ppt.agent.domain.project.model.entity.DeckChange;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;

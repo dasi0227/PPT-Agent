@@ -1,4 +1,4 @@
-package com.dasi.ppt.agent.domain.project.model;
+package com.dasi.ppt.agent.domain.project.model.entity;
 
 import com.dasi.ppt.agent.domain.project.model.enumeration.ChangeStatus;
 import com.dasi.ppt.agent.domain.project.model.enumeration.DiffType;
