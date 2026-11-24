@@ -186,7 +186,7 @@
 - 工具详情的 `interaction.request` 保留当时的表单内容，省略 `type` 和 `version`。
 - 资料审批保留原 `request.proposal`，`answer` 仅含决定及可选的拒绝反馈。
 - 资料编辑工具成功时，`result.content` 返回实际保存的完整定稿。受阻或失败时省略 `content`。
-- `edit_meta`、`edit_constraints` 的定稿为对象，`edit_outline` 的定稿为含正式节点 ID 的 JSON 源码字符串。
+- `edit_meta`、`edit_constraint` 的定稿为对象，`edit_outline` 的定稿为含正式节点 ID 的 JSON 源码字符串。
 - 预览评分完成时返回接口表定义的全部评分与判定项。评分缺失、越界或判定值无效时，`result.preview.status=unavailable` 并附 `reason`。
 - SSE 按会话订阅，事件名在 `event`，`data` 为 UTF-8 JSON。
 - `changed` 在变更可读取后发送，携带接收会话的 `revision` 和非空、无重复的 `areas`。
@@ -281,7 +281,7 @@
 
 ## 预览
 
-- 预览资源按接口表返回原文或二进制，未知资源返回 HTTP 404。
+- `GET /api/runtime/{file}` 按文件名读取打包在 `runtime/` 根目录下的公开资源。响应类型按扩展名确定，CSS 为 `text/css`，JS 为 `text/javascript`，无法识别时使用 `application/octet-stream`。找不到可读文件时返回 HTTP 404。
 - 预览资源使用 `Cache-Control: no-cache` 和 `ETag`，条件请求命中返回 HTTP 304。
 
 ## 其它

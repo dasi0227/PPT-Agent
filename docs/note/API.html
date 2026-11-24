@@ -1200,7 +1200,7 @@
                   <li><code>arguments</code>：对象，必返；可向用户展示的调用参数，无参数为 {}</li>
                   <li><code>result</code>：对象或 null，必返；对应的已保存工具结果，尚无结果记录为 null</li>
                   <li><code>result.status</code>：字符串，result 非 null 时必返；completed / blocked / failed</li>
-                  <li><code>result.content</code>：三种资料编辑工具成功保存的完整定稿。edit_meta、edit_constraints 为对象，edit_outline 为含正式节点 ID 的大纲 JSON 字符串</li>
+                  <li><code>result.content</code>：三种资料编辑工具成功保存的完整定稿。edit_meta、edit_constraint 为对象，edit_outline 为含正式节点 ID 的大纲 JSON 字符串</li>
                   <li><code>result.text</code>：字符串，可选；工具输出、检查结论或失败原因</li>
                   <li><code>result.targets</code>：数组，可选。每项含 part、path、diff，可选 slide_id。发生变更的目标必返 status（added / modified / deleted）。diff 复用「读取变更差异」每项的 type 与对应差异字段</li>
                   <li><code>result.image</code>：对象，可选；含 source（render / attachment）、url 与可选 slide_id，定位调用当时的图片</li>
@@ -1575,44 +1575,17 @@
               </td>
             </tr>
             <tr>
-              <th scope="row">加载预览样式和脚本</th>
+              <th scope="row">加载内置预览资源</th>
               <td><code>GET /api/runtime/{file}</code></td>
               <td>
                 <ul class="fields">
-                  <li><code>file</code>：字符串，必填。base.css / decorations.js / fonts.css / font-loader.js / theme-bridge.js</li>
+                  <li><code>file</code>：runtime 根目录中的文件名，必填</li>
+                  <li>当前内置资源：base.css、decorations.js、theme-bridge.js</li>
                 </ul>
               </td>
               <td>
                 <ul class="fields">
-                  <li><code>响应体</code>：CSS 或 JavaScript 原文，对应 text/css 或 application/javascript</li>
-                </ul>
-              </td>
-            </tr>
-            <tr>
-              <th scope="row">加载内置字体</th>
-              <td><code>GET /api/runtime/fonts/{name}</code></td>
-              <td>
-                <ul class="fields">
-                  <li><code>name</code>：字符串，必填。内置字体文件名，来自 fonts.css</li>
-                </ul>
-              </td>
-              <td>
-                <ul class="fields">
-                  <li><code>响应体</code>：font/ttf，字体二进制</li>
-                </ul>
-              </td>
-            </tr>
-            <tr>
-              <th scope="row">加载主题预览样例</th>
-              <td><code>GET /api/runtime/theme-examples/{name}</code></td>
-              <td>
-                <ul class="fields">
-                  <li><code>name</code>：cover / content / chart</li>
-                </ul>
-              </td>
-              <td>
-                <ul class="fields">
-                  <li><code>响应体</code>：text/html，指定样例的 HTML 原文</li>
+                  <li><code>响应体</code>：文件原文或二进制内容，CSS 为 text/css，JS 为 text/javascript，未知扩展名为 application/octet-stream</li>
                 </ul>
               </td>
             </tr>

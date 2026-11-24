@@ -61,7 +61,7 @@
 | `beforeRunCompleted(BeforeRunCompletedEvent)` | `CompletionHook` → `BeforeRunCompletedResult` | 初始为尚未确认完成。检查任务所需的计划、授权、产物及明确要求的截图等。Plan 任务须经计划审批。纯闲聊可直接完成。检查异常不能按通过处理。输入开关、继续循环及终态提交由主流程决定。 |
 | `afterRunCompleted(RunCompletedEvent)` | 返回 `void` | 仅在成功完成事务提交后投递 `AutoSuggestHook`。事件带触发 Run 的最后输入 ID、固定开关与路由。`RunService` 交付材料后释放 `RunState`。 |
 
-`ToolPruneHook` 分别按 `meta → edit_meta`、`constraints → edit_constraints`、`outline → edit_outline` 处理三道 JEV 选择题。每题可选 `needed`（任务需要）、`possible`（可能需要）或 `not_needed`（整个任务都不需要）。只有该题同时满足 `choice == "not_needed"`、`probabilities.not_needed ≥ 0.95` 和 `confidence ≥ 0.85`，才从本轮候选集中移除对应工具。其余情况保留该工具。单题答案缺失或无效时，继续处理其他题的有效答案。整次调用失败时沿用进入 Hook 前的候选集。[Prune 拼装与裁剪规则](ASSEMBLE.html#prune-title)
+`ToolPruneHook` 分别按 `meta → edit_meta`、`constraint → edit_constraint`、`outline → edit_outline` 处理三道 JEV 选择题。每题可选 `needed`（任务需要）、`possible`（可能需要）或 `not_needed`（整个任务都不需要）。只有该题同时满足 `choice == "not_needed"`、`probabilities.not_needed ≥ 0.95` 和 `confidence ≥ 0.85`，才从本轮候选集中移除对应工具。其余情况保留该工具。单题答案缺失或无效时，继续处理其他题的有效答案。整次调用失败时沿用进入 Hook 前的候选集。[Prune 拼装与裁剪规则](ASSEMBLE.html#prune-title)
 
 阶段事件仅在领域内传递。JEV、旁路命令及独立审查不递归触发主模型 Hook。异步命名和建议经过 `CommandService` 的正常受理校验，调度或执行失败保持已提交的主流程结果。
 
@@ -90,7 +90,7 @@ Create 中的 `update_plan` 直接替换生效计划的步骤。非空数组使�
 项目文稿的多文件修改、检查点和会话版本必须对应同一次提交。人工保存、Agent 写入、采集检查点及历史切换共用项目写锁。普通项目 GET 无需获取项目锁。每个文件用同一份字节生成正文和哈希，允许跨文件读到不同提交的内容。模型调用、候选准备和人工等待在锁外执行。[项目目录与日志](STRUCTURE_SPEC.md#项目目录) · [目录树](STRUCTURE.html#project-heading)
 
 1. **记录调用。** `ToolExecutor` 通过 `IRunRepository` 在 SQLite 事务中写入原始 `messages.type=tool_call`，递增所属会话版本。提交后即能查询这次尝试。
-2. **准备候选。** `DeckService` 为每个待修改的文稿文件准备一份 `DeckEditCandidate`。`run_command` 的候选来自 `IBashGateway` 返回的沙箱修改。需要审批时，`InteractionService` 在等待期间保留候选。资料审批若提交完整 `draft`，以该定稿替换候选内容，沿用原读取基准。Chat、Ask、Plan 中只读。Create 执行阶段仅能提交授权范围内的项目资料（`.meta.json`、`.constraints.json`、`.outline.json`）和页面规格／源码（`{slide_id}.json`、`{slide_id}.html`）。辅助文件留在沙箱，`.git/`、`.runtime/` 受保护。
+2. **准备候选。** `DeckService` 为每个待修改的文稿文件准备一份 `DeckEditCandidate`。`run_command` 的候选来自 `IBashGateway` 返回的沙箱修改。需要审批时，`InteractionService` 在等待期间保留候选。资料审批若提交完整 `draft`，以该定稿替换候选内容，沿用原读取基准。Chat、Ask、Plan 中只读。Create 执行阶段仅能提交授权范围内的项目资料（`.meta.json`、`.constraint.json`、`.outline.json`）和页面规格／源码（`{slide_id}.json`、`{slide_id}.html`）。辅助文件留在沙箱，`.git/`、`.runtime/` 受保护。
 3. **持锁复核。** 拿到项目写锁后，复查取消状态、当前授权、获批候选及文件基准。基准冲突时保留当前文件，按工具失败处理。人工保存在同一提交边界校验项目占用和 `base_hash`。项目有非终态 Run、正在 Git 提交或历史切换时返回 `PROJECT_BUSY`。导出采集快照时只短暂持锁，锁释放后即可保存。
 4. **先写日志。** `DeckRepository` 将原凭据键、请求摘要及文件修改前后的状态组装为 `MutationLog`。由 `PathResolver` 定位 `.runtime/mutations/{operation_hash}.json`，通过 `FileStorer` 原子写入完整日志。确认日志落盘后才改动项目文件。
 5. **应用文件。** `DeckRepository` 持锁通过 `FileStorer` 新建、替换或删除候选文件，记录本次来源及实际差异。资源编辑使用完整候选文档。

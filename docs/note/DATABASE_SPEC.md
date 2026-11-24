@@ -56,7 +56,7 @@
 - `tool_call` 与 `tool_result` 按 `(run_id, tool_call_id)` 配对，每种记录各最多一条。
 - `tool_result` 保存最终审批决定、实际结果及单次差异，后续取消保留已确认的结果。
 - 资料审批记录保留原始提案，答复只保存决定及可选反馈。
-- `edit_meta`、`edit_constraints`、`edit_outline` 成功时，`tool_result` 的 `content` 保存实际写入的完整定稿，包括用户批准的修改。
+- `edit_meta`、`edit_constraint`、`edit_outline` 成功时，`tool_result` 的 `content` 保存实际写入的完整定稿，包括用户批准的修改。
 - `context_position` 非空时在会话内唯一，SQL `NULL` 表示该消息不在当前上下文。
 - 同一轮模型返回的所有 `tool_call` 都有配对结果后，该工具轮次才整体进入上下文。缺少结果的轮次保留历史记录，整轮的 `context_position` 为 SQL `NULL`。
 - 压缩时，摘要写入与 `context_position` 调整同事务提交，保留原消息正文、引用和历史顺序。
@@ -157,7 +157,7 @@
 - `select_suggestion` 只存共用修饰键前缀，默认值为 `Option`。数字 1、2、3 由建议序号决定。检查组合键冲突时，`Option` 与 `Alt` 视为同一修饰键。
 - 交换多项快捷键或重置默认值时，在同一事务内更新原记录。
 
-## settings_llm
+## settings_models
 
 - `id` 为模型配置主键，由服务端生成唯一字符串。每个配置的 ID 固定，`name` 可修改且全局唯一，至少保留一条模型配置。
 - `provider` 保存用户选择的模型品牌，取值为deepseek、kimi、mimo、gpt、claude、gemini、qwen、minimax、glm、grok。
@@ -166,7 +166,7 @@
 ## settings_route
 
 - 以 `id=1` 保存全局路由。一次只更新指定的路由字段，目标模型的存在性校验与路由写入在同一事务完成。
-- 各路由字段引用 `settings_llm.id`。事务提交时校验外键。模型改名后路由仍指向原配置；删除单个模型时，在同一事务确认它未被使用且至少还剩一个模型。
+- 各路由字段引用 `settings_models.id`。事务提交时校验外键。模型改名后路由仍指向原配置；删除单个模型时，在同一事务确认它未被使用且至少还剩一个模型。
 
 ## settings_behavior
 

@@ -927,7 +927,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <a class="class-link" href="#class-EditResourceTool" aria-label="查看 EditResourceTool 职责">
 <text class="node-name" x="16" y="50">EditResourceTool</text>
 </a>
-<text class="node-caption" x="16" y="76">edit_meta · edit_constraints</text>
+<text class="node-caption" x="16" y="76">edit_meta · edit_constraint</text>
 <text class="node-caption" x="16" y="96">edit_outline · edit_spec</text>
 <text class="node-caption" x="16" y="116">edit_html</text>
 </g>
@@ -2086,7 +2086,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>会话历史与当前输入</td>
 <td>Prune 判定材料与问题</td>
-<td>拼装 jev_prune、历史与当前输入，附带 meta / constraints / outline 裁剪问题；供 ToolPruneHook 调用 IJevGateway。</td>
+<td>拼装 jev_prune、历史与当前输入，附带 meta / constraint / outline 裁剪问题；供 ToolPruneHook 调用 IJevGateway。</td>
 </tr>
 <tr id="class-RechristenPromptAssembler">
 <th scope="row">
@@ -2102,7 +2102,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>项目资料、页面规范、HTML 与截图</td>
 <td>Preview 判定材料与问题</td>
-<td>拼装 decision_preview、meta、constraints、spec、HTML 与截图，附带内容与视觉检查问题；供 RenderSlideTool 调用 IJevGateway。</td>
+<td>拼装 decision_preview、meta、constraint、spec、HTML 与截图，附带内容与视觉检查问题；供 RenderSlideTool 调用 IJevGateway。</td>
 </tr>
 </tbody>
 <tbody>
@@ -2299,7 +2299,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>资源种类、字段更新或正文修改意图，以及已读基准</td>
 <td>完整候选文档、审批请求或实际修改结果</td>
-<td>共用实现 edit_meta、edit_constraints、edit_outline、edit_spec、edit_html。委托项目领域校验与提交；按设置审批资料修改；不使用 JSON Patch。</td>
+<td>共用实现 edit_meta、edit_constraint、edit_outline、edit_spec、edit_html。委托项目领域校验与提交；按设置审批资料修改；不使用 JSON Patch。</td>
 </tr>
 <tr id="class-RunCommandTool">
 <th scope="row">

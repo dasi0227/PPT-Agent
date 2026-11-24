@@ -27,15 +27,15 @@
 - `PathResolver` 校验传入的相对路径，确保解析结果仍位于指定项目根目录内。
 - `infrastructure/persistence/filesystem/MutationLog` 对应一次文稿写入或历史切换的恢复日志文件，记录核对提交所需的字段及每个文件的 `before` 和 `after`。[日志字段](#项目目录)
 - `infrastructure/persistence/filesystem/MutationLogType` 定义文稿文件恢复日志的 `type`，取 `agent / manual / switch`。
-- `infrastructure` 模块的 `resources/render/` 存放随应用分发的内置字体、样式、脚本和预览样例。
+- `infrastructure` 模块将 `base.css`、`decorations.js` 和 `theme-bridge.js` 直接存放在 `resources/runtime/` 下。主题用 `--font-sans`、`--font-display`、`--font-mono` 指定系统字体族。
 
-- `interfaces/controller/` 按功能分为 `project`、`asset`、`setting`、`export`、`file`、`session`、`history`、`execution`、`interaction`、`checkpoint` 和 `runtime`。
+- `interfaces/controller/` 按功能分为 `project`、`asset`、`setting`、`export`、`file`、`session`、`history`、`execution`、`interaction`、`checkpoint` 和 `system`。
 - 每个功能包就近存放 `XxxController.java`。有请求体或结构化响应时，分别将顶层请求类型和响应类型放在 `dto/` 和 `vo/`。
 - DTO 声明请求的必填、长度和格式约束，Controller 通过 `@Valid` 触发校验，失败返回 `INVALID_ARGUMENT`。Service 负责业务规则，包括默认路由需绑定模型、名称唯一性和正文版本冲突。
 - 项目、会话、资产与模型配置的创建和更新 DTO，以及保存单个模型路由的 `SaveRouteDto`，均通过 `controller/dto/StrictRequestDto` 拒绝未声明的字段。
 - GET 的路径和查询参数由 Controller 直接接收。
 - 图片、下载和静态资源使用各自的 HTTP 响应类型。无响应体的接口直接返回空响应体。
-- 健康检查的 `HealthController.java` 位于 `controller/` 根目录。
+- `controller/system/SystemController.java` 提供健康检查和内置预览资源读取接口。
 - 项目文件打开接口归 `controller/file/`。
 - 会话历史、Run 与命令详情、工具详情和会话订阅归 `controller/history/`。
 - Run 与旁路命令的受理及取消入口归 `controller/execution/`。
@@ -75,7 +75,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `AppendCommandDto` 对应 `AppendCommandVo`，返回受理的单次命令执行 `id`。
 - `DeleteProjectDto` 和 `DeleteProjectLogoDto` 分别用于删除项目和删除项目 Logo，请求体均只含 `project_id`。删除成功返回空响应体。
 - `ContentHashVo` 供基本信息、约束、大纲、单页规格和单页 HTML 的保存接口共用。
-- 文稿正文沿用 `Meta`、`Constraints`、`Outline`、`Spec` 对应的 JSON 结构。
+- 文稿正文沿用 `Meta`、`Constraint`、`Outline`、`Spec` 对应的 JSON 结构。
 - 文件打开设置的读取和保存共用 `FileOpenSettingsVo`，返回实际生效的打开方式和自定义应用列表。
 - `CreateModelDto` 创建模型配置，`UpdateModelDto` 局部更新已有配置，密钥均只写，两者共用 `ModelConfigVo` 返回公开配置。读取模型设置时，`ModelSettingsVo` 组合 `List<ModelConfigVo>` 和 `ModelRoutesVo`，后二者均为顶层类。`DeleteModelDto` 按 ID 删除模型，`SaveRouteDto` 指定路由项及目标模型 ID。[模型设置字段](API.html#settings)
 - `RunChangesVo` 在差异条目上直接返回 `type` 及对应明细字段。工具结果与权限审批候选将同一结构放入各条目的 `diff`。[变更与工具详情](API.html#history)
@@ -93,7 +93,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - 领域仓储接口位于各自的 `repository/`，外部能力接口位于各自的 `gateway/`。
 - `project/model/entity/` 存放项目实体 `Project` 和页面实体 `Slide`。
 - `Slide` 以稳定的 `slide_id` 标识一页，关联该页的 `Spec` 和 HTML 源码。
-- `project/model/Deck` 按所属项目聚合 `Meta`、`Constraints`、`Outline` 及按 `slide_id` 索引的 `Slide`。[项目读取契约](API.html#projects)
+- `project/model/Deck` 按所属项目聚合 `Meta`、`Constraint`、`Outline` 及按 `slide_id` 索引的 `Slide`。[项目读取契约](API.html#projects)
 - `project/model/Meta` 对应 `.meta.json`，保存文稿标题、语言、页数要求、受众和目标。
 - `project/model/Spec` 对应 `{slide_id}.json`，描述单页的用途、核心信息、内容元素和布局。
 - `project/model/enumeration/SlidePurpose` 对应 `Spec.purpose`，取 `cover / introduction / transition / content_explanation / content_comparison / content_example / content_guidance / content_other / conclusion / other`。
@@ -102,7 +102,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `Outline.java` 在 `Outline` 内声明 `Section` 和 `Subsection` 两个内部类。
 - `Outline.Section` 保存章 ID、标题、有序的直属页面和有序的节。[大纲字段](API.html#projects)
 - `Outline.Subsection` 保存节 ID、标题和有序页面。章和节均以页面 ID 和标题引用页面。[大纲字段](API.html#projects)
-- `project/model/Constraints` 对应 `.constraints.json`，分别保存内容约束和视觉约束的要求与禁用项。
+- `project/model/Constraint` 对应 `.constraint.json`，分别保存内容约束和视觉约束的要求与禁用项。
 - `project/model/ChangeTarget` 是文稿变更目标的值对象，包含 `part`、项目内相对路径 `path` 和页面目标的 `slide_id`。
 - `project/model/DeckEditCandidate` 表示一个 `ChangeTarget` 的待提交修改，携带待写入的完整文件内容或明确的删除操作。
 - `DeckEditCandidate` 的读取基准记录原文件哈希或文件当时不存在，供 `DeckService` 在提交前持锁复核。
@@ -180,7 +180,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 ## 项目目录
 
 - 每个项目使用独立的 `{project_id}/` 根目录，由同一工作目录下的单个后端进程管理。
-- 项目级文稿存于根目录的 `.meta.json`、`.constraints.json`、`.outline.json`。
+- 项目级文稿存于根目录的 `.meta.json`、`.constraint.json`、`.outline.json`。
 - 单页规格和源码按幻灯片 ID 存为根目录的 `{slide_id}.json` 和 `{slide_id}.html`。
 - 文稿回退和返回只处理上述五类文件，其他项目文件保留原状。
 - 项目主题正文和 Logo 存在数据库中，项目目录不另存永久副本。
@@ -207,7 +207,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `.runtime/exports/{export_id}/` 的根目录只存一个最终成品，文件名为 `{filename}.pdf`、`{filename}.zip` 或 `{filename}.html`。
 - 导出使用创建时固定的完整输入，`ExportSnapshot` 只在任务内存保留。预览和导出都用 `Meta.title` 填充 `deck_title`，用页面所属 `Outline.Section.title` 填充 `section_title`。
 - PNG 和 PDF 导出的逐页图片存入任务的 `work/{序号}-{标题}.png`，序号补零，标题规范化。
-- HTML 导出直接生成单文件，播放器、字体、样式、脚本和 Logo 内嵌，项目内不创建播放目录。
+- HTML 导出直接生成单文件，内嵌播放器、样式、脚本和 Logo。文本按主题指定的系统字体族排版，项目内不创建播放目录。
 - 导出成品写完并关闭后清理 `work/`，保留待下载成品。
 - 导出失败或取消时，工作停止后清理临时文件和不完整成品。
 - 完整发送下载文件后清理整个导出任务目录，启动恢复时清理遗留导出目录。

@@ -1331,11 +1331,11 @@
       </div>
     </article>
 
-    <article class="database-card" id="settings-llm" aria-labelledby="settings-llm-heading">
+    <article class="database-card" id="settings-models" aria-labelledby="settings-models-heading">
       <header class="card-header">
         <div>
           <div class="table-heading">
-            <h2 id="settings-llm-heading"><code>settings_llm</code></h2>
+            <h2 id="settings-models-heading"><code>settings_models</code></h2>
             <span class="table-label">模型配置</span>
           </div>
           <p class="table-purpose">每行保存一套可选用的模型连接配置。</p>
@@ -1343,8 +1343,8 @@
         <span class="status">已确定</span>
       </header>
 
-      <div class="table-scroll" role="region" aria-label="settings_llm 字段与约束" tabindex="0">
-        <table aria-label="settings_llm 字段设计与约束">
+      <div class="table-scroll" role="region" aria-label="settings_models 字段与约束" tabindex="0">
+        <table aria-label="settings_models 字段设计与约束">
           <colgroup>
             <col class="field-col"><col class="type-col"><col class="nullable-col">
             <col class="default-col"><col class="meaning-col"><col class="decision-col">
@@ -1360,7 +1360,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr id="settings-llm-id">
+            <tr id="settings-models-id">
               <th scope="row"><code>id</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1368,7 +1368,7 @@
               <td>稳定的模型配置 ID。</td>
               <td class="decision">主键，由服务端生成唯一字符串。</td>
             </tr>
-            <tr id="settings-llm-name">
+            <tr id="settings-models-name">
               <th scope="row"><code>name</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1376,7 +1376,7 @@
               <td>模型配置名称。</td>
               <td class="decision">全局唯一。</td>
             </tr>
-            <tr id="settings-llm-protocol">
+            <tr id="settings-models-protocol">
               <th scope="row"><code>protocol</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1384,7 +1384,7 @@
               <td>调用模型所使用的 API 协议。</td>
               <td class="decision"><code>responses</code> / <code>anthropic</code>。</td>
             </tr>
-            <tr id="settings-llm-provider">
+            <tr id="settings-models-provider">
               <th scope="row"><code>provider</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1392,7 +1392,7 @@
               <td>用户选择的模型品牌。</td>
               <td class="decision">deepseek、kimi、mimo、gpt、claude、gemini、qwen、minimax、glm、grok。</td>
             </tr>
-            <tr id="settings-llm-base-url">
+            <tr id="settings-models-base-url">
               <th scope="row"><code>base_url</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1400,7 +1400,7 @@
               <td>模型 API 的基础地址。</td>
               <td class="decision">非空白字符串，保存规范化后的模型基础地址。</td>
             </tr>
-            <tr id="settings-llm-model">
+            <tr id="settings-models-model">
               <th scope="row"><code>model</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1408,7 +1408,7 @@
               <td>实际请求的模型标识。</td>
               <td class="decision">非空字符串。</td>
             </tr>
-            <tr id="settings-llm-key">
+            <tr id="settings-models-key">
               <th scope="row"><code>key</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -1464,7 +1464,7 @@
               <td class="nullable">否</td>
               <td>无</td>
               <td>主路默认模型配置。</td>
-              <td class="decision">外键 <code>settings_llm.id</code>。</td>
+              <td class="decision">外键 <code>settings_models.id</code>。</td>
             </tr>
             <tr id="settings-route-main-fallback">
               <th scope="row"><code>main_fallback</code></th>
@@ -1472,7 +1472,7 @@
               <td class="nullable">是</td>
               <td><code>NULL</code></td>
               <td>主路备用模型配置。</td>
-              <td class="decision">外键关联 <code>settings_llm.id</code>；为空表示不启用备用。</td>
+              <td class="decision">外键关联 <code>settings_models.id</code>；为空表示不启用备用。</td>
             </tr>
             <tr id="settings-route-side-default">
               <th scope="row"><code>side_default</code></th>
@@ -1480,7 +1480,7 @@
               <td class="nullable">否</td>
               <td>无</td>
               <td>旁路默认模型配置。</td>
-              <td class="decision">外键 <code>settings_llm.id</code>。</td>
+              <td class="decision">外键 <code>settings_models.id</code>。</td>
             </tr>
             <tr id="settings-route-side-fallback">
               <th scope="row"><code>side_fallback</code></th>
@@ -1488,7 +1488,7 @@
               <td class="nullable">是</td>
               <td><code>NULL</code></td>
               <td>旁路统一备用模型配置。</td>
-              <td class="decision">外键关联 <code>settings_llm.id</code>；为空表示不启用备用。</td>
+              <td class="decision">外键关联 <code>settings_models.id</code>；为空表示不启用备用。</td>
             </tr>
             <tr id="settings-route-rename">
               <th scope="row"><code>rename</code></th>
@@ -1496,7 +1496,7 @@
               <td class="nullable">是</td>
               <td><code>NULL</code></td>
               <td>会话命名使用的模型配置。</td>
-              <td class="decision">外键关联 <code>settings_llm.id</code>；为空时使用 <code>side_default</code>。</td>
+              <td class="decision">外键关联 <code>settings_models.id</code>；为空时使用 <code>side_default</code>。</td>
             </tr>
             <tr id="settings-route-compact">
               <th scope="row"><code>compact</code></th>
@@ -1504,7 +1504,7 @@
               <td class="nullable">是</td>
               <td><code>NULL</code></td>
               <td>上下文压缩使用的模型配置。</td>
-              <td class="decision">外键关联 <code>settings_llm.id</code>；为空时使用 <code>side_default</code>。</td>
+              <td class="decision">外键关联 <code>settings_models.id</code>；为空时使用 <code>side_default</code>。</td>
             </tr>
             <tr id="settings-route-commit">
               <th scope="row"><code>commit</code></th>
@@ -1512,7 +1512,7 @@
               <td class="nullable">是</td>
               <td><code>NULL</code></td>
               <td>提交说明生成使用的模型配置。</td>
-              <td class="decision">外键关联 <code>settings_llm.id</code>；为空时使用 <code>side_default</code>。</td>
+              <td class="decision">外键关联 <code>settings_models.id</code>；为空时使用 <code>side_default</code>。</td>
             </tr>
             <tr id="settings-route-polish">
               <th scope="row"><code>polish</code></th>
@@ -1520,7 +1520,7 @@
               <td class="nullable">是</td>
               <td><code>NULL</code></td>
               <td>提示词润色使用的模型配置。</td>
-              <td class="decision">外键关联 <code>settings_llm.id</code>；为空时使用 <code>side_default</code>。</td>
+              <td class="decision">外键关联 <code>settings_models.id</code>；为空时使用 <code>side_default</code>。</td>
             </tr>
             <tr id="settings-route-handoff">
               <th scope="row"><code>handoff</code></th>
@@ -1528,7 +1528,7 @@
               <td class="nullable">是</td>
               <td><code>NULL</code></td>
               <td>交接说明生成使用的模型配置。</td>
-              <td class="decision">外键关联 <code>settings_llm.id</code>；为空时使用 <code>side_default</code>。</td>
+              <td class="decision">外键关联 <code>settings_models.id</code>；为空时使用 <code>side_default</code>。</td>
             </tr>
             <tr id="settings-route-suggest">
               <th scope="row"><code>suggest</code></th>
@@ -1536,7 +1536,7 @@
               <td class="nullable">是</td>
               <td><code>NULL</code></td>
               <td>下一步建议生成使用的模型配置。</td>
-              <td class="decision">外键关联 <code>settings_llm.id</code>；为空时使用 <code>side_default</code>。</td>
+              <td class="decision">外键关联 <code>settings_models.id</code>；为空时使用 <code>side_default</code>。</td>
             </tr>
           </tbody>
         </table>
