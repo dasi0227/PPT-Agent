@@ -1,5 +1,5 @@
 import { ContentRequirementsIcon } from '../../components/ui/ContentRequirementsIcon';
-import { GlobalConstraintsIcon } from '../../components/ui/GlobalConstraintsIcon';
+import { GlobalConstraintIcon } from '../../components/ui/GlobalConstraintIcon';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { List } from 'lucide-react';
 import type { ProjectContentSnapshot } from '../../api/types';
@@ -7,7 +7,7 @@ import { Button, InlineNotice, Skeleton } from '../../components/ui/primitives';
 import { useDeckStore, type ProjectDocument } from '../../stores/deckStore';
 import { DocumentCanvas } from './DocumentCanvas';
 import { changedFields, ManagementEditor } from './ManagementEditor';
-import { MetaFields, ConstraintsFields } from './AuthoringFields';
+import { MetaFields, ConstraintFields } from './AuthoringFields';
 import { partLabel } from './semanticLabels';
 import { useProjectStore } from '../../stores/projectStore';
 import { resourceApprovalKey, useResourceApprovalStore } from '../../stores/resourceApprovalStore';
@@ -19,7 +19,7 @@ function MissingDocument({ snapshot, document, blocked, notice }: { snapshot: Pr
   const [createError, setCreateError] = useState('');
   const pending = useRef(false);
   const title = partLabel(document);
-  const icon = document === 'meta' ? ContentRequirementsIcon : document === 'outline' ? List : GlobalConstraintsIcon;
+  const icon = document === 'meta' ? ContentRequirementsIcon : document === 'outline' ? List : GlobalConstraintIcon;
   useEffect(() => {
     useDeckStore.getState().setSourceBlocked(true);
     return () => useDeckStore.getState().setSourceBlocked(false);
@@ -59,7 +59,7 @@ export function ProjectDocumentView({ document, snapshot, error, onRetry, blocke
   const activeProjectId = useProjectStore(state => state.activeProjectId);
   if (activeApproval?.resource === document && activeApproval.projectId === activeProjectId) return <ApprovalDraftEditor key={resourceApprovalKey(activeApproval.runId, activeApproval.interactionId)} active={activeApproval} />;
   const title = partLabel(document);
-  const icon = document === 'meta' ? ContentRequirementsIcon : document === 'outline' ? List : GlobalConstraintsIcon;
+  const icon = document === 'meta' ? ContentRequirementsIcon : document === 'outline' ? List : GlobalConstraintIcon;
   const notice = error ? <InlineNotice tone="danger" className="mb-6 flex flex-wrap items-center justify-between gap-3">
     <span>{snapshot ? '内容更新失败，当前显示上次加载的内容。' : '内容加载失败，请重试。'}</span>
     <Button variant="secondary" onClick={onRetry}>重试</Button>
@@ -81,9 +81,9 @@ export function ProjectDocumentView({ document, snapshot, error, onRetry, blocke
       {editor => <MetaFields editor={editor} />}
     </ManagementEditor>;
   }
-  if (!snapshot.constraints) return <MissingDocument snapshot={snapshot} document="constraints" blocked={unavailable} notice={notice} />;
-  return <ManagementEditor {...common} key={`${snapshot.project_id}:constraints`} resourceKey="constraints" value={snapshot.constraints} hash={snapshot.hashes.constraints}
-    mutation={(next, previous) => ({ op: 'constraints.patch', patch: changedFields(previous, next) })}>
-    {editor => <ConstraintsFields editor={editor} />}
+  if (!snapshot.constraint) return <MissingDocument snapshot={snapshot} document="constraint" blocked={unavailable} notice={notice} />;
+  return <ManagementEditor {...common} key={`${snapshot.project_id}:constraint`} resourceKey="constraint" value={snapshot.constraint} hash={snapshot.hashes.constraint}
+    mutation={(next, previous) => ({ op: 'constraint.patch', patch: changedFields(previous, next) })}>
+    {editor => <ConstraintFields editor={editor} />}
   </ManagementEditor>;
 }

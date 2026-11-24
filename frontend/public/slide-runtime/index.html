@@ -2,8 +2,6 @@
 <html lang="en">
 <head>
   <link rel="stylesheet" href="/interaction-tokens.css">
-  <link rel="stylesheet" href="/api/runtime/fonts.css">
-  <script src="/api/runtime/font-loader.js"></script>
   <meta charset="UTF-8">
   <title>Slide Runtime</title>
   <script src="/api/runtime/decorations.js"></script>
@@ -203,16 +201,15 @@
       head.querySelectorAll('link').forEach((link) => {
         const id = link.getAttribute('id');
         const href = link.getAttribute('href') || '';
-        if (id === 'fonts-link' || id === 'base-link' || id === 'theme-link' || href.endsWith('/common/base.css') || href.endsWith('/common/tokens.css')) {
+        if (id === 'base-link' || id === 'theme-link' || href.endsWith('/common/base.css') || href.endsWith('/common/tokens.css')) {
           link.remove();
         }
       });
       const links = [
-        ['fonts-link','/api/runtime/fonts.css'], ['base-link','/api/runtime/base.css'],
+        ['base-link','/api/runtime/base.css'],
         ['theme-link',appearance?.theme_css_url || '']
       ].map(([id,href])=>{const link=document.createElement('link');link.id=id;link.rel='stylesheet';if(href)link.href=href;return link;});
       head.prepend(...links);
-      const fontLoader=document.createElement('script');fontLoader.src='/api/runtime/font-loader.js';head.appendChild(fontLoader);
       const themeBridge=document.createElement('script');themeBridge.src='/api/runtime/theme-bridge.js';themeBridge.dataset.slideId=slideID;
       document.body.appendChild(themeBridge);
 		document.querySelectorAll('img[src], source[src]').forEach((node) => {
@@ -380,7 +377,7 @@
     }
 
     let appearanceSequence=0;
-    async function requestAppearance(slide, force=false, execution=state.activeExecution) {
+    function requestAppearance(slide, force=false, execution=state.activeExecution) {
       if(!execution || execution.slideID!==slide.id || !execution.ready) return;
       const hash=slide.frame.appearance?.hash || 'unavailable';
       if(!force && execution.requestedHash===hash && !execution.error)return;
@@ -390,8 +387,6 @@
       if (execution === state.activeExecution) window.parent.postMessage({type:'themeApplying',slide_id:slide.id,resource_hash:slide.resource_hash || '',appearance_hash:slide.frame.appearance?.hash || ''},'*');
       try {
         if(!slide.frame.appearance)throw new Error('当前主题不可用，请从主题仓库选择现有主题');
-        await window.PPTFonts.prepare();
-        if(state.executions.get(slide.id)!==execution || request!==execution.requestID)return;
         execution.container.querySelector('iframe').contentWindow.postMessage({bridge:'ppt-theme-v1',type:'applyTheme',slide_id:slide.id,request_id:request,appearance:slide.frame.appearance,theme_id:slide.frame.theme_id},'*');
       }catch(error){
         if(state.executions.get(slide.id)===execution && request===execution.requestID) {

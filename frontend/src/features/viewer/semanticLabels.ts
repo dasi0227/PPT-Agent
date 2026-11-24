@@ -22,7 +22,7 @@ const SLIDE_PURPOSE_LABELS: Record<SlidePurpose, string> = {
 const PART_LABELS: Record<string, string> = {
   meta: '基本信息',
   outline: '目录结构',
-  constraints: '全局约束',
+  constraint: '全局约束',
   spec: '设计稿',
   html: '幻灯片',
 };

@@ -56,7 +56,7 @@ export interface ConstraintRules {
   requirements: string[];
   prohibitions: string[];
 }
-export interface Constraints {
+export interface Constraint {
   content: ConstraintRules;
   visual: ConstraintRules;
 }
@@ -373,7 +373,7 @@ export interface ProjectContentSnapshot {
   hashes: Record<string, string>;
   meta: Meta | null;
   outline: Outline;
-  constraints: Constraints | null;
+  constraint: Constraint | null;
   slides_by_id: Record<string, {
     spec_state: 'pending' | 'ready' | 'invalid'; spec: SlideSpec | null; html_state: HTMLState;
     html_hash: string;
@@ -401,9 +401,9 @@ export type PPTMutation = { expected_scene_revision?: string } & (
   | { op: 'outline.move'; expected_hash?: string; node_id: string; position: MutationPosition }
   | { op: 'outline.update'; expected_hash?: string; node_id: string; changes: OutlineNodeChanges }
   | { op: 'outline.remove'; expected_hash?: string; node_id: string; child_policy?: 'promote_to_section' }
-  | { op: 'constraints.create'; expected_hash?: string }
-  | { op: 'constraints.write'; expected_hash?: string; constraints: Constraints }
-  | { op: 'constraints.patch'; expected_hash?: string; patch: RestrictedPatch[] }
+  | { op: 'constraint.create'; expected_hash?: string }
+  | { op: 'constraint.write'; expected_hash?: string; constraint: Constraint }
+  | { op: 'constraint.patch'; expected_hash?: string; patch: RestrictedPatch[] }
   | { op: 'slide.spec.write'; expected_hash?: string; slide_id: string; spec: SlideSpec }
   | { op: 'slide.spec.patch'; expected_hash?: string; slide_id: string; patch: RestrictedPatch[] }
 );
@@ -438,8 +438,8 @@ export interface ScopeExpansionRequest {
   feedback?: string;
 }
 
-export type ApprovalResource = 'meta' | 'constraints' | 'outline';
-export interface ResourceEditApproval<T = Meta | Constraints | Outline> {
+export type ApprovalResource = 'meta' | 'constraint' | 'outline';
+export interface ResourceEditApproval<T = Meta | Constraint | Outline> {
   run_id: string;
   call_id: string;
   interaction_id: string;
@@ -564,7 +564,7 @@ export interface ArtifactDiff {
 export interface PublicTarget {
   type: 'deck' | 'slide' | 'file';
   slide_id?: string;
-  part: 'meta' | 'outline' | 'constraints' | 'spec' | 'html' | 'content';
+  part: 'meta' | 'outline' | 'constraint' | 'spec' | 'html' | 'content';
   display_name?: string;
   insertions?: number;
   deletions?: number;
@@ -638,9 +638,9 @@ export interface QuestionAnswer {
 export const RUN_ACTIVITIES = [
   'run.preparing', 'run.recovering', 'run.analyzing', 'run.retrying', 'run.canceling', 'model.fallback',
   'plan.preparing',
-  'presentation.meta.reading', 'presentation.structure.reading', 'presentation.constraints.reading', 'slide.content.reading',
+  'presentation.meta.reading', 'presentation.structure.reading', 'presentation.constraint.reading', 'slide.content.reading',
   'reference.inspecting',
-  'presentation.meta.updating', 'presentation.structure.updating', 'presentation.constraints.updating',
+  'presentation.meta.updating', 'presentation.structure.updating', 'presentation.constraint.updating',
   'slide.updating', 'slide.layout.checking',
   'resource.preparing', 'command.executing', 'presentation.reviewing',
 ] as const;

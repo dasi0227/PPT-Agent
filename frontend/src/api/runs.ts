@@ -14,7 +14,7 @@ import {
   ScopeExpansionRequest,
   ResourceEditApproval,
   Meta,
-  Constraints,
+  Constraint,
   Outline,
   SteerRunRequest,
   SteerRunResponse,
@@ -46,7 +46,7 @@ export const runsApi = {
     }),
   getResourceEditApproval: (runId: string, interactionId: string, sceneRevision: string) =>
     fetchClient<ResourceEditApproval>(`/runs/${runId}/resource-edit-approvals/${interactionId}?scene_revision=${encodeURIComponent(sceneRevision)}`, { reportError: false }),
-  updateResourceEditDraft: (runId: string, interactionId: string, revision: string, draft: Meta | Constraints | Outline, sceneRevision: string) =>
+  updateResourceEditDraft: (runId: string, interactionId: string, revision: string, draft: Meta | Constraint | Outline, sceneRevision: string) =>
     fetchClient<ResourceEditApproval>(`/runs/${runId}/resource-edit-approvals/${interactionId}/draft`, {
       method: 'PUT', body: JSON.stringify({ revision, draft, scene_revision: sceneRevision, request_revision: revision }), reportError: false,
     }),

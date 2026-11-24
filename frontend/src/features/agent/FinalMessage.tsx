@@ -45,7 +45,7 @@ function uniqueTargets(targets: PublicTarget[]): PublicTarget[] {
 const targetGroupRank: Record<PublicTarget['part'], number> = {
   outline: 0,
   meta: 1,
-  constraints: 2,
+  constraint: 2,
   spec: 3,
   html: 4,
   content: 5,

@@ -52,7 +52,7 @@ const snapshot: ProjectContentSnapshot = {
       { id: 'sli_two', title: '结论' },
     ],
   }] },
-  constraints: { content: { requirements: [], prohibitions: [] }, visual: { requirements: [], prohibitions: [] } },
+  constraint: { content: { requirements: [], prohibitions: [] }, visual: { requirements: [], prohibitions: [] } },
   decorations: { slide_pagination: 'bottom-right', section_title: 'top-left', deck_title: 'none', logo: 'none' }, logo: null,
   slides_by_id: {},
 };

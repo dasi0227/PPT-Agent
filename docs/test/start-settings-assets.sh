@@ -21,7 +21,7 @@ sqlite3 -bail data.db <<'SQL'
 INSERT INTO settings_fileopen DEFAULT VALUES;
 INSERT INTO settings_shortcut DEFAULT VALUES;
 INSERT INTO settings_behavior DEFAULT VALUES;
-INSERT INTO settings_llm (id, name, protocol, provider, base_url, model, key)
+INSERT INTO settings_models (id, name, protocol, provider, base_url, model, key)
 VALUES ('fixture', 'Fixture', 'responses', 'gpt', 'http://127.0.0.1:1', 'fixture', 'integration-test-only');
 INSERT INTO settings_route (main_default, side_default) VALUES ('fixture', 'fixture');
 SQL

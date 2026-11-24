@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ChartColumn, ChevronDown, Code2, Gauge, Image, List, Quote, Table2, Type, Workflow, type LucideIcon } from 'lucide-react';
-import type { Constraints, Meta, SlidePurpose, SlideSpec } from '../../api/types';
+import type { Constraint, Meta, SlidePurpose, SlideSpec } from '../../api/types';
 import { Select } from '../../components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '../../components/ui/dropdown-menu';
 import { elementTypeLabel, slidePurposeOptions } from './semanticLabels';
@@ -34,7 +34,7 @@ export function MetaFields({ editor }: { editor: ManagementController<Meta> }) {
   </>;
 }
 
-export function ConstraintsFields({ editor }: { editor: ManagementController<Constraints> }) {
+export function ConstraintFields({ editor }: { editor: ManagementController<Constraint> }) {
   const value = editor.value;
   return <>
     <TextListProperty editor={editor} id="content.requirements" label="内容需求" items={value.content.requirements} maxLength={300}

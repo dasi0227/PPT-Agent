@@ -101,7 +101,7 @@ function interactionItem(record: TimelineRecord, row: InteractionView, runId: st
         answer: answer ? { decision: answer.decision as 'allow_once' | 'deny', feedback: string(answer.feedback) } : undefined } };
     case 'resource': {
       const resource = request.resource as import('../../api/types').ApprovalResource;
-      const labels = { meta: '基本信息', constraints: '全局约束', outline: '目录结构' };
+      const labels = { meta: '基本信息', constraint: '全局约束', outline: '目录结构' };
       return { ...display, type: 'tool', callId: row.call_id, tool: `edit_${resource}`, label: `编辑${labels[resource]}`,
         status: row.state === 'canceled' ? 'canceled' : 'running', target: request.target as ToolActivityItem['target'],
         approval: { interactionId: row.id, resource, revision: row.request_revision, target: request.target as import('../../api/types').PublicTarget,

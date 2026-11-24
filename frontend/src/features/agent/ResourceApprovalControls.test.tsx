@@ -45,7 +45,7 @@ it('saves and restores the isolated draft, then approves the reviewed revision o
   fireEvent.click(screen.getByRole('button', { name: '继续' }));
   await screen.findByRole('button', { name: '编辑演示目标' });
   expect(screen.getByRole('button', { name: '继续' })).toBeDisabled();
-  act(() => { useDeckStore.getState().setActiveDocument('constraints'); });
+  act(() => { useDeckStore.getState().setActiveDocument('constraint'); });
   expect(screen.getByRole('button', { name: '继续' })).toBeEnabled();
   fireEvent.click(screen.getByRole('button', { name: '继续' }));
   await screen.findByRole('button', { name: '编辑演示目标' });

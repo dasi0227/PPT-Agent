@@ -1,10 +1,10 @@
 import { ClipboardList, LayoutTemplate, List, ListChecks, MessageCircleQuestion, MessagesSquare, NotebookPen, Paintbrush, Type, type LucideIcon } from 'lucide-react';
 import type { ProjectContentSnapshot, RunMode } from '../../api/types';
 import { ContentRequirementsIcon } from '../../components/ui/ContentRequirementsIcon';
-import { GlobalConstraintsIcon } from '../../components/ui/GlobalConstraintsIcon';
+import { GlobalConstraintIcon } from '../../components/ui/GlobalConstraintIcon';
 import { orderedSlides } from '../deck/selectors';
 
-export type StarterActionId = 'content' | 'outline' | 'constraints' | 'clarify' | 'brainstorm' | 'plan' | 'specification' | 'describe' | 'copy' | 'layout' | 'color';
+export type StarterActionId = 'content' | 'outline' | 'constraint' | 'clarify' | 'brainstorm' | 'plan' | 'specification' | 'describe' | 'copy' | 'layout' | 'color';
 export interface StarterTemplate {
   id: StarterActionId;
   label: string;
@@ -17,7 +17,7 @@ export interface StarterTemplate {
 const templates: Record<StarterActionId, StarterTemplate> = {
   content: { id: 'content', label: '阐述内容', icon: ContentRequirementsIcon, mode: 'create', scope: 'all', text: "请根据以下信息整理这份 PPT 的基本信息：\n- 主题：【主题】\n- 受众：【目标受众】\n- 目标：【演示目标】\n- 语言：【语言】\n- 页数：【预计页数】\n\n只需整理基本信息，暂时不需要生成设计稿或幻灯片。" },
   outline: { id: 'outline', label: '生成目录', icon: List, mode: 'create', scope: 'all', text: "请根据以下信息整理这份 PPT 的目录结构：\n- 主题：【主题】\n- 章节数量：【章节数】\n- 总页数：【总页数】\n\n只需整理目录结构，暂时不需要生成设计稿或幻灯片。" },
-  constraints: { id: 'constraints', label: '规定约束', icon: GlobalConstraintsIcon, mode: 'create', scope: 'all', text: "请根据以下信息设置整份 PPT 的全局约束：\n- 内容要求：【内容要求】\n- 内容禁止项：【内容禁止项】\n- 视觉要求：【视觉要求】\n- 视觉禁止项：【视觉禁止项】\n\n只需设置全局约束，暂时不需要生成设计稿或幻灯片。" },
+  constraint: { id: 'constraint', label: '规定约束', icon: GlobalConstraintIcon, mode: 'create', scope: 'all', text: "请根据以下信息设置整份 PPT 的全局约束：\n- 内容要求：【内容要求】\n- 内容禁止项：【内容禁止项】\n- 视觉要求：【视觉要求】\n- 视觉禁止项：【视觉禁止项】\n\n只需设置全局约束，暂时不需要生成设计稿或幻灯片。" },
   clarify: { id: 'clarify', label: '理清需求', icon: MessageCircleQuestion, mode: 'ask', scope: 'all', text: "我准备做一份关于【主题或想法】的 PPT，请先通过提问帮我理清需求。" },
   brainstorm: { id: 'brainstorm', label: '聊聊思路', icon: MessagesSquare, mode: 'chat', scope: 'all', text: "我想做一份关于【主题】的 PPT，一起聊聊【想讨论的问题】。" },
   plan: { id: 'plan', label: '规划制作', icon: ListChecks, mode: 'plan', scope: 'all', text: "我想完成【制作目标】，请结合当前项目制定一份制作计划，先交给我确认。" },
@@ -31,7 +31,7 @@ const templates: Record<StarterActionId, StarterTemplate> = {
 export function getStarterTemplates(snapshot: ProjectContentSnapshot): StarterTemplate[] {
   const slides = orderedSlides(snapshot);
   const ids: StarterActionId[] = slides.length === 0
-    ? ['content', 'constraints', 'outline', 'clarify', 'brainstorm', 'plan']
+    ? ['content', 'constraint', 'outline', 'clarify', 'brainstorm', 'plan']
     : slides.every(slide => snapshot.slides_by_id[slide.id]?.spec_state === 'ready' && slide.html_state === 'available')
       ? ['copy', 'layout', 'color']
       : ['specification', 'describe'];

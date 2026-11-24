@@ -1,5 +1,5 @@
 import { ContentRequirementsIcon } from '../../components/ui/ContentRequirementsIcon';
-import { GlobalConstraintsIcon } from '../../components/ui/GlobalConstraintsIcon';
+import { GlobalConstraintIcon } from '../../components/ui/GlobalConstraintIcon';
 import {
   forwardRef,
   useMemo,
@@ -141,7 +141,7 @@ function DeckNavigatorChrome({
         </span>
       </div>
       <nav aria-label="项目文档" className="workspace-document-nav shrink-0 space-y-0.5 py-2">
-        {([{ kind: 'meta', icon: ContentRequirementsIcon }, { kind: 'constraints', icon: GlobalConstraintsIcon }, { kind: 'outline', icon: List }] as const).map(({ kind, icon: Icon }) => (
+        {([{ kind: 'meta', icon: ContentRequirementsIcon }, { kind: 'constraint', icon: GlobalConstraintIcon }, { kind: 'outline', icon: List }] as const).map(({ kind, icon: Icon }) => (
           <button
             key={kind}
             type="button"

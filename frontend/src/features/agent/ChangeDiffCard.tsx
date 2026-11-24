@@ -19,7 +19,7 @@ const fieldLabels: Record<string, string> = {
 };
 const fieldOrders: Partial<Record<PublicTarget['part'], readonly string[]>> = {
   meta: ['title', 'language', 'count', 'audience', 'goal'],
-  constraints: ['content.requirements', 'content.prohibitions', 'visual.requirements', 'visual.prohibitions'],
+  constraint: ['content.requirements', 'content.prohibitions', 'visual.requirements', 'visual.prohibitions'],
 };
 function orderedFields(fields: FieldDiff[], part: PublicTarget['part']): FieldDiff[] {
   const order = fieldOrders[part];
@@ -106,7 +106,7 @@ export function ChangeDiffCard({ target, previewEnabled = true, footer, variant 
 }) {
   const diff = target.diff;
   const inline = variant === 'inline';
-  const fieldSeparators = target.part !== 'meta' && target.part !== 'constraints';
+  const fieldSeparators = target.part !== 'meta' && target.part !== 'constraint';
   return <section className={cn('min-w-0 overflow-hidden bg-timeline-card', inline ? 'border-t border-border' : 'rounded-[10px] border border-border-strong')} aria-label="变更差异">
     {!inline && <TimelineCardHeader action={previewEnabled && <ChangePreviewButton target={target} />}>
       <div className="flex min-w-0 flex-1 items-center gap-2.5 pt-1.5">

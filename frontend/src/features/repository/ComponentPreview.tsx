@@ -9,10 +9,9 @@ const HEIGHT = 540;
 // no theme tokens, public slide roles, decorations or theme API dependencies.
 function componentDocument(html: string) {
   return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
-<link rel="stylesheet" href="/api/runtime/fonts.css">
 <style>
 html,body{margin:0;width:100%;height:100%;overflow:hidden}
-body{display:grid;place-items:center;box-sizing:border-box;padding:40px;background:#fff;color:#263241;font:18px/1.5 "Noto Sans SC",sans-serif}
+body{display:grid;place-items:center;box-sizing:border-box;padding:40px;background:#fff;color:#263241;font:18px/1.5 sans-serif}
 .component-preview-stage{width:100%;max-width:880px;display:grid;place-items:center}
 .component-preview-stage>svg{width:100%;height:auto}
 </style></head><body><div class="component-preview-stage">${html}</div></body></html>`;

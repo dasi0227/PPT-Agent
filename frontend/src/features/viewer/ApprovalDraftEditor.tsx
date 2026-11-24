@@ -1,21 +1,21 @@
 import { ContentRequirementsIcon } from '../../components/ui/ContentRequirementsIcon';
-import { GlobalConstraintsIcon } from '../../components/ui/GlobalConstraintsIcon';
+import { GlobalConstraintIcon } from '../../components/ui/GlobalConstraintIcon';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Constraints, Meta, Outline, ResourceEditApproval } from '../../api/types';
+import type { Constraint, Meta, Outline, ResourceEditApproval } from '../../api/types';
 import { runsApi } from '../../api/runs';
 import { Button } from '../../components/ui/primitives';
 import { resourceApprovalKey, useResourceApprovalStore, type ActiveResourceApproval } from '../../stores/resourceApprovalStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useDeckStore } from '../../stores/deckStore';
 import { DocumentCanvas } from './DocumentCanvas';
-import { MetaFields, ConstraintsFields } from './AuthoringFields';
+import { MetaFields, ConstraintFields } from './AuthoringFields';
 import type { ManagementController, TextEdit } from './ManagementEditor';
 import { partLabel } from './semanticLabels';
 import { OutlineEditor } from './OutlineEditor';
 import { applyOutlineCommand } from './outlineEditing';
 import { JSONPreview } from './JSONPreview';
 
-type EditableResource = Meta | Constraints | Outline;
+type EditableResource = Meta | Constraint | Outline;
 type InlineDraft<T> = TextEdit<T> & { base: T };
 
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : '操作失败'; }
@@ -35,7 +35,7 @@ function ApprovalActions({ busy, canRestore, onRestore, onSave }: {
   </div>;
 }
 
-function FieldApprovalEditor<T extends Meta | Constraints>({ record, persist, saved }: {
+function FieldApprovalEditor<T extends Meta | Constraint>({ record, persist, saved }: {
   record: ResourceEditApproval; persist: (draft: EditableResource) => Promise<ResourceEditApproval>;
   saved: (revision: string) => void;
 }) {
@@ -101,11 +101,11 @@ function FieldApprovalEditor<T extends Meta | Constraints>({ record, persist, sa
   };
   const isMeta = record.resource === 'meta';
   if (showJSON && !inline && !busy) return <JSONPreview title={partLabel(record.resource)} value={value} />;
-  return <DocumentCanvas title={partLabel(record.resource)} icon={isMeta ? ContentRequirementsIcon : GlobalConstraintsIcon}
+  return <DocumentCanvas title={partLabel(record.resource)} icon={isMeta ? ContentRequirementsIcon : GlobalConstraintIcon}
     footer={<ApprovalActions busy={busy} canRestore={savedChanges || Boolean(inline)} onRestore={() => void restore()} onSave={() => void submit()} />}>
     {error && <p className="mb-3 text-xs text-danger" role="alert">{error}</p>}
     {isMeta ? <MetaFields editor={controller as unknown as ManagementController<Meta>} />
-      : <ConstraintsFields editor={controller as unknown as ManagementController<Constraints>} />}
+      : <ConstraintFields editor={controller as unknown as ManagementController<Constraint>} />}
   </DocumentCanvas>;
 }
 
