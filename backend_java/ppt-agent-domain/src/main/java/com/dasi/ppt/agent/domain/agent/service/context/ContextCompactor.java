@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.domain.agent.service.context;
 
-import com.dasi.ppt.agent.domain.agent.gateway.ILlmGateway;
+import com.dasi.ppt.agent.domain.gateway.ILlmGateway;
 import com.dasi.ppt.agent.domain.agent.repository.IRunRepository;
 import com.dasi.ppt.agent.domain.agent.repository.ISessionRepository;
 import com.dasi.ppt.agent.domain.agent.service.context.assembler.CompactPromptAssembler;

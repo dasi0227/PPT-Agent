@@ -27,7 +27,7 @@ export function HeaderActions({
   const openProjectIds = useProjectStore(value => value.openProjectIds);
   const path = pathname.toLowerCase().replace(/\/+$/, '') || homeRoute;
   const inSettings = path === '/settings' || path.startsWith('/settings/');
-  const inRepository = path === '/warehouse' || path.startsWith('/warehouse/');
+  const inRepository = path === '/assets' || path.startsWith('/assets/');
   const inWorkspace = path.startsWith('/projects/');
   const returnProjectId = activeProjectId ?? openProjectIds[openProjectIds.length - 1];
   const previousWorkspace = typeof state?.returnTo === 'string' && state.returnTo.startsWith('/projects/')

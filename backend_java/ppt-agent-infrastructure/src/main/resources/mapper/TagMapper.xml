@@ -6,4 +6,20 @@
         <result column="type" property="type"/>
         <result column="name" property="name"/>
     </resultMap>
+
+    <select id="list" resultMap="tagPo">
+        SELECT id, type, name FROM tags WHERE type = #{type} ORDER BY name, id
+    </select>
+
+    <select id="listNames" resultType="string">
+        SELECT name FROM tags WHERE type = #{type}
+    </select>
+
+    <insert id="insert">
+        INSERT INTO tags (id, type, name) VALUES (#{id}, #{type}, #{name})
+    </insert>
+
+    <delete id="delete">
+        DELETE FROM tags WHERE id = #{tagId}
+    </delete>
 </mapper>

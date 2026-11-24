@@ -1,9 +1,17 @@
 package com.dasi.ppt.agent.interfaces.controller.project.dto;
 
-public record SaveSlideHtmlDto(
-        String projectId,
-        String slideId,
-        String baseHash,
-        String html
-) {
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+@Builder
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public final class SaveSlideHtmlDto {
+    private String projectId;
+    private String slideId;
+    private String baseHash;
+    private String html;
 }

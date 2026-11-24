@@ -1,24 +1,24 @@
 import { useEffect, useMemo } from 'react';
 import { create } from 'zustand';
-import { fetchClient } from '../api/client';
-import type { ResourceScope, TagDefinition } from '../api/types';
+import { assetsApi, type AssetTag } from '../api/assets';
+import type { ResourceScope } from '../api/types';
 import { showGlobalError } from './toastStore';
 
 interface TagState {
-  tags: Partial<Record<ResourceScope, TagDefinition[]>>;
+  tags: Partial<Record<ResourceScope, AssetTag[]>>;
   load: (scope: ResourceScope) => Promise<void>;
 }
 
 const inflight = new Map<ResourceScope, Promise<void>>();
-const emptyTags: TagDefinition[] = [];
+const emptyTags: AssetTag[] = [];
 
 export const useTagStore = create<TagState>((set) => ({
   tags: {},
   load: (scope) => {
     const pending = inflight.get(scope);
     if (pending) return pending;
-    const request = fetchClient<{ tags: TagDefinition[] }>(`/tags?scope=${scope}`, { reportError: false })
-      .then(({ tags }) => {
+    const request = assetsApi.tags(scope)
+      .then(({ items: tags }) => {
         set(state => ({ tags: { ...state.tags, [scope]: tags } }));
       })
       .finally(() => { inflight.delete(scope); });
@@ -40,8 +40,8 @@ export function useResourceTags(scope: ResourceScope, active = true) {
     return () => window.removeEventListener('focus', refresh);
   }, [active, load, scope]);
   return useMemo(() => ({
-    labels: Object.fromEntries(tags.map(tag => [tag.key, tag.name])) as Record<string, string>,
-    order: tags.map(tag => tag.key),
+    labels: Object.fromEntries(tags.map(tag => [tag.id, tag.name])) as Record<string, string>,
+    order: tags.map(tag => tag.id),
     refresh: () => load(scope),
   }), [load, scope, tags]);
 }

@@ -6,16 +6,23 @@ import com.dasi.ppt.agent.domain.agent.model.enumeration.InstructionDecision;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.RunMode;
 import com.dasi.ppt.agent.domain.agent.model.result.PreviewAssessment;
 import com.dasi.ppt.agent.domain.project.model.DeckChange;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.util.List;
 
-public record BeforeRunCompletedEvent(
-        RunMode mode,
-        InstructionDecision intent,
-        String candidateReply,
-        Plan plan,
-        RunScope scope,
-        List<DeckChange> changes,
-        List<PreviewAssessment> previews
-) {
+@Builder
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public final class BeforeRunCompletedEvent {
+    private RunMode mode;
+    private InstructionDecision intent;
+    private String candidateReply;
+    private Plan plan;
+    private RunScope scope;
+    private List<DeckChange> changes;
+    private List<PreviewAssessment> previews;
 }

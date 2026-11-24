@@ -1,7 +1,7 @@
 import { confirmDiscardFuture } from '../stores/historyConfirmationStore';
 import { showGlobalError } from '../stores/toastStore';
 
-const API_BASE = '/api/v1';
+const API_BASE = '/api';
 const DEFAULT_TIMEOUT_MS = 15_000;
 let historyEpoch = 0;
 export function invalidateHistoryRequests() { historyEpoch += 1; }
@@ -140,16 +140,15 @@ export async function fetchClient<T>(path: string, options: FetchClientOptions =
     }
 
     if (response.status === 204) return undefined as T;
-    if (responseType === 'text') {
-      const text = await response.text();
-      if (epoch !== historyEpoch) throw new RequestCanceledError();
-      return text as T;
-    }
-
     const text = await response.text();
     if (epoch !== historyEpoch) throw new RequestCanceledError();
-    if (text.trim() === '') return undefined as T;
-    return JSON.parse(text) as T;
+    if (responseType === 'text' && !response.headers.get('Content-Type')?.includes('application/json')) return text as T;
+    if (!text.trim()) return undefined as T;
+    const body = JSON.parse(text);
+    const error = errorFields(body);
+    if (error.code) throw new APIError(response.status, error.code, error.message ?? error.code, error.details);
+    if (responseType === 'text') return text as T;
+    return body as T;
   } catch (error) {
     let requestError: Error;
     if (error instanceof APIError || error instanceof RequestCanceledError) requestError = error;
@@ -166,4 +165,8 @@ export async function fetchClient<T>(path: string, options: FetchClientOptions =
     window.clearTimeout(timeout);
     combined.cleanup();
   }
+}
+
+export function postJson<T>(path: string, body: unknown) {
+  return fetchClient<T>(path, { method: 'POST', body: JSON.stringify(body), reportError: false });
 }

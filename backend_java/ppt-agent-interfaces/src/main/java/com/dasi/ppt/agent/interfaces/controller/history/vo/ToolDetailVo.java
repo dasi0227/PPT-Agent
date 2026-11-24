@@ -10,86 +10,126 @@ import com.dasi.ppt.agent.domain.project.model.enumeration.ChangePart;
 import com.dasi.ppt.agent.domain.project.model.enumeration.ChangeStatus;
 import com.dasi.ppt.agent.interfaces.controller.interaction.vo.InteractionFormVo;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 import tools.jackson.databind.JsonNode;
 
 import java.util.List;
 
-public record ToolDetailVo(JsonNode arguments, ToolResultVo result) {
+@Builder
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public final class ToolDetailVo {
+    private JsonNode arguments;
+    private ToolResultVo result;
 
+    @Builder
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record ToolResultVo(
-            ToolResultStatus status,
-            JsonNode content,
-            String text,
-            List<ToolChangedTargetVo> targets,
-            ToolImageVo image,
-            List<LoadedResourceVo> resources,
-            ToolCommandVo command,
-            ToolInteractionVo interaction,
-            PreviewAssessmentVo preview
-    ) {
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class ToolResultVo {
+        private ToolResultStatus status;
+        private JsonNode content;
+        private String text;
+        private List<ToolChangedTargetVo> targets;
+        private ToolImageVo image;
+        private List<LoadedResourceVo> resources;
+        private ToolCommandVo command;
+        private ToolInteractionVo interaction;
+        private PreviewAssessmentVo preview;
     }
 
+    @Builder
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record ToolChangedTargetVo(
-            ChangePart part,
-            String path,
-            String slideId,
-            ChangeStatus status,
-            RunChangesVo.ChangeDiffVo diff
-    ) {
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class ToolChangedTargetVo {
+        private ChangePart part;
+        private String path;
+        private String slideId;
+        private ChangeStatus status;
+        private RunChangesVo.ChangeDiffVo diff;
     }
 
+    @Builder
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record ToolImageVo(
-            String source,
-            String url,
-            String slideId
-    ) {
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class ToolImageVo {
+        private String source;
+        private String url;
+        private String slideId;
     }
 
-    public record LoadedResourceVo(
-            AssetType type,
-            String id,
-            String name
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class LoadedResourceVo {
+        private AssetType type;
+        private String id;
+        private String name;
     }
 
+    @Builder
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record ToolCommandVo(
-            String text,
-            Integer exitCode,
-            Long durationMs,
-            String stdoutPreview,
-            String stderrPreview
-    ) {
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class ToolCommandVo {
+        private String text;
+        private Integer exitCode;
+        private Long durationMs;
+        private String stdoutPreview;
+        private String stderrPreview;
     }
 
-    public record ToolInteractionVo(
-            InteractionType type,
-            InteractionFormVo.InteractionRequestVo request,
-            InteractionFormVo.InteractionAnswerVo answer,
-            List<String> appliedScope
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class ToolInteractionVo {
+        private InteractionType type;
+        private InteractionFormVo.InteractionRequestVo request;
+        private InteractionFormVo.InteractionAnswerVo answer;
+        private List<String> appliedScope;
     }
 
+    @Builder
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record PreviewAssessmentVo(
-            String slideId,
-            PreviewStatus status,
-            PreviewScoresVo scores,
-            PreviewJudgesVo judges,
-            String reason
-    ) {
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class PreviewAssessmentVo {
+        private String slideId;
+        private PreviewStatus status;
+        private PreviewScoresVo scores;
+        private PreviewJudgesVo judges;
+        private String reason;
     }
 
-    public record PreviewScoresVo(
-            double contentCoverage,
-            double expressionClarity,
-            double requirementAdherence
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class PreviewScoresVo {
+        private double contentCoverage;
+        private double expressionClarity;
+        private double requirementAdherence;
     }
 
-    public record PreviewJudgesVo(PreviewMismatch mismatch, PreviewIssue issue) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class PreviewJudgesVo {
+        private PreviewMismatch mismatch;
+        private PreviewIssue issue;
     }
 }

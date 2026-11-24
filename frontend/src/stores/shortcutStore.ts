@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { fetchClient } from '../api/client';
-import { defaultBindings, type ShortcutSettings } from '../lib/shortcuts';
+import { fetchClient, postJson } from '../api/client';
+import { defaultBindings, fromShortcutFields, toShortcutFields, type ShortcutSettings } from '../lib/shortcuts';
 import { showGlobalError, useToastStore } from './toastStore';
 
 const endpoint = '/settings/shortcuts';
@@ -37,7 +37,9 @@ export const useShortcutStore = create<ShortcutState>((set, get) => {
   const persist = async (edit: ShortcutSettings) => {
     clearShortcutResetUndo();
     ++requestVersion;
-    const value = await fetchClient<ShortcutSettings>(endpoint, { method: 'PUT', body: JSON.stringify(edit), reportError: false });
+    await postJson<void>(endpoint + '/save', toShortcutFields(edit.bindings));
+    ++requestVersion;
+    const value = { bindings: edit.bindings, revision: get().revision + 1 };
     set({ ...value, ready: true });
     // Other windows refetch the database; the browser signal carries no settings data.
     try { localStorage.setItem('ppt-shortcuts-updated', `${value.revision}:${Date.now()}`); } catch { /* Database save already succeeded; focus refresh still synchronizes other windows. */ }
@@ -48,9 +50,12 @@ export const useShortcutStore = create<ShortcutState>((set, get) => {
     load: () => {
       if (loading) return loading;
       const version = ++requestVersion;
-      loading = fetchClient<ShortcutSettings>(endpoint, { reportError: false, cache: 'no-store' })
-        .then(value => {
-          if (version !== requestVersion || (get().ready && value.revision < get().revision)) return;
+      loading = fetchClient<Record<string, string>>(endpoint, { reportError: false, cache: 'no-store' })
+        .then(fields => {
+          if (version !== requestVersion) return;
+          const bindings = fromShortcutFields(fields);
+          if (get().ready && JSON.stringify(toShortcutFields(get().bindings)) === JSON.stringify(toShortcutFields(bindings))) return;
+          const value = { bindings, revision: get().revision + 1 };
           if (resetNotice && value.revision !== resetNotice.revision) clearShortcutResetUndo();
           set({ ...value, ready: true });
         })

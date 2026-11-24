@@ -1,10 +1,17 @@
 package com.dasi.ppt.agent.interfaces.controller.project.dto;
 
 import com.dasi.ppt.agent.domain.project.model.Outline;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
-public record SaveOutlineDto(
-        String projectId,
-        String baseHash,
-        Outline outline
-) {
+@Builder
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public final class SaveOutlineDto {
+    private String projectId;
+    private String baseHash;
+    private Outline outline;
 }

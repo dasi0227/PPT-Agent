@@ -9,4 +9,18 @@
         <result column="require_resource_approval" property="requireResourceApproval"/>
         <result column="require_high_risk_approval" property="requireHighRiskApproval"/>
     </resultMap>
+
+    <select id="read" resultMap="behaviorSettingsPo">
+        SELECT * FROM settings_behavior WHERE id = 1
+    </select>
+
+    <update id="save">
+        UPDATE settings_behavior SET
+            auto_rename_enabled = COALESCE(#{autoRenameEnabled}, auto_rename_enabled),
+            auto_suggest_enabled = COALESCE(#{autoSuggestEnabled}, auto_suggest_enabled),
+            show_tool_failures = COALESCE(#{showToolFailures}, show_tool_failures),
+            require_resource_approval = COALESCE(#{requireResourceApproval}, require_resource_approval),
+            require_high_risk_approval = COALESCE(#{requireHighRiskApproval}, require_high_risk_approval)
+        WHERE id = #{id}
+    </update>
 </mapper>

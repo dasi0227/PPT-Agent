@@ -12,7 +12,7 @@
 .settings-card-front img { width: 60px; height: 60px; object-fit: contain; }
 .settings-card-front span { max-width: 100%; color: rgb(var(--ui-text-800)); font-size: 16px; line-height: 1.65; font-weight: 550; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .settings-card-back { display: flex; flex-direction: column; padding: 20px 18px 17px; transform: rotateY(180deg); }
-.settings-card-back fieldset { min-width: 0; display: grid; gap: 12px; }
+.settings-card-back fieldset { min-width: 0; display: grid; gap: 6px; }
 .settings-card-back label { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 9px; align-items: center; }
 .settings-card-back label > span:first-child { font-size: 12px; color: rgb(var(--ui-text-600)); }
 .settings-card-back input { --ui-autofill-background: var(--ui-panel); --ui-autofill-color: var(--ui-text-800); width: 100%; min-width: 0; height: 36px; border: 1px solid rgb(var(--ui-border)); border-radius: 7px; background: rgb(var(--ui-panel)); padding: 0 8px; font-size: 12px; color: rgb(var(--ui-text-800)); caret-color: rgb(var(--ui-accent)); }
@@ -21,6 +21,18 @@
 .settings-key { display: block; position: relative; min-width: 0; }
 .settings-key input { padding-right: 38px; }
 .settings-card-actions { margin-top: auto; }
+.settings-card-actions .settings-model-save {
+  background-color: rgb(var(--ui-text-800));
+  color: rgb(var(--ui-surface));
+}
+.settings-card-actions .settings-model-save:not(:disabled):is(:hover, :focus-visible) {
+  background-color: rgb(var(--ui-foreground));
+  color: rgb(var(--ui-surface));
+}
+.settings-card-actions button:focus-visible {
+  outline: 2px solid rgb(var(--ui-text-600));
+  outline-offset: 2px;
+}
 .settings-card-error { min-height: 27px; margin: 3px 0; color: rgb(var(--ui-danger-hover)); font-size: 11px; line-height: 13px; }
 .settings-routing { width: 100%; }
 .settings-routing h2 { font-size: 17px; font-weight: 600; margin: 30px 0 14px; }

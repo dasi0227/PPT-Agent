@@ -1,36 +1,28 @@
-import { fetchClient } from './client';
+import { fetchClient, postJson } from './client';
 
-export type FileOpenWith = 'system' | 'vscode' | 'textedit' | 'finder' | 'custom' | 'inherit';
-export interface FileOpenMethod { open_with: FileOpenWith; custom_app_path: string }
-export interface FileApplication { name: string; path: string; builtin?: 'finder' | 'textedit' | 'vscode' }
 export interface FileSettings {
-  default: FileOpenMethod;
-  json: FileOpenMethod;
-  html: FileOpenMethod;
-  revision: number;
-  custom_apps: FileApplication[];
+  default_open: string;
+  json_open: string;
+  html_open: string;
+  custom_apps: string[];
 }
-export interface FileSettingsView extends FileSettings { supported: boolean }
-export function fileMethodForPath(value: FileSettings, path: string): FileOpenMethod {
-  const extension = path.split('/').pop()?.match(/\.([^.]+)$/)?.[1]?.toLowerCase();
-  const method = extension === 'json' ? value.json : extension === 'html' || extension === 'htm' ? value.html : value.default;
-  return method.open_with === 'inherit' ? value.default : method;
+export function applicationName(path: string) {
+  return path.split(/[/\\]/).pop()?.replace(/\.(app|exe)$/i, '') || path;
 }
-export function fileActionLabel(value: FileSettingsView | null, url: string) {
+export function fileActionLabel(value: FileSettings | null, url: string) {
   if (!value) return '打开文件';
-  const method = fileMethodForPath(value, new URL(url, window.location.origin).searchParams.get('path') ?? '');
-  if (method.open_with === 'finder') return '在访达中显示';
-  const names: Partial<Record<FileOpenWith, string>> = { system: '系统默认应用', vscode: 'VS Code', textedit: '文本编辑' };
-  const name = method.open_with === 'custom' ? value.custom_apps.find(app => app.path === method.custom_app_path)?.name ?? '所选应用' : names[method.open_with];
-  return `使用${name}打开`;
+  const path = new URL(url, window.location.origin).searchParams.get('path') ?? '';
+  let method = /\.json$/i.test(path) ? value.json_open : /\.html?$/i.test(path) ? value.html_open : value.default_open;
+  if (method === 'inherit') method = value.default_open;
+  return `使用${method === 'system' ? '系统默认应用' : applicationName(method)}打开`;
 }
 export const filesApi = {
-  get: () => fetchClient<FileSettingsView>('/settings/files', { cache: 'no-store', reportError: false }),
-  save: (edit: FileSettings) => fetchClient<FileSettingsView>('/settings/files', { method: 'PUT', reportError: false, body: JSON.stringify(edit) }),
-  pickApplication: () => fetchClient<{ application: FileApplication | null }>(
-    '/settings/files/pick-application', { method: 'POST', reportError: false, timeoutMs: 125000 }),
+  get: () => fetchClient<FileSettings>('/settings/fileopen', { cache: 'no-store', reportError: false }),
+  save: (edit: FileSettings) => postJson<FileSettings>('/settings/fileopen/save', edit),
+  pickApplication: () => fetchClient<{ path: string | null }>('/settings/fileopen/pick', { method: 'POST', reportError: false, timeoutMs: 125000 }),
   open: (url: string) => {
-    if (!url.startsWith('/api/v1/files/open?')) return Promise.reject(new Error('文件链接已失效，请刷新页面后重试'));
-    return fetchClient<void>(url.slice('/api/v1'.length), { method: 'POST', reportError: false });
+    const link = new URL(url, location.origin);
+    if (link.origin !== location.origin || link.pathname !== '/api/files/open') return Promise.reject(new Error('文件链接已失效，请刷新页面后重试'));
+    return postJson<void>('/files/open', { project_id: link.searchParams.get('project_id'), path: link.searchParams.get('path') });
   },
 };

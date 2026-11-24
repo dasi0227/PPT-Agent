@@ -1,56 +1,40 @@
-import { fetchClient } from './client';
+import { fetchClient, postJson } from './client';
 
 export const SIDE_PURPOSES = ['rename', 'compact', 'commit', 'polish', 'handoff', 'suggest'] as const;
 export type SidePurpose = typeof SIDE_PURPOSES[number];
+export type Route = 'main_default' | 'main_fallback' | 'side_default' | 'side_fallback' | SidePurpose;
 export type ModelProtocol = 'responses' | 'anthropic';
+export const providers = ['deepseek', 'kimi', 'mimo', 'gpt', 'claude', 'gemini', 'qwen', 'minimax', 'glm', 'grok'] as const;
+export type Provider = typeof providers[number];
 export interface ModelConfig {
+  id: string;
   name: string;
-  /** Read-only brand inferred by the backend from model. */
-  readonly provider: string;
   protocol: ModelProtocol;
+  provider: Provider;
   base_url: string;
   model: string;
-  has_key: boolean;
 }
-export interface RoadConfig { default: string; fallback: string | null }
 export interface ModelSettings {
-  revision: string;
-  protocols: ModelProtocol[];
-  llm: ModelConfig[];
-  main_road: RoadConfig;
-  side_road: RoadConfig & Record<SidePurpose, string | null>;
+  models: ModelConfig[];
+  routes: Record<Route, string | null>;
 }
-export interface ModelEdit {
-  previous_name?: string;
-  name: string;
-  protocol: ModelProtocol;
-  base_url: string;
-  model: string;
-  key?: string;
-}
-export type SettingsEdit = Omit<ModelSettings, 'protocols' | 'llm'> & { llm: ModelEdit[] };
+type ModelInput = Omit<ModelConfig, 'id'> & { key: string };
 export const settingsApi = {
-  reload: () => fetchClient<ModelSettings>('/settings/models/reload', {
-    method: 'POST', reportError: false, cache: 'no-store',
-  }),
-  save: (settings: SettingsEdit) => fetchClient<ModelSettings>('/settings/models', {
-    method: 'PUT', body: JSON.stringify(settings), reportError: false,
-  }),
+  get: () => fetchClient<ModelSettings>('/settings/models', { reportError: false, cache: 'no-store' }),
+  create: (input: ModelInput) => postJson<ModelConfig>('/settings/models/create', input),
+  update: (input: Partial<ModelInput> & { id: string }) => postJson<ModelConfig>('/settings/models/update', input),
+  delete: (id: string) => postJson<void>('/settings/models/delete', { id }),
+  saveRoute: (route: Route, model_id: string | null) => postJson<void>('/settings/routes/save', { route, model_id }),
 };
 
 export interface AgentSettings {
-  revision: string;
   auto_rename_enabled: boolean;
   auto_suggest_enabled: boolean;
   show_tool_failures: boolean;
   require_resource_approval: boolean;
   require_high_risk_approval: boolean;
 }
-
 export const agentSettingsApi = {
-  get: () => fetchClient<AgentSettings>('/settings/agent', { reportError: false, cache: 'no-store' }),
-  reload: () => fetchClient<AgentSettings>('/settings/agent/reload', { method: 'POST', reportError: false, cache: 'no-store' }),
-  save: (settings: AgentSettings) => fetchClient<AgentSettings>('/settings/agent', {
-    method: 'PUT', body: JSON.stringify(settings), reportError: false,
-  }),
+  get: () => fetchClient<AgentSettings>('/settings/behavior', { reportError: false, cache: 'no-store' }),
+  save: (edit: Partial<AgentSettings>) => postJson<void>('/settings/behavior/save', edit),
 };

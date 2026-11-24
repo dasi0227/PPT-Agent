@@ -1,42 +1,73 @@
 package com.dasi.ppt.agent.interfaces.controller.session.vo;
 
 import com.dasi.ppt.agent.domain.agent.model.enumeration.PlanStepStatus;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.util.List;
 
-public record SessionStateVo(
-        String revision,
-        PlanVo plan,
-        ContextWindowVo context,
-        String activeRunId,
-        List<String> activeCommandIds,
-        List<String> suggestions
-) {
+@Builder
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public final class SessionStateVo {
+    private String revision;
+    private PlanVo plan;
+    private ContextWindowVo context;
+    private String activeRunId;
+    private List<String> activeCommandIds;
+    private List<String> suggestions;
 
-    public record PlanVo(String runId, List<PlanStepVo> steps) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class PlanVo {
+        private String runId;
+        private List<PlanStepVo> steps;
     }
 
-    public record PlanStepVo(String title, PlanStepStatus status) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class PlanStepVo {
+        private String title;
+        private PlanStepStatus status;
     }
 
-    public record ContextWindowVo(
-            long current,
-            long total,
-            long thresholdMin,
-            long thresholdMax,
-            ContextDetailsVo details
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class ContextWindowVo {
+        private long current;
+        private long total;
+        private long thresholdMin;
+        private long thresholdMax;
+        private ContextDetailsVo details;
     }
 
-    public record ContextDetailsVo(
-            List<TokenBreakdownItemVo> systemPrompt,
-            List<TokenBreakdownItemVo> runtime,
-            List<TokenBreakdownItemVo> chatHistory,
-            List<TokenBreakdownItemVo> readFile,
-            List<TokenBreakdownItemVo> other
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class ContextDetailsVo {
+        private List<TokenBreakdownItemVo> systemPrompt;
+        private List<TokenBreakdownItemVo> runtime;
+        private List<TokenBreakdownItemVo> chatHistory;
+        private List<TokenBreakdownItemVo> readFile;
+        private List<TokenBreakdownItemVo> other;
     }
 
-    public record TokenBreakdownItemVo(String name, long tokens) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class TokenBreakdownItemVo {
+        private String name;
+        private long tokens;
     }
 }

@@ -1,10 +1,16 @@
 package com.dasi.ppt.agent.infrastructure.persistence.database.po;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+@Builder
 @Getter
 @Setter
+@NoArgsConstructor
+@AllArgsConstructor
 public class ShortcutSettingsPo {
 
     private int id;
@@ -23,7 +29,5 @@ public class ShortcutSettingsPo {
     private String toggleSource;
     private String switchTheme;
     private String submitRequest;
-    private String suggestion1;
-    private String suggestion2;
-    private String suggestion3;
+    private String selectSuggestion;
 }

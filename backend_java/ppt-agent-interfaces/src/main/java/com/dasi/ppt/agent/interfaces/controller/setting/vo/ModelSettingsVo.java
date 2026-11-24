@@ -1,31 +1,29 @@
 package com.dasi.ppt.agent.interfaces.controller.setting.vo;
 
-import com.dasi.ppt.agent.domain.setting.model.enumeration.LlmProtocol;
+import com.dasi.ppt.agent.domain.setting.model.entity.ModelSettings;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.util.List;
 
-public record ModelSettingsVo(List<ModelConfigVo> models, ModelRoutesVo routes) {
+@Builder
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public final class ModelSettingsVo {
+    private List<ModelConfigVo> models;
+    private ModelRoutesVo routes;
 
-    public record ModelConfigVo(
-            String name,
-            LlmProtocol protocol,
-            String baseUrl,
-            String model,
-            String provider
-    ) {
-    }
-
-    public record ModelRoutesVo(
-            String mainDefault,
-            String mainFallback,
-            String sideDefault,
-            String sideFallback,
-            String rename,
-            String compact,
-            String commit,
-            String polish,
-            String handoff,
-            String suggest
-    ) {
+    public static ModelSettingsVo toVo(ModelSettings settings) {
+        List<ModelConfigVo> models = settings.getModels()
+                .stream()
+                .map(ModelConfigVo::toVo)
+                .toList();
+        return ModelSettingsVo.builder()
+                .models(models)
+                .routes(ModelRoutesVo.toVo(settings.getRoutes()))
+                .build();
     }
 }

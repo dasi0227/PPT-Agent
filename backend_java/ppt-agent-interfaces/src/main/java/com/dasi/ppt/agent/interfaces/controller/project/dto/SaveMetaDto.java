@@ -1,10 +1,17 @@
 package com.dasi.ppt.agent.interfaces.controller.project.dto;
 
 import com.dasi.ppt.agent.domain.project.model.Meta;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
-public record SaveMetaDto(
-        String projectId,
-        String baseHash,
-        Meta meta
-) {
+@Builder
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public final class SaveMetaDto {
+    private String projectId;
+    private String baseHash;
+    private Meta meta;
 }

@@ -14,7 +14,8 @@
     </resultMap>
 
     <select id="hasApplicationSchema" resultType="boolean">
-        SELECT COUNT(*) = 15
+        SELECT COUNT(*) = 15 AND EXISTS (SELECT 1 FROM pragma_table_info('assets') WHERE name = 'enabled')
+            AND EXISTS (SELECT 1 FROM pragma_table_info('settings_llm') WHERE name = 'id' AND pk = 1)
         FROM sqlite_schema
         WHERE type = 'table' AND name IN (
             'projects', 'sessions', 'runs', 'messages', 'commands', 'checkpoints', 'receipts',

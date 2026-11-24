@@ -1,16 +1,22 @@
 package com.dasi.ppt.agent.infrastructure.persistence.database.po;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+@Builder
 @Getter
 @Setter
+@NoArgsConstructor
+@AllArgsConstructor
 public class BehaviorSettingsPo {
 
     private int id;
-    private boolean autoRenameEnabled;
-    private boolean autoSuggestEnabled;
-    private boolean showToolFailures;
-    private boolean requireResourceApproval;
-    private boolean requireHighRiskApproval;
+    private Boolean autoRenameEnabled;
+    private Boolean autoSuggestEnabled;
+    private Boolean showToolFailures;
+    private Boolean requireResourceApproval;
+    private Boolean requireHighRiskApproval;
 }

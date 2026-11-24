@@ -1,9 +1,16 @@
 package com.dasi.ppt.agent.interfaces.controller.asset.vo;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
 import java.util.List;
 
-public record TagListVo(List<TagSummaryVo> items) {
-
-    public record TagSummaryVo(String id, String name) {
-    }
+@Builder
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public final class TagListVo {
+    private List<TagInfoVo> items;
 }

@@ -4,8 +4,7 @@ import { repositoriesApi } from '../../api/repositories';
 import type { Theme } from '../../api/types';
 import { IsolatedSlidePreview } from '../viewer/IsolatedSlidePreview';
 import type { RuntimeSlide } from '../viewer/previewProtocol';
-import { themeShowcaseModes, type ThemeShowcaseMode } from './themeShowcase';
-import { RepositoryPreviewCache } from './RepositoryPreviewCache';
+import { type ThemeShowcaseMode } from './themeShowcase';
 
 const examples = new Map<string, Promise<string>>();
 let exampleVersion = 0;
@@ -22,7 +21,7 @@ export function clearThemeExampleCache() {
 function loadExample(mode: ThemeShowcaseMode) {
   let pending = examples.get(mode);
   if (!pending) {
-    pending = repositoriesApi.themeExample(mode).then(value => value.html).catch(error => {
+    pending = repositoriesApi.themeExample(mode).catch(error => {
       if (examples.get(mode) === pending) examples.delete(mode);
       throw error;
     });
@@ -32,7 +31,7 @@ function loadExample(mode: ThemeShowcaseMode) {
 }
 
 // Same HTML, scaling and iframe execution path as the project canvas.
-export const ThemePreview = memo(function ThemePreview({ theme, mode = 'cover', miniature = false }: { theme: Theme; mode?: ThemeShowcaseMode; miniature?: boolean }) {
+export const ThemePreview = memo(function ThemePreview({ theme, mode = 'cover', miniature = false }: { theme: Pick<Theme, 'id' | 'name' | 'appearance' | 'content_state'>; mode?: ThemeShowcaseMode; miniature?: boolean }) {
   const version = useSyncExternalStore(subscribeExamples, () => exampleVersion);
   const host = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(!miniature);
@@ -68,15 +67,3 @@ export const ThemePreview = memo(function ThemePreview({ theme, mode = 'cover', 
     {error && !miniature && <div role="alert" className="absolute inset-0 flex items-center justify-center gap-3 text-sm text-danger"><span>{error}</span><button type="button" onClick={() => setRetry(value => value + 1)}>重试</button></div>}
   </div>;
 });
-
-function previewKey(theme: Theme, mode: ThemeShowcaseMode) {
-  return JSON.stringify([theme.id, theme.appearance?.hash ?? theme.style_hash, mode]);
-}
-
-export function ThemePreviewGallery({ themes, selected, mode }: { themes: Theme[]; selected: Theme; mode: ThemeShowcaseMode }) {
-  const entries = useMemo(() => themes.filter(theme => theme.content_state === 'ready').flatMap(theme => themeShowcaseModes.map(example => ({
-    key: previewKey(theme, example.value),
-    content: <ThemePreview theme={theme} mode={example.value} />,
-  }))), [themes]);
-  return <RepositoryPreviewCache entries={entries} activeKey={previewKey(selected, mode)} />;
-}

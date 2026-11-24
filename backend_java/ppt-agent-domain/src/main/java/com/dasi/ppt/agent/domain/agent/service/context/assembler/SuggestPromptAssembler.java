@@ -5,6 +5,10 @@ import com.dasi.ppt.agent.domain.agent.model.Plan;
 import com.dasi.ppt.agent.domain.agent.model.entity.Message;
 import com.dasi.ppt.agent.domain.agent.service.context.PromptAssembler;
 import com.dasi.ppt.agent.domain.project.model.Deck;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
@@ -22,11 +26,14 @@ public class SuggestPromptAssembler implements PromptAssembler<SuggestPromptAsse
         throw new UnsupportedOperationException();
     }
 
-    public record Input(
-            Deck projectContext,
-            Plan currentPlan,
-            List<Message> history,
-            String userInstruction
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class Input {
+        private Deck projectContext;
+        private Plan currentPlan;
+        private List<Message> history;
+        private String userInstruction;
     }
 }

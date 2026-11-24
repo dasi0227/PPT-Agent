@@ -1,24 +1,34 @@
 package com.dasi.ppt.agent.domain.shared.sse;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.dasi.ppt.agent.domain.shared.exception.InvalidEnumValueException;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 
+@Getter
+@AllArgsConstructor
 public enum ChangeArea {
-    @JsonProperty("history")
-    HISTORY,
-    @JsonProperty("run")
-    RUN,
-    @JsonProperty("commands")
-    COMMANDS,
-    @JsonProperty("plan")
-    PLAN,
-    @JsonProperty("suggestions")
-    SUGGESTIONS,
-    @JsonProperty("context")
-    CONTEXT,
-    @JsonProperty("checkpoints")
-    CHECKPOINTS,
-    @JsonProperty("content")
-    CONTENT,
-    @JsonProperty("sessions")
-    SESSIONS
+    HISTORY("history"),
+    RUN("run"),
+    COMMANDS("commands"),
+    PLAN("plan"),
+    SUGGESTIONS("suggestions"),
+    CONTEXT("context"),
+    CHECKPOINTS("checkpoints"),
+    CONTENT("content"),
+    SESSIONS("sessions");
+
+    @JsonValue
+    private final String value;
+
+    @JsonCreator
+    public static ChangeArea fromValue(String value) {
+        for (ChangeArea candidate : values()) {
+            if (candidate.value.equals(value)) {
+                return candidate;
+            }
+        }
+        throw new InvalidEnumValueException(ChangeArea.class, value);
+    }
 }

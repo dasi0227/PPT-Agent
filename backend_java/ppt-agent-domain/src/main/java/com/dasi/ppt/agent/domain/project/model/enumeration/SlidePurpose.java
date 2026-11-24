@@ -1,26 +1,35 @@
 package com.dasi.ppt.agent.domain.project.model.enumeration;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.dasi.ppt.agent.domain.shared.exception.InvalidEnumValueException;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 
+@Getter
+@AllArgsConstructor
 public enum SlidePurpose {
-    @JsonProperty("cover")
-    COVER,
-    @JsonProperty("introduction")
-    INTRODUCTION,
-    @JsonProperty("transition")
-    TRANSITION,
-    @JsonProperty("content_explanation")
-    CONTENT_EXPLANATION,
-    @JsonProperty("content_comparison")
-    CONTENT_COMPARISON,
-    @JsonProperty("content_example")
-    CONTENT_EXAMPLE,
-    @JsonProperty("content_guidance")
-    CONTENT_GUIDANCE,
-    @JsonProperty("content_other")
-    CONTENT_OTHER,
-    @JsonProperty("conclusion")
-    CONCLUSION,
-    @JsonProperty("other")
-    OTHER
+    COVER("cover"),
+    INTRODUCTION("introduction"),
+    TRANSITION("transition"),
+    CONTENT_EXPLANATION("content_explanation"),
+    CONTENT_COMPARISON("content_comparison"),
+    CONTENT_EXAMPLE("content_example"),
+    CONTENT_GUIDANCE("content_guidance"),
+    CONTENT_OTHER("content_other"),
+    CONCLUSION("conclusion"),
+    OTHER("other");
+
+    @JsonValue
+    private final String value;
+
+    @JsonCreator
+    public static SlidePurpose fromValue(String value) {
+        for (SlidePurpose candidate : values()) {
+            if (candidate.value.equals(value)) {
+                return candidate;
+            }
+        }
+        throw new InvalidEnumValueException(SlidePurpose.class, value);
+    }
 }

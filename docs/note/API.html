@@ -234,18 +234,32 @@
                 </ul>
               </td>
             </tr>
-            <tr id="projects-save">
-              <th scope="row">保存项目</th>
-              <td><code>POST /api/projects/save</code></td>
+            <tr id="projects-create">
+              <th scope="row">创建项目</th>
+              <td><code>POST /api/projects/create</code></td>
               <td>
                 <ul class="fields">
-                  <li><code>project_id</code>：可选，省略创建项目，传入则修改已有项目名称</li>
-                  <li><code>title</code>：项目名称，去首尾空白后为 1–60 个字符</li>
+                  <li><code>title</code>：项目名称，去除首尾空白后为 1–60 个字符</li>
                 </ul>
               </td>
               <td>
                 <ul class="fields">
-                  <li><code>id</code>：项目 ID，创建时由后端生成</li>
+                  <li><code>id</code>：新建项目的 ID</li>
+                </ul>
+              </td>
+            </tr>
+            <tr id="projects-update">
+              <th scope="row">更新项目</th>
+              <td><code>POST /api/projects/update</code></td>
+              <td>
+                <ul class="fields">
+                  <li><code>project_id</code>：需修改的项目 ID</li>
+                  <li><code>title</code>：项目名称，去除首尾空白后为 1–60 个字符</li>
+                </ul>
+              </td>
+              <td>
+                <ul class="fields">
+                  <li><code>id</code>：已更新项目的 ID</li>
                 </ul>
               </td>
             </tr>
@@ -397,7 +411,7 @@
           </tr></thead>
           <tbody>
             <tr>
-              <th scope="row">读取资产内容</th>
+              <th scope="row">读取资产列表</th>
               <td><code>GET /api/assets?type={type}&amp;query={query}</code></td>
               <td>
                 <ul class="fields">
@@ -412,15 +426,16 @@
                   <li><code>items[].type</code>：theme / component / skill / snippet</li>
                   <li><code>items[].name</code>：显示名</li>
                   <li><code>items[].description</code>：描述</li>
-                  <li><code>items[].disabled</code>：布尔值，是否停用</li>
+                  <li><code>items[].enabled</code>：布尔值，是否启用</li>
                   <li><code>items[].tag_ids</code>：同类标签 ID 数组</li>
                   <li><code>items[].updated_at</code>：最后修改时间，毫秒时间戳</li>
+                  <li><code>items[].hash</code>：null</li>
                 </ul>
               </td>
             </tr>
             <tr>
               <th scope="row">读取标签字典</th>
-              <td><code>GET /api/tags?type={type}</code></td>
+              <td><code>GET /api/assets/tags?type={type}</code></td>
               <td>
                 <ul class="fields">
                   <li><code>type</code>：theme / component / skill / snippet</li>
@@ -433,6 +448,32 @@
                   <li><code>items[].name</code>：显示名称</li>
                 </ul>
               </td>
+            </tr>
+            <tr>
+              <th scope="row">创建标签</th>
+              <td><code>POST /api/assets/tags/create</code></td>
+              <td>
+                <ul class="fields">
+                  <li><code>type</code>：必填，theme / component / skill / snippet</li>
+                  <li><code>name</code>：必填，去除首尾空白后非空，同一类型内不区分大小写地保持唯一</li>
+                </ul>
+              </td>
+              <td>
+                <ul class="fields">
+                  <li><code>id</code>：新标签 ID</li>
+                  <li><code>name</code>：去除首尾空白、保留大小写的显示名称</li>
+                </ul>
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">删除标签</th>
+              <td><code>POST /api/assets/tags/delete</code></td>
+              <td>
+                <ul class="fields">
+                  <li><code>tag_id</code>：必填，要从标签字典删除的标签 ID</li>
+                </ul>
+              </td>
+              <td>无</td>
             </tr>
             <tr>
               <th scope="row">读取资产正文</th>
@@ -449,27 +490,49 @@
                 </ul>
               </td>
             </tr>
-            <tr>
-              <th scope="row">保存资产</th>
-              <td><code>POST /api/assets/save</code></td>
+            <tr id="assets-create">
+              <th scope="row">创建资产</th>
+              <td><code>POST /api/assets/create</code></td>
               <td>
                 <ul class="fields">
-                  <li><code>asset_id</code>：可选，省略创建资产，传入则更新已有资产</li>
-                  <li><code>type</code>：创建时必填，theme / component / skill / snippet；更新时省略</li>
-                  <li><code>name</code>：创建时必填，更新时可选；名称去首尾空白后 1–80 字符</li>
-                  <li><code>description</code>：创建时必填，更新时可选；描述去首尾空白后 1–500 字符</li>
-                  <li><code>content</code>：创建时必填，更新时可选；该类型的完整原文字符串，可由前端读取文件获得，更新时省略不修改</li>
-                  <li><code>base_hash</code>：更新且提交 content 时必填，读取正文时的哈希；创建或仅修改摘要时省略</li>
-                  <li><code>tag_ids</code>：可选，标签 ID 数组；创建时默认 []，更新时省略不修改，[] 清空</li>
-                  <li><code>disabled</code>：仅更新时可选，布尔值；true 停用，false 启用；创建默认启用</li>
+                  <li><code>type</code>：theme / component / skill / snippet</li>
+                  <li><code>name</code>：提交值不能为空白，最长 80，保存时去除首尾空白，同一类型内不区分大小写唯一</li>
+                  <li><code>description</code>：提交值不能为空白，最长 500，保存时去除首尾空白</li>
+                  <li><code>content</code>：该类型的完整正文</li>
+                  <li><code>tag_ids</code>：可选，同类标签 ID 数组，默认空数组</li>
                 </ul>
+                <p>新资产默认启用。type、name、description 和 content 均需提供。</p>
               </td>
               <td>
                 <ul class="fields">
                   <li><code>id</code>：稳定资产 ID</li>
-                  <li><code>hash</code>：本次保存后 content 的内容哈希，字符串；摘要字段变化不影响该哈希</li>
-                  <li><code>updated_at</code>：最后修改时间，毫秒时间戳；同值保存时不变</li>
+                  <li><code>type</code>：资产类型</li>
+                  <li><code>name</code>：保存后的显示名</li>
+                  <li><code>description</code>：保存后的描述</li>
+                  <li><code>enabled</code>：布尔值，是否启用</li>
+                  <li><code>tag_ids</code>：保存后的同类标签 ID 数组</li>
+                  <li><code>hash</code>：资产正文的哈希</li>
+                  <li><code>updated_at</code>：最后修改时间，毫秒时间戳</li>
                 </ul>
+              </td>
+            </tr>
+            <tr id="assets-update">
+              <th scope="row">更新资产</th>
+              <td><code>POST /api/assets/update</code></td>
+              <td>
+                <ul class="fields">
+                  <li><code>asset_id</code>：已有资产的 ID</li>
+                  <li><code>name</code>：提交值不能为空白，最长 80，保存时去除首尾空白，同一类型内不区分大小写唯一</li>
+                  <li><code>description</code>：提交值不能为空白，最长 500，保存时去除首尾空白</li>
+                  <li><code>content</code>：替换后的完整正文，与 base_hash 同时提供</li>
+                  <li><code>base_hash</code>：读取正文时的哈希</li>
+                  <li><code>tag_ids</code>：同类标签 ID 数组，传 [] 清空</li>
+                  <li><code>enabled</code>：布尔值，true 启用，false 停用</li>
+                </ul>
+                <p>至少提供一个非 null 的可修改字段。可修改字段省略或为 null 时保留原值。</p>
+              </td>
+              <td>
+                <p>返回保存后的资产信息，字段与<a href="#assets-create">创建资产</a>相同。同值更新保留原 <code>updated_at</code>。</p>
               </td>
             </tr>
             <tr>
@@ -509,11 +572,10 @@
               <td>无</td>
               <td>
                 <ul class="fields">
-                  <li><code>default_open</code>：默认方式：system / finder / textedit / vscode 或 app:应用绝对路径</li>
+                  <li><code>default_open</code>：<code>system</code> 或应用绝对路径（Windows 为 <code>.exe</code>，其他平台为 <code>.app</code>）</li>
                   <li><code>json_open</code>：JSON 打开方式，同默认方式，另可为 inherit</li>
                   <li><code>html_open</code>：HTML / HTM 打开方式，同 json_open</li>
                   <li><code>custom_apps</code>：自定义应用绝对路径的有序字符串数组，无自定义应用时为 []</li>
-                  <li><code>supported</code>：当前平台能否启动本地应用，布尔值</li>
                 </ul>
               </td>
             </tr>
@@ -522,13 +584,18 @@
               <td><code>POST /api/settings/fileopen/save</code></td>
               <td>
                 <ul class="fields">
-                  <li><code>default_open</code>：默认方式：system / finder / textedit / vscode 或 app:应用绝对路径</li>
+                  <li><code>default_open</code>：<code>system</code> 或应用绝对路径（Windows 为 <code>.exe</code>，其他平台为 <code>.app</code>）</li>
                   <li><code>json_open</code>：JSON 打开方式，同默认方式，另可为 inherit</li>
                   <li><code>html_open</code>：HTML / HTM 打开方式，同 json_open</li>
                   <li><code>custom_apps</code>：自定义应用绝对路径的有序字符串数组，[] 清空</li>
                 </ul>
               </td>
-              <td>无</td>
+              <td>
+                <ul class="fields">
+                  <li><code>default_open</code>、<code>json_open</code>、<code>html_open</code>：实际生效的打开方式，含未登记应用的回退结果</li>
+                  <li><code>custom_apps</code>：路径规范化后按首次出现顺序去重的应用列表</li>
+                </ul>
+              </td>
             </tr>
             <tr>
               <th scope="row">选择本地应用</th>
@@ -561,9 +628,7 @@
                   <li><code>toggle_source</code>：切换源码，默认 Primary+KeyI</li>
                   <li><code>switch_theme</code>：切换主题，默认 Primary+KeyT</li>
                   <li><code>submit_request</code>：发送指令，默认 Primary+Enter</li>
-                  <li><code>suggestion_1</code>：建议一，默认 Alt+Digit1</li>
-                  <li><code>suggestion_2</code>：建议二，默认 Alt+Digit2</li>
-                  <li><code>suggestion_3</code>：建议三，默认 Alt+Digit3</li>
+                  <li><code>select_suggestion</code>：选择建议共用的单个修饰键，默认 Option，对应数字 1、2、3</li>
                 </ul>
               </td>
             </tr>
@@ -571,6 +636,7 @@
               <th scope="row">保存快捷键</th>
               <td><code>POST /api/settings/shortcuts/save</code></td>
               <td>
+                <p>五个触发符各取 <code>/~!@#$%^&amp;*&gt;\+</code> 中的一个字符，且互不重复。操作快捷键使用 Primary、Option 或 Alt 中的一个修饰键加一个普通键。组合需避开保留键且互不重复，检查冲突时 Option 与 Alt 等价。</p>
                 <ul class="fields">
                   <li><code>command_trigger</code>：命令，默认 /</li>
                   <li><code>reference_trigger</code>：综合引用菜单，默认 @</li>
@@ -587,9 +653,7 @@
                   <li><code>toggle_source</code>：切换源码，默认 Primary+KeyI</li>
                   <li><code>switch_theme</code>：切换主题，默认 Primary+KeyT</li>
                   <li><code>submit_request</code>：发送指令，默认 Primary+Enter</li>
-                  <li><code>suggestion_1</code>：建议一，默认 Alt+Digit1</li>
-                  <li><code>suggestion_2</code>：建议二，默认 Alt+Digit2</li>
-                  <li><code>suggestion_3</code>：建议三，默认 Alt+Digit3</li>
+                  <li><code>select_suggestion</code>：只提交单个修饰键，默认 Option，与数字 1、2、3 分别组成快捷键</li>
                 </ul>
               </td>
               <td>无</td>
@@ -601,46 +665,90 @@
               <td>
                 <ul class="fields">
                   <li><code>models</code>：完整模型对象数组，至少一项</li>
+                  <li><code>models[].id</code>：稳定的模型配置 ID</li>
                   <li><code>models[].name</code>：唯一配置名，1–80 字符</li>
                   <li><code>models[].protocol</code>：responses 或 anthropic</li>
-                  <li><code>models[].base_url</code>：HTTP(S) API 前缀</li>
+                  <li><code>models[].base_url</code>：模型基础地址</li>
                   <li><code>models[].model</code>：上游模型名</li>
-                  <li><code>models[].provider</code>：用于图标的品牌名，服务端推导</li>
-                  <li><code>routes.main_default</code>：主路默认模型配置名</li>
-                  <li><code>routes.main_fallback</code>：主路备用配置名，null 表示关闭</li>
-                  <li><code>routes.side_default</code>：旁路默认配置名</li>
-                  <li><code>routes.side_fallback</code>：旁路共用备用配置名，null 表示关闭</li>
-                  <li><code>routes.rename</code>：rename 的模型配置名，null 沿用 side_default</li>
-                  <li><code>routes.compact</code>：compact 的模型配置名，null 沿用 side_default</li>
-                  <li><code>routes.commit</code>：commit 的模型配置名，null 沿用 side_default</li>
-                  <li><code>routes.polish</code>：polish 的模型配置名，null 沿用 side_default</li>
-                  <li><code>routes.handoff</code>：handoff 的模型配置名，null 沿用 side_default</li>
-                  <li><code>routes.suggest</code>：suggest 的模型配置名，null 沿用 side_default</li>
+                  <li><code>models[].provider</code>：用户选择的模型品牌，用于图标</li>
+                  <li><code>routes.main_default</code>：主路默认模型配置 ID</li>
+                  <li><code>routes.main_fallback</code>：主路备用配置 ID，null 表示关闭</li>
+                  <li><code>routes.side_default</code>：旁路默认配置 ID</li>
+                  <li><code>routes.side_fallback</code>：旁路共用备用配置 ID，null 表示关闭</li>
+                  <li><code>routes.rename</code>：rename 的模型配置 ID，null 沿用 side_default</li>
+                  <li><code>routes.compact</code>：compact 的模型配置 ID，null 沿用 side_default</li>
+                  <li><code>routes.commit</code>：commit 的模型配置 ID，null 沿用 side_default</li>
+                  <li><code>routes.polish</code>：polish 的模型配置 ID，null 沿用 side_default</li>
+                  <li><code>routes.handoff</code>：handoff 的模型配置 ID，null 沿用 side_default</li>
+                  <li><code>routes.suggest</code>：suggest 的模型配置 ID，null 沿用 side_default</li>
+                </ul>
+              </td>
+            </tr>
+            <tr id="settings-models-create">
+              <th scope="row">创建模型配置</th>
+              <td><code>POST /api/settings/models/create</code></td>
+              <td>
+                <ul class="fields">
+                  <li><code>name</code>：唯一配置名，提交值不能为空白，最长 80，保存时去除首尾空白</li>
+                  <li><code>protocol</code>：responses 或 anthropic</li>
+                  <li><code>base_url</code>：模型基础地址，提供时需为非空白字符串</li>
+                  <li><code>provider</code>：模型品牌，可选值为deepseek、kimi、mimo、gpt、claude、gemini、qwen、minimax、glm、grok</li>
+                  <li><code>model</code>：非空白的上游模型名</li>
+                  <li><code>key</code>：只写的非空白密钥</li>
+                </ul>
+                <p>六个字段均需提供。</p>
+              </td>
+              <td>
+                <ul class="fields">
+                  <li><code>id</code>：稳定的模型配置 ID</li>
+                  <li><code>name</code>：生效的配置名</li>
+                  <li><code>protocol</code>：生效的协议</li>
+                  <li><code>base_url</code>：保存后的模型基础地址</li>
+                  <li><code>model</code>：上游模型名</li>
+                  <li><code>provider</code>：保存的模型品牌</li>
+                </ul>
+              </td>
+            </tr>
+            <tr id="settings-models-update">
+              <th scope="row">更新模型配置</th>
+              <td><code>POST /api/settings/models/update</code></td>
+              <td>
+                <ul class="fields">
+                  <li><code>id</code>：已有模型配置的 ID</li>
+                  <li><code>name</code>：唯一配置名，提交值不能为空白，最长 80，保存时去除首尾空白</li>
+                  <li><code>protocol</code>：responses 或 anthropic</li>
+                  <li><code>base_url</code>：模型基础地址，提供时需为非空白字符串</li>
+                  <li><code>provider</code>：模型品牌，可选值为deepseek、kimi、mimo、gpt、claude、gemini、qwen、minimax、glm、grok</li>
+                  <li><code>model</code>：非空白的上游模型名</li>
+                  <li><code>key</code>：只写的非空白密钥</li>
+                </ul>
+                <p>可修改字段省略或为 null 时保留原值，包括密钥。只传 ID 时返回当前公开配置。</p>
+              </td>
+              <td>
+                <ul class="fields">
+                  <li><code>id</code>：稳定的模型配置 ID</li>
+                  <li><code>name</code>：生效的配置名</li>
+                  <li><code>protocol</code>：生效的协议</li>
+                  <li><code>base_url</code>：保存后的模型基础地址</li>
+                  <li><code>model</code>：上游模型名</li>
+                  <li><code>provider</code>：保存的模型品牌</li>
                 </ul>
               </td>
             </tr>
             <tr>
-              <th scope="row">保存模型与路由</th>
-              <td><code>POST /api/settings/models/save</code></td>
+              <th scope="row">删除单个模型配置</th>
+              <td><code>POST /api/settings/models/delete</code></td>
+              <td><code>id</code>：要删除的模型配置 ID。至少保留一个模型，删除前需解除路由引用。</td>
+              <td>无</td>
+            </tr>
+            <tr>
+              <th scope="row">更新单个模型路由</th>
+              <td><code>POST /api/settings/routes/save</code></td>
               <td>
+                <p>只接受以下两个字段，未声明的字段返回 <code>INVALID_ARGUMENT</code>。</p>
                 <ul class="fields">
-                  <li><code>models</code>：完整模型对象数组，至少一项</li>
-                  <li><code>models[].name</code>：唯一配置名，1–80 字符</li>
-                  <li><code>models[].protocol</code>：responses 或 anthropic</li>
-                  <li><code>models[].base_url</code>：HTTP(S) API 前缀</li>
-                  <li><code>models[].model</code>：上游模型名</li>
-                  <li><code>models[].previous_name</code>：字符串，编辑已有项时必填原配置名，新增项省略；原条目未列入即删除</li>
-                  <li><code>models[].key</code>：非空字符串，新增项必填；编辑项省略保留，提供则替换，不接受 null 或空字符串</li>
-                  <li><code>routes.main_default</code>：主路默认模型配置名</li>
-                  <li><code>routes.main_fallback</code>：主路备用配置名，null 表示关闭</li>
-                  <li><code>routes.side_default</code>：旁路默认配置名</li>
-                  <li><code>routes.side_fallback</code>：旁路共用备用配置名，null 表示关闭</li>
-                  <li><code>routes.rename</code>：rename 的模型配置名，null 沿用 side_default</li>
-                  <li><code>routes.compact</code>：compact 的模型配置名，null 沿用 side_default</li>
-                  <li><code>routes.commit</code>：commit 的模型配置名，null 沿用 side_default</li>
-                  <li><code>routes.polish</code>：polish 的模型配置名，null 沿用 side_default</li>
-                  <li><code>routes.handoff</code>：handoff 的模型配置名，null 沿用 side_default</li>
-                  <li><code>routes.suggest</code>：suggest 的模型配置名，null 沿用 side_default</li>
+                  <li><code>route</code>：main_default、side_default、main_fallback、side_fallback、rename、compact、commit、polish、handoff 或 suggest</li>
+                  <li><code>model_id</code>：已有模型配置 ID。两个默认路由均需提供；对备用路由省略或传 null 表示关闭，对命令路由则表示跟随 side_default。</li>
                 </ul>
               </td>
               <td>无</td>
@@ -663,12 +771,13 @@
               <th scope="row">保存智能体行为</th>
               <td><code>POST /api/settings/behavior/save</code></td>
               <td>
+                <p>各开关均可选。传 <code>true</code> 开启，传 <code>false</code> 关闭，省略或传 <code>null</code> 保留当前值。</p>
                 <ul class="fields">
-                  <li><code>auto_rename_enabled</code>：自动命名，默认 true</li>
-                  <li><code>auto_suggest_enabled</code>：自动建议，默认 true</li>
-                  <li><code>show_tool_failures</code>：显示工具失败，默认 false</li>
-                  <li><code>require_resource_approval</code>：编辑基本信息、全局约束、大纲时需审批，默认 false</li>
-                  <li><code>require_high_risk_approval</code>：高风险操作需审批，默认 true</li>
+                  <li><code>auto_rename_enabled</code>：自动命名</li>
+                  <li><code>auto_suggest_enabled</code>：自动建议</li>
+                  <li><code>show_tool_failures</code>：显示工具失败</li>
+                  <li><code>require_resource_approval</code>：编辑基本信息、全局约束、大纲时需审批</li>
+                  <li><code>require_high_risk_approval</code>：高风险操作需审批</li>
                 </ul>
               </td>
               <td>无</td>
@@ -883,20 +992,34 @@
                 </ul>
               </td>
             </tr>
-            <tr id="sessions-save">
-              <th scope="row">保存会话</th>
-              <td><code>POST /api/sessions/save</code></td>
+            <tr id="sessions-create">
+              <th scope="row">创建会话</th>
+              <td><code>POST /api/sessions/create</code></td>
               <td>
                 <ul class="fields">
-                  <li><code>session_id</code>：字符串，可选；省略创建会话，传入则修改已有会话名称</li>
-                  <li><code>project_id</code>：字符串，创建时必填；修改时省略</li>
-                  <li><code>title</code>：字符串，创建时可选，省略使用「新会话」；修改时必填，去首尾空白后非空</li>
-                  <li><code>expected_revision</code>：十进制字符串。可返回最新且标题实际改变时必填，取检查点列表的 revision。</li>
+                  <li><code>project_id</code>：所属项目 ID</li>
+                  <li><code>title</code>：可选，会话标题，省略时使用「新会话」</li>
                 </ul>
               </td>
               <td>
                 <ul class="fields">
-                  <li><code>id</code>：字符串，会话 ID，创建时由后端生成</li>
+                  <li><code>id</code>：新建会话的 ID</li>
+                </ul>
+              </td>
+            </tr>
+            <tr id="sessions-update">
+              <th scope="row">更新会话</th>
+              <td><code>POST /api/sessions/update</code></td>
+              <td>
+                <ul class="fields">
+                  <li><code>session_id</code>：已有会话的 ID</li>
+                  <li><code>title</code>：新的会话标题，去除首尾空白后非空</li>
+                  <li><code>expected_revision</code>：十进制字符串。可返回最新且标题实际改变时需提供，取检查点列表的 revision</li>
+                </ul>
+              </td>
+              <td>
+                <ul class="fields">
+                  <li><code>id</code>：已更新会话的 ID</li>
                 </ul>
               </td>
             </tr>

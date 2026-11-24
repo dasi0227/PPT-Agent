@@ -2429,7 +2429,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>模型选择与所需行为设置</td>
 <td>已校验的模型 / 路由与行为配置</td>
-<td>归 domain/setting/service；在 Run 受理时解析主模型、主旁路及备用配置、两项审批和自动命名 / 建议开关，由 Run 在内存持有。循环、审批判断及该 Run 的自动命令复用配置；手动命令在自身受理时取配置，show_tool_failures 即时影响展示。</td>
+<td>归 domain/setting/service，提供全局模型、路由和行为设置。RunService 在受理时组装 RunConfig，主循环、审批判断及该 Run 的自动命令复用这份配置。手动命令在自身受理时取配置，show_tool_failures 即时影响展示。</td>
 </tr>
 </tbody>
 <tbody>
@@ -2484,7 +2484,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </tbody>
 <tbody>
 <tr class="group-heading">
-<th colspan="4" scope="rowgroup">domain/agent/gateway · 外部能力接口</th>
+<th colspan="4" scope="rowgroup">domain/gateway · 外部能力接口</th>
 </tr>
 <tr id="class-ILlmGateway">
 <th scope="row">

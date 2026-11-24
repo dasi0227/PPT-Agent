@@ -8,4 +8,21 @@
         <result column="html_open" property="htmlOpen"/>
         <result column="custom_apps" property="customApps"/>
     </resultMap>
+
+    <select id="read" resultMap="fileOpenSettingsPo">
+        SELECT * FROM settings_fileopen WHERE id = 1
+    </select>
+
+    <insert id="save">
+        INSERT INTO settings_fileopen (
+            id, default_open, json_open, html_open, custom_apps
+        ) VALUES (
+            #{id}, #{defaultOpen}, #{jsonOpen}, #{htmlOpen}, #{customApps}
+        )
+        ON CONFLICT (id) DO UPDATE SET
+            default_open = excluded.default_open,
+            json_open = excluded.json_open,
+            html_open = excluded.html_open,
+            custom_apps = excluded.custom_apps
+    </insert>
 </mapper>

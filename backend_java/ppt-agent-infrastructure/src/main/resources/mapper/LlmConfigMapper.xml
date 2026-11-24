@@ -2,10 +2,55 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.dasi.ppt.agent.infrastructure.persistence.database.mapper.LlmConfigMapper">
     <resultMap id="llmConfigPo" type="com.dasi.ppt.agent.infrastructure.persistence.database.po.LlmConfigPo">
-        <id column="name" property="name"/>
+        <id column="id" property="id"/>
+        <result column="name" property="name"/>
         <result column="protocol" property="protocol"/>
+        <result column="provider" property="provider"/>
         <result column="base_url" property="baseUrl"/>
         <result column="model" property="model"/>
         <result column="key" property="key"/>
     </resultMap>
+
+    <select id="list" resultMap="llmConfigPo">
+        SELECT * FROM settings_llm ORDER BY name
+    </select>
+
+    <select id="nameExists" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1 FROM settings_llm
+            WHERE name = #{name}
+            <if test="excludeId != null">
+                AND id != #{excludeId}
+            </if>
+        )
+    </select>
+
+    <select id="exists" resultType="boolean">
+        SELECT EXISTS (SELECT 1 FROM settings_llm WHERE id = #{id})
+    </select>
+
+    <select id="count" resultType="int">
+        SELECT COUNT(*) FROM settings_llm
+    </select>
+
+    <insert id="insert">
+        INSERT INTO settings_llm (id, name, protocol, provider, base_url, model, key)
+        VALUES (#{id}, #{name}, #{protocol}, #{provider}, #{baseUrl}, #{model}, #{key})
+    </insert>
+
+    <select id="update" resultMap="llmConfigPo" affectData="true" flushCache="true" useCache="false">
+        UPDATE settings_llm SET
+            name = COALESCE(#{name}, name),
+            protocol = COALESCE(#{protocol}, protocol),
+            provider = COALESCE(#{provider}, provider),
+            base_url = COALESCE(#{baseUrl}, base_url),
+            model = COALESCE(#{model}, model),
+            key = COALESCE(#{key}, key)
+        WHERE id = #{id}
+        RETURNING *
+    </select>
+
+    <delete id="delete">
+        DELETE FROM settings_llm WHERE id = #{id}
+    </delete>
 </mapper>

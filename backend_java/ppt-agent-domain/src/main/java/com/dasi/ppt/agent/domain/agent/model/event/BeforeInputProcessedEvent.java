@@ -1,17 +1,24 @@
 package com.dasi.ppt.agent.domain.agent.model.event;
 
+import com.dasi.ppt.agent.domain.agent.model.RunConfig;
 import com.dasi.ppt.agent.domain.agent.model.entity.Message;
-import com.dasi.ppt.agent.domain.setting.model.RunConfig;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.util.List;
 
-public record BeforeInputProcessedEvent(
-        String projectId,
-        String sessionId,
-        String runId,
-        Message instruction,
-        List<Message> history,
-        String sessionTitle,
-        RunConfig config
-) {
+@Builder
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public final class BeforeInputProcessedEvent {
+    private String projectId;
+    private String sessionId;
+    private String runId;
+    private Message instruction;
+    private List<Message> history;
+    private String sessionTitle;
+    private RunConfig config;
 }

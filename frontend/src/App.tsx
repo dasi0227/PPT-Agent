@@ -1,3 +1,4 @@
+import { AssetRepositoryPage } from './features/repository/AssetRepositoryPage';
 import { useFileSettingsStore } from './stores/fileSettingsStore';
 import { useAgentSettingsStore } from './stores/agentSettingsStore';
 import { useShortcutStore } from './stores/shortcutStore';
@@ -10,10 +11,6 @@ import { GlobalToasts } from './components/ui/GlobalToasts';
 import { DeletionFeedback } from './features/workspace/DeletionFeedback';
 import { GlobalModals } from './features/workspace/GlobalModals';
 import { UnknownRouteRedirect, WorkspaceRoute } from './features/workspace/WorkspaceRoute';
-import { ThemeRepositoryPage } from './features/repository/ThemeRepositoryPage';
-import { ComponentRepositoryPage } from './features/repository/ComponentRepositoryPage';
-import { SkillRepositoryPage } from './features/repository/SkillRepositoryPage';
-import { SnippetRepositoryPage } from './features/repository/SnippetRepositoryPage';
 
 export function App() {
   useEffect(() => {
@@ -57,16 +54,18 @@ export function App() {
 
 function AppLayout() {
   const { pathname } = useLocation();
-  const themeActive = pathname.replace(/\/+$/, '').toLowerCase() === '/warehouse/theme';
+  const path = pathname.replace(/\/+$/, '').toLowerCase();
+  const themeActive = path === '/assets' || path === '/assets/theme';
   const [themeVisited, setThemeVisited] = useState(themeActive);
   useEffect(() => { if (themeActive) setThemeVisited(true); }, [themeActive]);
   return <>
     {(themeActive || themeVisited) && (
       <div hidden={!themeActive} {...(!themeActive ? { inert: '' } : {})}>
-        <ThemeRepositoryPage active={themeActive} />
+        <AssetRepositoryPage key="Theme" type="theme" active={themeActive} />
       </div>
     )}
-    <Outlet /><ProjectHistoryDialogs /><GlobalModals /><GlobalToasts /><DeletionFeedback />
+    <Outlet /><ProjectHistoryDialogs /><GlobalModals /><GlobalToasts />
+    {path !== '/settings' && !themeActive && !path.startsWith('/assets/') && <DeletionFeedback />}
   </>;
 }
 
@@ -75,10 +74,11 @@ const router = createBrowserRouter([{
   children: [
     { path: '/', element: <WorkspaceRoute /> },
     { path: '/projects/:projectId', element: <WorkspaceRoute /> },
-    { path: '/warehouse/theme', element: null },
-    { path: '/warehouse/component', element: <ComponentRepositoryPage /> },
-    { path: '/warehouse/skill', element: <SkillRepositoryPage /> },
-    { path: '/warehouse/snippet', element: <SnippetRepositoryPage /> },
+    { path: '/assets', element: null },
+    { path: '/assets/theme', element: null },
+    { path: '/assets/component', element: <AssetRepositoryPage key="Component" type="component" /> },
+    { path: '/assets/skill', element: <AssetRepositoryPage key="Skill" type="skill" /> },
+    { path: '/assets/snippet', element: <AssetRepositoryPage key="Snippet" type="snippet" /> },
     { path: '/settings', element: <SettingsPage /> },
     { path: '*', element: <UnknownRouteRedirect /> },
   ],

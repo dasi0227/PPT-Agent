@@ -2,65 +2,90 @@ package com.dasi.ppt.agent.domain.agent.model;
 
 import com.dasi.ppt.agent.domain.project.model.enumeration.DecorationPosition;
 import com.dasi.ppt.agent.domain.project.model.enumeration.DecorationType;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.util.List;
 
-public record DomSelection(
-        String selectionId,
-        int markerNo,
-        String slideId,
-        String html,
-        String htmlHash,
-        String comment,
-        Region region
-) {
+@Builder
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public final class DomSelection {
+    private String selectionId;
+    private int markerNo;
+    private String slideId;
+    private String html;
+    private String htmlHash;
+    private String comment;
+    private Region region;
 
-    public record Region(
-            String type,
-            Rect rect,
-            List<Target> targets,
-            List<Decoration> decorations
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class Region {
+        private String type;
+        private Rect rect;
+        private List<Target> targets;
+        private List<Decoration> decorations;
     }
 
-    public record Rect(
-            double x,
-            double y,
-            double width,
-            double height
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class Rect {
+        private double x;
+        private double y;
+        private double width;
+        private double height;
     }
 
-    public record Target(
-            String targetId,
-            String tag,
-            Fingerprint fingerprint,
-            Rect rect
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class Target {
+        private String targetId;
+        private String tag;
+        private Fingerprint fingerprint;
+        private Rect rect;
     }
 
-    public record Fingerprint(
-            String tag,
-            int siblingIndex,
-            String stableId,
-            List<String> classes,
-            List<Ancestor> ancestors
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class Fingerprint {
+        private String tag;
+        private int siblingIndex;
+        private String stableId;
+        private List<String> classes;
+        private List<Ancestor> ancestors;
     }
 
-    public record Ancestor(
-            String tag,
-            String stableId,
-            String classSummary,
-            int siblingIndex
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class Ancestor {
+        private String tag;
+        private String stableId;
+        private String classSummary;
+        private int siblingIndex;
     }
 
-    public record Decoration(
-            DecorationType type,
-            DecorationPosition placement,
-            String text,
-            Rect rect
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class Decoration {
+        private DecorationType type;
+        private DecorationPosition placement;
+        private String text;
+        private Rect rect;
     }
 }

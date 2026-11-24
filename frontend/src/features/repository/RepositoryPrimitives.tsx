@@ -10,11 +10,13 @@ export function RepositoryPageHeader({
   query,
   onQueryChange,
   searchLabel,
+  actions,
 }: {
   title: string;
   query: string;
   onQueryChange: (value: string) => void;
   searchLabel: string;
+  actions?: ReactNode;
 }) {
   return (
     <header className="flex h-16 shrink-0 items-center gap-4 border-b border-border bg-surface px-5 md:px-6">
@@ -29,6 +31,7 @@ export function RepositoryPageHeader({
           aria-label={searchLabel}
         />
       </label>
+      <div className="ml-auto flex gap-2">{actions}</div>
     </header>
   );
 }

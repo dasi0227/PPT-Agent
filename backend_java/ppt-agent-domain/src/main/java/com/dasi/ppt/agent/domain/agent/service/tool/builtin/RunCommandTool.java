@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.domain.agent.service.tool.builtin;
 
-import com.dasi.ppt.agent.domain.agent.gateway.IBashGateway;
+import com.dasi.ppt.agent.domain.gateway.IBashGateway;
 import com.dasi.ppt.agent.domain.agent.model.ToolCall;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.ToolName;
 import com.dasi.ppt.agent.domain.agent.model.result.ToolResult;

@@ -14,4 +14,12 @@
         <result column="handoff" property="handoff"/>
         <result column="suggest" property="suggest"/>
     </resultMap>
+
+    <select id="read" resultMap="routeSettingsPo">
+        SELECT * FROM settings_route WHERE id = 1
+    </select>
+
+    <update id="updateRoute">
+        UPDATE settings_route SET "${route.value}" = #{modelId} WHERE id = 1
+    </update>
 </mapper>

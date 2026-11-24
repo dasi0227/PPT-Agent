@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import type { AssetDraft, AssetTag } from '../../api/assets';
+import { showGlobalError } from '../../stores/toastStore';
+import { useState } from 'react';
 import { Button } from '../../components/ui/primitives';
 import {
   Dialog,
@@ -9,63 +11,34 @@ import {
 } from '../../components/ui/dialog';
 import { cn } from '../../lib/utils';
 
-export interface RepositoryMetadataDraft<T extends string> {
-  name: string;
-  description: string;
-  tags: T[];
-}
-
-export function RepositoryEditDialog<T extends string>({
-  open,
-  title,
-  value,
-  tagOptions,
-  onOpenChange,
-  onSave,
-}: {
-  open: boolean;
+export function RepositoryEditDialog({ title, value, tags, onClose, onSave }: {
   title: string;
-  value: RepositoryMetadataDraft<T>;
-  tagOptions: Array<{ value: T; label: string }>;
-  onOpenChange: (open: boolean) => void;
-  onSave: (value: RepositoryMetadataDraft<T>) => Promise<void>;
+  value: AssetDraft;
+  tags: AssetTag[];
+  onClose: () => void;
+  onSave: (draft: AssetDraft) => Promise<void>;
 }) {
   const [draft, setDraft] = useState(value);
   const [saving, setSaving] = useState(false);
-  const valueTags = value.tags.join('\u0000');
-
-  useEffect(() => {
-    if (open) {
-      setDraft({
-        name: value.name,
-        description: value.description,
-        tags: valueTags ? valueTags.split('\u0000') as T[] : [],
-      });
-    }
-  }, [open, value.description, value.name, valueTags]);
-
-  const dirty = draft.name !== value.name
-    || draft.description !== value.description
-    || draft.tags.join('\u0000') !== valueTags;
-
+  const dirty = JSON.stringify(draft) !== JSON.stringify(value);
   const requestOpenChange = (next: boolean) => {
     if (saving) return;
     if (!next && dirty && !window.confirm('当前修改尚未保存，确定放弃吗？')) return;
-    onOpenChange(next);
+    if (!next) onClose();
   };
 
   const valid = draft.name.trim().length > 0
     && draft.name.trim().length <= 80
     && draft.description.trim().length > 0
     && draft.description.trim().length <= 500
-    && draft.tags.length <= 2;
+    && draft.content.length > 0;
 
-  const toggleTag = (tag: T) => {
+  const toggleTag = (tag: string) => {
     setDraft((current) => ({
       ...current,
-      tags: current.tags.includes(tag)
-        ? current.tags.filter((value) => value !== tag)
-        : current.tags.length < 2 ? [...current.tags, tag] : current.tags,
+      tag_ids: current.tag_ids.includes(tag)
+        ? current.tag_ids.filter((value) => value !== tag)
+        : [...current.tag_ids, tag],
     }));
   };
 
@@ -73,25 +46,23 @@ export function RepositoryEditDialog<T extends string>({
     if (!valid || saving) return;
     setSaving(true);
     try {
-      await onSave({
-        name: draft.name.trim(),
-        description: draft.description.trim(),
-        tags: draft.tags,
-      });
-      onOpenChange(false);
+      await onSave(draft);
+      onClose();
+    } catch (cause) {
+      showGlobalError(cause instanceof Error ? cause.message : '保存失败');
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={requestOpenChange}>
+    <Dialog open onOpenChange={requestOpenChange}>
       <DialogContent className="gap-0 p-0 sm:max-w-[480px]">
         <DialogHeader className="border-b border-border px-5 py-4">
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <form
-          className="space-y-4 px-5 py-5"
+          className="max-h-[75dvh] space-y-4 overflow-y-auto px-5 py-5"
           onSubmit={(event) => {
             event.preventDefault();
             void submit();
@@ -110,21 +81,20 @@ export function RepositoryEditDialog<T extends string>({
           <fieldset className="grid gap-1.5">
             <legend className="mb-1.5 text-xs font-semibold text-text-600">标签</legend>
             <div className="flex flex-wrap gap-1.5">
-              {tagOptions.map((option) => {
-                const selected = draft.tags.includes(option.value);
+              {tags.map((option) => {
+                const selected = draft.tag_ids.includes(option.id);
                 return (
                   <button
-                    key={option.value}
+                    key={option.id}
                     type="button"
                     aria-pressed={selected}
-                    disabled={!selected && draft.tags.length >= 2}
-                    onClick={() => toggleTag(option.value)}
+                    onClick={() => toggleTag(option.id)}
                     className={cn(
                       'h-7 rounded-md border px-2.5 text-xs font-medium focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40',
                       selected ? 'border-accent/30 ui-selected' : 'border-border bg-surface text-text-600 ui-interactive',
                     )}
                   >
-                    {option.label}
+                    {option.name}
                   </button>
                 );
               })}
@@ -139,6 +109,10 @@ export function RepositoryEditDialog<T extends string>({
               onChange={(event) => setDraft({ ...draft, description: event.target.value })}
               className="resize-none rounded-lg border border-border bg-surface px-3 py-2 text-[13px] leading-5 text-text-900 outline-none"
             />
+          </label>
+          <label className="grid gap-1.5 text-xs font-semibold text-text-600">正文
+            <textarea rows={5} value={draft.content} onChange={event => setDraft({ ...draft, content: event.target.value })}
+              className="rounded-lg border border-border bg-surface px-3 py-2 font-mono text-[13px] text-text-900" />
           </label>
           <DialogFooter className="pt-2">
             <Button type="button" variant="secondary" disabled={saving} onClick={() => requestOpenChange(false)}>

@@ -1,5 +1,7 @@
 package com.dasi.ppt.agent.infrastructure.properties;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.nio.file.Path;
@@ -7,12 +9,17 @@ import java.time.Duration;
 import java.util.List;
 
 @ConfigurationProperties("ppt.sandbox")
-public record SandboxProperties(
-        List<Path> allowedFilepaths,
-        List<String> allowedDomains,
-        Execution execution
-) {
+@Getter
+@AllArgsConstructor
+public final class SandboxProperties {
+    private final List<Path> allowedFilepaths;
+    private final List<String> allowedDomains;
+    private final Execution execution;
 
-    public record Execution(Duration timeout, int maxOutputBytes) {
+    @Getter
+    @AllArgsConstructor
+    public static final class Execution {
+        private final Duration timeout;
+        private final int maxOutputBytes;
     }
 }

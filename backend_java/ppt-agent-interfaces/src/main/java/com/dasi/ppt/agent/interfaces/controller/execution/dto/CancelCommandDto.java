@@ -1,4 +1,14 @@
 package com.dasi.ppt.agent.interfaces.controller.execution.dto;
 
-public record CancelCommandDto(String id) {
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+@Builder
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public final class CancelCommandDto {
+    private String id;
 }

@@ -5,29 +5,19 @@ let generation = 0;
 
 export const useAgentSettingsStore = create<{
   value: AgentSettings | null;
-  load: (reload?: boolean) => Promise<void>;
-  save: (edit: AgentSettings) => Promise<void>;
+  load: () => Promise<void>;
+  save: (edit: Partial<AgentSettings>) => Promise<void>;
 }>((set) => ({
   value: null,
-  load: async (reload = false) => {
+  load: async () => {
     const started = ++generation;
-    const value = await (reload ? agentSettingsApi.reload() : agentSettingsApi.get());
+    const value = await agentSettingsApi.get();
     if (started === generation) set({ value });
   },
   save: async edit => {
-    const started = ++generation;
-    try {
-      const value = await agentSettingsApi.save(edit);
-      const refreshRequired = started !== generation;
-      generation += 1;
-      set({ value });
-      try { localStorage.setItem('ppt-agent-settings-updated', `${value.revision}:${Date.now()}`); } catch { /* Focus refresh also synchronizes windows. */ }
-      if (refreshRequired) {
-        const refreshed = ++generation;
-        await agentSettingsApi.get().then(latest => {
-          if (refreshed === generation) set({ value: latest });
-        }).catch(() => {});
-      }
-    } catch (cause) { generation += 1; throw cause; }
+    await agentSettingsApi.save(edit);
+    ++generation;
+    set(state => ({ value: state.value && { ...state.value, ...edit } }));
+    try { localStorage.setItem('ppt-agent-settings-updated', String(Date.now())); } catch { /* Focus also refreshes. */ }
   },
 }));

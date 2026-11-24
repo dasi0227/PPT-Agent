@@ -940,7 +940,7 @@
               <td class="nullable">否</td>
               <td>无</td>
               <td>资产列表、选择器与搜索使用的名称。</td>
-              <td class="decision">非空，最多 80 字符；<code>snippet</code> 名称不区分大小写唯一。</td>
+              <td class="decision">非空，最多 80 字符。同一类型内名称按去首尾空白后的 Unicode 小写值比较，必须唯一。</td>
             </tr>
             <tr id="assets-description">
               <th scope="row"><code>description</code></th>
@@ -958,13 +958,13 @@
               <td>资产的完整正文。</td>
               <td class="decision">直接保存原文：主题为 CSS，组件为 HTML，技能为 Markdown，短语为纯文本。</td>
             </tr>
-            <tr id="assets-disabled">
-              <th scope="row"><code>disabled</code></th>
+            <tr id="assets-enabled">
+              <th scope="row"><code>enabled</code></th>
               <td><code>INTEGER</code></td>
               <td class="nullable">否</td>
-              <td><code>0</code></td>
-              <td>是否停用该资产。</td>
-              <td class="decision"><code>0 / 1</code>。</td>
+              <td><code>1</code></td>
+              <td>是否启用该资产。</td>
+              <td class="decision"><code>1</code> 为启用，<code>0</code> 为停用。</td>
             </tr>
             <tr id="assets-updated-at">
               <th scope="row"><code>updated_at</code></th>
@@ -1130,7 +1130,7 @@
               <td class="nullable">否</td>
               <td><code>'system'</code></td>
               <td>文件的默认打开方式。</td>
-              <td class="decision"><code>system / finder / textedit / vscode</code>，或 <code>app:绝对路径</code>。</td>
+              <td class="decision"><code>system</code> 或 <code>custom_apps</code> 中的应用绝对路径。</td>
             </tr>
             <tr id="settings-fileopen-json-open">
               <th scope="row"><code>json_open</code></th>
@@ -1154,7 +1154,7 @@
               <td class="nullable">否</td>
               <td><code>'[]'</code></td>
               <td>用户添加到选项中的应用。</td>
-              <td class="decision">JSON 应用绝对路径数组，路径不得重复。</td>
+              <td class="decision">规范化的应用绝对路径 JSON 数组。Windows 使用 <code>.exe</code>，其他平台使用 <code>.app</code>，按首次出现顺序去重。</td>
             </tr>
           </tbody>
         </table>
@@ -1244,7 +1244,7 @@
               <td class="nullable">否</td>
               <td><code>'Primary+ArrowLeft'</code></td>
               <td>切换到上一张幻灯片的快捷键。</td>
-              <td class="decision">规范化组合键；不得使用冲突或系统保留组合。</td>
+              <td class="decision"><code>Primary</code>、<code>Option</code> 或 <code>Alt</code> 中的一个修饰键与一个普通键用 <code>+</code> 连接。组合需避开保留键且互不重复。</td>
             </tr>
             <tr id="settings-shortcut-next-slide">
               <th scope="row"><code>next_slide</code></th>
@@ -1318,29 +1318,13 @@
               <td>提交输入框请求的快捷键。</td>
               <td class="decision">同 <code>previous_slide</code>。</td>
             </tr>
-            <tr id="settings-shortcut-suggestion-1">
-              <th scope="row"><code>suggestion_1</code></th>
+            <tr id="settings-shortcut-select-suggestion">
+              <th scope="row"><code>select_suggestion</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
-              <td><code>'Alt+Digit1'</code></td>
-              <td>填入第 1 条建议的快捷键。</td>
-              <td class="decision">同 <code>previous_slide</code>。</td>
-            </tr>
-            <tr id="settings-shortcut-suggestion-2">
-              <th scope="row"><code>suggestion_2</code></th>
-              <td><code>TEXT</code></td>
-              <td class="nullable">否</td>
-              <td><code>'Alt+Digit2'</code></td>
-              <td>填入第 2 条建议的快捷键。</td>
-              <td class="decision">同 <code>previous_slide</code>。</td>
-            </tr>
-            <tr id="settings-shortcut-suggestion-3">
-              <th scope="row"><code>suggestion_3</code></th>
-              <td><code>TEXT</code></td>
-              <td class="nullable">否</td>
-              <td><code>'Alt+Digit3'</code></td>
-              <td>填入第 3 条建议的快捷键。</td>
-              <td class="decision">同 <code>previous_slide</code>。</td>
+              <td><code>'Option'</code></td>
+              <td>选择建议的共用修饰键前缀。</td>
+              <td class="decision">只存单个修饰键，与数字 1、2、3 分别组合检查冲突。检查时 <code>Option</code> 与 <code>Alt</code> 等价。</td>
             </tr>
           </tbody>
         </table>
@@ -1376,6 +1360,14 @@
             </tr>
           </thead>
           <tbody>
+            <tr id="settings-llm-id">
+              <th scope="row"><code>id</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>稳定的模型配置 ID。</td>
+              <td class="decision">主键，由服务端生成唯一字符串。</td>
+            </tr>
             <tr id="settings-llm-name">
               <th scope="row"><code>name</code></th>
               <td><code>TEXT</code></td>
@@ -1392,13 +1384,21 @@
               <td>调用模型所使用的 API 协议。</td>
               <td class="decision"><code>responses</code> / <code>anthropic</code>。</td>
             </tr>
+            <tr id="settings-llm-provider">
+              <th scope="row"><code>provider</code></th>
+              <td><code>TEXT</code></td>
+              <td class="nullable">否</td>
+              <td>无</td>
+              <td>用户选择的模型品牌。</td>
+              <td class="decision">deepseek、kimi、mimo、gpt、claude、gemini、qwen、minimax、glm、grok。</td>
+            </tr>
             <tr id="settings-llm-base-url">
               <th scope="row"><code>base_url</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
               <td>无</td>
               <td>模型 API 的基础地址。</td>
-              <td class="decision">HTTP(S) 地址；保存 API 前缀，不含具体请求端点。</td>
+              <td class="decision">非空白字符串，保存规范化后的模型基础地址。</td>
             </tr>
             <tr id="settings-llm-model">
               <th scope="row"><code>model</code></th>
@@ -1464,7 +1464,7 @@
               <td class="nullable">否</td>
               <td>无</td>
               <td>主路默认模型配置。</td>
-              <td class="decision">外键 <code>settings_llm.name</code>。</td>
+              <td class="decision">外键 <code>settings_llm.id</code>。</td>
             </tr>
             <tr id="settings-route-main-fallback">
               <th scope="row"><code>main_fallback</code></th>
@@ -1472,7 +1472,7 @@
               <td class="nullable">是</td>
               <td><code>NULL</code></td>
               <td>主路备用模型配置。</td>
-              <td class="decision">外键关联 <code>settings_llm.name</code>；为空表示不启用备用。</td>
+              <td class="decision">外键关联 <code>settings_llm.id</code>；为空表示不启用备用。</td>
             </tr>
             <tr id="settings-route-side-default">
               <th scope="row"><code>side_default</code></th>
@@ -1480,7 +1480,7 @@
               <td class="nullable">否</td>
               <td>无</td>
               <td>旁路默认模型配置。</td>
-              <td class="decision">外键 <code>settings_llm.name</code>。</td>
+              <td class="decision">外键 <code>settings_llm.id</code>。</td>
             </tr>
             <tr id="settings-route-side-fallback">
               <th scope="row"><code>side_fallback</code></th>
@@ -1488,7 +1488,7 @@
               <td class="nullable">是</td>
               <td><code>NULL</code></td>
               <td>旁路统一备用模型配置。</td>
-              <td class="decision">外键关联 <code>settings_llm.name</code>；为空表示不启用备用。</td>
+              <td class="decision">外键关联 <code>settings_llm.id</code>；为空表示不启用备用。</td>
             </tr>
             <tr id="settings-route-rename">
               <th scope="row"><code>rename</code></th>
@@ -1496,7 +1496,7 @@
               <td class="nullable">是</td>
               <td><code>NULL</code></td>
               <td>会话命名使用的模型配置。</td>
-              <td class="decision">外键关联 <code>settings_llm.name</code>；为空时使用 <code>side_default</code>。</td>
+              <td class="decision">外键关联 <code>settings_llm.id</code>；为空时使用 <code>side_default</code>。</td>
             </tr>
             <tr id="settings-route-compact">
               <th scope="row"><code>compact</code></th>
@@ -1504,7 +1504,7 @@
               <td class="nullable">是</td>
               <td><code>NULL</code></td>
               <td>上下文压缩使用的模型配置。</td>
-              <td class="decision">外键关联 <code>settings_llm.name</code>；为空时使用 <code>side_default</code>。</td>
+              <td class="decision">外键关联 <code>settings_llm.id</code>；为空时使用 <code>side_default</code>。</td>
             </tr>
             <tr id="settings-route-commit">
               <th scope="row"><code>commit</code></th>
@@ -1512,7 +1512,7 @@
               <td class="nullable">是</td>
               <td><code>NULL</code></td>
               <td>提交说明生成使用的模型配置。</td>
-              <td class="decision">外键关联 <code>settings_llm.name</code>；为空时使用 <code>side_default</code>。</td>
+              <td class="decision">外键关联 <code>settings_llm.id</code>；为空时使用 <code>side_default</code>。</td>
             </tr>
             <tr id="settings-route-polish">
               <th scope="row"><code>polish</code></th>
@@ -1520,7 +1520,7 @@
               <td class="nullable">是</td>
               <td><code>NULL</code></td>
               <td>提示词润色使用的模型配置。</td>
-              <td class="decision">外键关联 <code>settings_llm.name</code>；为空时使用 <code>side_default</code>。</td>
+              <td class="decision">外键关联 <code>settings_llm.id</code>；为空时使用 <code>side_default</code>。</td>
             </tr>
             <tr id="settings-route-handoff">
               <th scope="row"><code>handoff</code></th>
@@ -1528,7 +1528,7 @@
               <td class="nullable">是</td>
               <td><code>NULL</code></td>
               <td>交接说明生成使用的模型配置。</td>
-              <td class="decision">外键关联 <code>settings_llm.name</code>；为空时使用 <code>side_default</code>。</td>
+              <td class="decision">外键关联 <code>settings_llm.id</code>；为空时使用 <code>side_default</code>。</td>
             </tr>
             <tr id="settings-route-suggest">
               <th scope="row"><code>suggest</code></th>
@@ -1536,7 +1536,7 @@
               <td class="nullable">是</td>
               <td><code>NULL</code></td>
               <td>下一步建议生成使用的模型配置。</td>
-              <td class="decision">外键关联 <code>settings_llm.name</code>；为空时使用 <code>side_default</code>。</td>
+              <td class="decision">外键关联 <code>settings_llm.id</code>；为空时使用 <code>side_default</code>。</td>
             </tr>
           </tbody>
         </table>

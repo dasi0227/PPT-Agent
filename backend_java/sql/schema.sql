@@ -6,11 +6,11 @@ CREATE TABLE assets (
     name TEXT NOT NULL,
     description TEXT NOT NULL,
     content TEXT NOT NULL,
-    disabled INTEGER NOT NULL DEFAULT 0,
+    enabled INTEGER NOT NULL DEFAULT 1,
     updated_at INTEGER NOT NULL,
     CHECK (length(trim(name)) BETWEEN 1 AND 80),
     CHECK (length(trim(description)) BETWEEN 1 AND 500),
-    CHECK (disabled IN (0, 1))
+    CHECK (enabled IN (0, 1))
 );
 
 CREATE TABLE tags (
@@ -168,9 +168,7 @@ CREATE TABLE settings_shortcut (
     toggle_source TEXT NOT NULL DEFAULT 'Primary+KeyI',
     switch_theme TEXT NOT NULL DEFAULT 'Primary+KeyT',
     submit_request TEXT NOT NULL DEFAULT 'Primary+Enter',
-    suggestion_1 TEXT NOT NULL DEFAULT 'Alt+Digit1',
-    suggestion_2 TEXT NOT NULL DEFAULT 'Alt+Digit2',
-    suggestion_3 TEXT NOT NULL DEFAULT 'Alt+Digit3',
+    select_suggestion TEXT NOT NULL DEFAULT 'Option',
     CHECK (id = 1),
     CHECK (length(command_trigger) = 1),
     CHECK (length(reference_trigger) = 1),
@@ -190,8 +188,10 @@ CREATE TABLE settings_shortcut (
 );
 
 CREATE TABLE settings_llm (
-    name TEXT NOT NULL PRIMARY KEY,
+    id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+    name TEXT NOT NULL UNIQUE,
     protocol TEXT NOT NULL,
+    provider TEXT NOT NULL CHECK (provider IN ('deepseek', 'kimi', 'mimo', 'gpt', 'claude', 'gemini', 'qwen', 'minimax', 'glm', 'grok')),
     base_url TEXT NOT NULL,
     model TEXT NOT NULL,
     key TEXT NOT NULL,
@@ -203,16 +203,16 @@ CREATE TABLE settings_llm (
 
 CREATE TABLE settings_route (
     id INTEGER NOT NULL PRIMARY KEY DEFAULT 1,
-    main_default TEXT NOT NULL REFERENCES settings_llm(name) ON UPDATE CASCADE ON DELETE RESTRICT,
-    main_fallback TEXT DEFAULT NULL REFERENCES settings_llm(name) ON UPDATE CASCADE ON DELETE RESTRICT,
-    side_default TEXT NOT NULL REFERENCES settings_llm(name) ON UPDATE CASCADE ON DELETE RESTRICT,
-    side_fallback TEXT DEFAULT NULL REFERENCES settings_llm(name) ON UPDATE CASCADE ON DELETE RESTRICT,
-    rename TEXT DEFAULT NULL REFERENCES settings_llm(name) ON UPDATE CASCADE ON DELETE RESTRICT,
-    compact TEXT DEFAULT NULL REFERENCES settings_llm(name) ON UPDATE CASCADE ON DELETE RESTRICT,
-    "commit" TEXT DEFAULT NULL REFERENCES settings_llm(name) ON UPDATE CASCADE ON DELETE RESTRICT,
-    polish TEXT DEFAULT NULL REFERENCES settings_llm(name) ON UPDATE CASCADE ON DELETE RESTRICT,
-    handoff TEXT DEFAULT NULL REFERENCES settings_llm(name) ON UPDATE CASCADE ON DELETE RESTRICT,
-    suggest TEXT DEFAULT NULL REFERENCES settings_llm(name) ON UPDATE CASCADE ON DELETE RESTRICT,
+    main_default TEXT NOT NULL REFERENCES settings_llm(id) DEFERRABLE INITIALLY DEFERRED,
+    main_fallback TEXT DEFAULT NULL REFERENCES settings_llm(id) DEFERRABLE INITIALLY DEFERRED,
+    side_default TEXT NOT NULL REFERENCES settings_llm(id) DEFERRABLE INITIALLY DEFERRED,
+    side_fallback TEXT DEFAULT NULL REFERENCES settings_llm(id) DEFERRABLE INITIALLY DEFERRED,
+    rename TEXT DEFAULT NULL REFERENCES settings_llm(id) DEFERRABLE INITIALLY DEFERRED,
+    compact TEXT DEFAULT NULL REFERENCES settings_llm(id) DEFERRABLE INITIALLY DEFERRED,
+    "commit" TEXT DEFAULT NULL REFERENCES settings_llm(id) DEFERRABLE INITIALLY DEFERRED,
+    polish TEXT DEFAULT NULL REFERENCES settings_llm(id) DEFERRABLE INITIALLY DEFERRED,
+    handoff TEXT DEFAULT NULL REFERENCES settings_llm(id) DEFERRABLE INITIALLY DEFERRED,
+    suggest TEXT DEFAULT NULL REFERENCES settings_llm(id) DEFERRABLE INITIALLY DEFERRED,
     CHECK (id = 1)
 );
 

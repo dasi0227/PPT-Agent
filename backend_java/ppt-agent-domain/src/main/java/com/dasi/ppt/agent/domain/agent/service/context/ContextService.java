@@ -12,6 +12,10 @@ import com.dasi.ppt.agent.domain.agent.service.run.RunState;
 import com.dasi.ppt.agent.domain.asset.service.AssetService;
 import com.dasi.ppt.agent.domain.project.model.Deck;
 import com.dasi.ppt.agent.domain.project.service.DeckService;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.stereotype.Service;
@@ -31,12 +35,15 @@ public class ContextService {
     private final PlanPromptAssembler planPromptAssembler;
     private final CreatePromptAssembler createPromptAssembler;
 
-    public record Turn(
-            RunState state,
-            List<Message> history,
-            List<InstructionReference> references,
-            Deck deck,
-            List<ToolDefinition> tools
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class Turn {
+        private RunState state;
+        private List<Message> history;
+        private List<InstructionReference> references;
+        private Deck deck;
+        private List<ToolDefinition> tools;
     }
 }

@@ -12,8 +12,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 import tools.jackson.databind.ObjectMapper;
 
-import java.util.Optional;
-
 @Repository
 @RequiredArgsConstructor
 public class RunRepository implements IRunRepository {
@@ -27,7 +25,7 @@ public class RunRepository implements IRunRepository {
     private final ObjectMapper objectMapper;
 
     @Override
-    public Optional<Run> findRun(String runId) {
+    public Run findRun(String runId) {
         throw new UnsupportedOperationException();
     }
 }

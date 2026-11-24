@@ -1,4 +1,14 @@
 package com.dasi.ppt.agent.interfaces.controller.execution.vo;
 
-public record AppendRunVo(String runId) {
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+@Builder
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public final class AppendRunVo {
+    private String runId;
 }

@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.infrastructure.gateway;
 
-import com.dasi.ppt.agent.domain.project.gateway.IFileGateway;
+import com.dasi.ppt.agent.domain.gateway.IFileGateway;
 import com.dasi.ppt.agent.infrastructure.persistence.filesystem.FileStorer;
 import com.dasi.ppt.agent.infrastructure.persistence.filesystem.PathResolver;
 import lombok.RequiredArgsConstructor;

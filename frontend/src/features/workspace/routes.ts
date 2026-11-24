@@ -2,7 +2,7 @@ export const homeRoute = '/';
 export type RepositorySection = 'theme' | 'component' | 'skill' | 'snippet';
 
 export function repositoryRoute(section: RepositorySection): string {
-  return `/warehouse/${section}`;
+  return `/assets/${section}`;
 }
 
 export function projectRoute(projectId: string): string {

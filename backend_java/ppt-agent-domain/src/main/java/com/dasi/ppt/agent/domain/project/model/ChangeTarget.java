@@ -1,10 +1,19 @@
 package com.dasi.ppt.agent.domain.project.model;
 
 import com.dasi.ppt.agent.domain.project.model.enumeration.ChangePart;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
-public record ChangeTarget(
-        ChangePart part,
-        String path,
-        String slideId
-) {
+@Builder
+@Getter
+@EqualsAndHashCode
+@AllArgsConstructor
+@NoArgsConstructor
+public final class ChangeTarget {
+    private ChangePart part;
+    private String path;
+    private String slideId;
 }

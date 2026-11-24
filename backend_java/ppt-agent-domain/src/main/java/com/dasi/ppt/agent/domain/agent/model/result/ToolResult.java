@@ -2,18 +2,25 @@ package com.dasi.ppt.agent.domain.agent.model.result;
 
 import com.dasi.ppt.agent.domain.agent.model.enumeration.ToolResultStatus;
 import com.dasi.ppt.agent.domain.project.model.DeckChange;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 import tools.jackson.databind.JsonNode;
 
 import java.util.List;
 
-public record ToolResult(
-        ToolResultStatus status,
-        JsonNode content,
-        String text,
-        String code,
-        String correction,
-        List<DeckChange> changes,
-        JsonNode interaction,
-        PreviewAssessment preview
-) {
+@Builder
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public final class ToolResult {
+    private ToolResultStatus status;
+    private JsonNode content;
+    private String text;
+    private String code;
+    private String correction;
+    private List<DeckChange> changes;
+    private JsonNode interaction;
+    private PreviewAssessment preview;
 }

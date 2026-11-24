@@ -4,15 +4,22 @@ import com.dasi.ppt.agent.domain.agent.model.enumeration.InstructionReferenceTyp
 import com.dasi.ppt.agent.domain.agent.model.enumeration.RunMode;
 import com.dasi.ppt.agent.domain.project.model.enumeration.DecorationPosition;
 import com.dasi.ppt.agent.domain.project.model.enumeration.DecorationType;
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonSetter;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.util.List;
 
+@Builder
 @Getter
 @Setter
+@AllArgsConstructor
+@NoArgsConstructor(onConstructor_ = @JsonCreator)
 public class AppendRunDto {
 
     private String sessionId;
@@ -29,81 +36,113 @@ public class AppendRunDto {
     @Setter(lombok.AccessLevel.NONE)
     private boolean scopeProvided;
 
+    public static class AppendRunDtoBuilder {
+        public AppendRunDtoBuilder scope(RunScopeDto scope) {
+            this.scope = scope;
+            this.scopeProvided = true;
+            return this;
+        }
+    }
+
     @JsonSetter("scope")
     public void setScope(RunScopeDto scope) {
         this.scopeProvided = true;
         this.scope = scope;
     }
 
-    public record RunScopeDto(
-            String currentSlideId,
-            List<String> slideIds,
-            List<String> sectionIds,
-            List<String> subsectionIds
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class RunScopeDto {
+        private String currentSlideId;
+        private List<String> slideIds;
+        private List<String> sectionIds;
+        private List<String> subsectionIds;
     }
 
-    public record InstructionReferenceDto(
-            InstructionReferenceType type,
-            String assetId,
-            String slideId,
-            String attachmentId,
-            String originalName,
-            String selectionId,
-            Integer markerNo,
-            String html,
-            String htmlHash,
-            String comment,
-            DomRegionDto region
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class InstructionReferenceDto {
+        private InstructionReferenceType type;
+        private String assetId;
+        private String slideId;
+        private String attachmentId;
+        private String originalName;
+        private String selectionId;
+        private Integer markerNo;
+        private String html;
+        private String htmlHash;
+        private String comment;
+        private DomRegionDto region;
     }
 
-    public record DomRegionDto(
-            String type,
-            CanvasRectDto rect,
-            List<DomTargetDto> targets,
-            List<DomDecorationDto> decorations
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class DomRegionDto {
+        private String type;
+        private CanvasRectDto rect;
+        private List<DomTargetDto> targets;
+        private List<DomDecorationDto> decorations;
     }
 
-    public record DomTargetDto(
-            String targetId,
-            String tag,
-            DomFingerprintDto fingerprint,
-            CanvasRectDto rect
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class DomTargetDto {
+        private String targetId;
+        private String tag;
+        private DomFingerprintDto fingerprint;
+        private CanvasRectDto rect;
     }
 
-    public record DomDecorationDto(
-            DecorationType type,
-            DecorationPosition placement,
-            String text,
-            CanvasRectDto rect
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class DomDecorationDto {
+        private DecorationType type;
+        private DecorationPosition placement;
+        private String text;
+        private CanvasRectDto rect;
     }
 
-    public record DomFingerprintDto(
-            String tag,
-            int siblingIndex,
-            String stableId,
-            List<String> classes,
-            List<DomAncestorDto> ancestors
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class DomFingerprintDto {
+        private String tag;
+        private int siblingIndex;
+        private String stableId;
+        private List<String> classes;
+        private List<DomAncestorDto> ancestors;
     }
 
-    public record DomAncestorDto(
-            String tag,
-            String stableId,
-            String classSummary,
-            int siblingIndex
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class DomAncestorDto {
+        private String tag;
+        private String stableId;
+        private String classSummary;
+        private int siblingIndex;
     }
 
-    public record CanvasRectDto(
-            double x,
-            double y,
-            double width,
-            double height
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class CanvasRectDto {
+        private double x;
+        private double y;
+        private double width;
+        private double height;
     }
 }

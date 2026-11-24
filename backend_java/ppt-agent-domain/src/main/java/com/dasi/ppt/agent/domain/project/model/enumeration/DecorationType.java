@@ -1,14 +1,29 @@
 package com.dasi.ppt.agent.domain.project.model.enumeration;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.dasi.ppt.agent.domain.shared.exception.InvalidEnumValueException;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 
+@Getter
+@AllArgsConstructor
 public enum DecorationType {
-    @JsonProperty("slide_pagination")
-    SLIDE_PAGINATION,
-    @JsonProperty("deck_title")
-    DECK_TITLE,
-    @JsonProperty("section_title")
-    SECTION_TITLE,
-    @JsonProperty("logo")
-    LOGO
+    SLIDE_PAGINATION("slide_pagination"),
+    DECK_TITLE("deck_title"),
+    SECTION_TITLE("section_title"),
+    LOGO("logo");
+
+    @JsonValue
+    private final String value;
+
+    @JsonCreator
+    public static DecorationType fromValue(String value) {
+        for (DecorationType candidate : values()) {
+            if (candidate.value.equals(value)) {
+                return candidate;
+            }
+        }
+        throw new InvalidEnumValueException(DecorationType.class, value);
+    }
 }

@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.domain.agent.service.tool.builtin;
 
-import com.dasi.ppt.agent.domain.agent.gateway.IJevGateway;
+import com.dasi.ppt.agent.domain.gateway.IJevGateway;
 import com.dasi.ppt.agent.domain.agent.model.ToolCall;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.ToolName;
 import com.dasi.ppt.agent.domain.agent.model.result.ToolResult;
@@ -11,6 +11,10 @@ import com.dasi.ppt.agent.domain.project.model.Constraints;
 import com.dasi.ppt.agent.domain.project.model.Meta;
 import com.dasi.ppt.agent.domain.project.model.Spec;
 import com.dasi.ppt.agent.domain.project.service.SlidePreviewService;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -34,12 +38,15 @@ public class RenderSlideTool implements AgentTool {
         throw new UnsupportedOperationException();
     }
 
-    public record PreviewInput(
-            Meta meta,
-            Constraints constraints,
-            Spec spec,
-            String html,
-            byte[] screenshot
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class PreviewInput {
+        private Meta meta;
+        private Constraints constraints;
+        private Spec spec;
+        private String html;
+        private byte[] screenshot;
     }
 }

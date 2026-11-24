@@ -7,7 +7,69 @@
         <result column="name" property="name"/>
         <result column="description" property="description"/>
         <result column="content" property="content"/>
-        <result column="disabled" property="disabled"/>
+        <result column="enabled" property="enabled"/>
         <result column="updated_at" property="updatedAt"/>
+        <collection property="tagIds" ofType="string" notNullColumn="tag_id">
+            <result column="tag_id"/>
+        </collection>
     </resultMap>
+
+    <sql id="summaryColumns">
+        a.id, a.type, a.name, a.description, a.enabled, a.updated_at, link.tag_id
+    </sql>
+
+    <select id="list" resultMap="assetPo" resultOrdered="true">
+        SELECT <include refid="summaryColumns"/>
+        FROM assets a
+        LEFT JOIN asset_tags link ON link.asset_id = a.id
+        WHERE a.type = #{type}
+        <if test="query != ''">
+            AND (instr(lower(a.name), lower(#{query})) > 0
+                OR instr(lower(a.description), lower(#{query})) > 0
+                OR (a.type = 'snippet' AND instr(lower(a.content), lower(#{query})) > 0)
+                OR EXISTS (
+                    SELECT 1 FROM asset_tags atag
+                    JOIN tags t ON t.id = atag.tag_id
+                    WHERE atag.asset_id = a.id AND instr(lower(t.name), lower(#{query})) > 0
+                ))
+        </if>
+        ORDER BY a.updated_at DESC, a.name, a.id, link.tag_id
+    </select>
+
+    <select id="find" resultMap="assetPo">
+        SELECT <include refid="summaryColumns"/>, a.content
+        FROM assets a
+        LEFT JOIN asset_tags link ON link.asset_id = a.id
+        WHERE a.id = #{id}
+        ORDER BY link.tag_id
+    </select>
+
+    <select id="listNames" resultType="string">
+        SELECT name FROM assets WHERE type = #{type}
+        <if test="excludeAssetId != null">AND id != #{excludeAssetId}</if>
+    </select>
+
+    <insert id="insert">
+        INSERT INTO assets (id, type, name, description, content, enabled, updated_at)
+        VALUES (#{id}, #{type}, #{name}, #{description}, #{content}, #{enabled}, #{updatedAt})
+    </insert>
+
+    <update id="update">
+        UPDATE assets SET name = #{name}, description = #{description}, content = #{content},
+                          enabled = #{enabled}, updated_at = #{updatedAt}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateTimestampsByTag">
+        UPDATE assets SET updated_at = MAX(updated_at + 1, #{updatedAt})
+        WHERE id IN (SELECT asset_id FROM asset_tags WHERE tag_id = #{tagId})
+    </update>
+
+    <select id="isUsed" resultType="boolean">
+        SELECT EXISTS (SELECT 1 FROM projects WHERE theme = #{id})
+    </select>
+
+    <delete id="delete">
+        DELETE FROM assets WHERE id = #{id}
+    </delete>
 </mapper>

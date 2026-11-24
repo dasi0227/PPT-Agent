@@ -2,23 +2,33 @@ package com.dasi.ppt.agent.domain.project.model;
 
 import com.dasi.ppt.agent.domain.project.model.enumeration.DecorationPosition;
 import com.dasi.ppt.agent.domain.project.model.enumeration.DecorationType;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.util.List;
 import java.util.Map;
 
-public record ExportSnapshot(
-        String projectName,
-        String deckTitle,
-        List<Page> pages,
-        String themeCss,
-        Map<DecorationType, DecorationPosition> positions,
-        byte[] logo
-) {
+@Builder
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public final class ExportSnapshot {
+    private String projectName;
+    private String deckTitle;
+    private List<Page> pages;
+    private String themeCss;
+    private Map<DecorationType, DecorationPosition> positions;
+    private byte[] logo;
 
-    public record Page(
-            String title,
-            String html,
-            String sectionTitle
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class Page {
+        private String title;
+        private String html;
+        private String sectionTitle;
     }
 }

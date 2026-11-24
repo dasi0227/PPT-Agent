@@ -32,15 +32,14 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$ROOT_DIR/backend_go"
 FRONTEND_DIR="$ROOT_DIR/frontend"
 RENDERER_DIR="$BACKEND_DIR/render-worker"
-COMMAND_WORKER_DIR="$BACKEND_DIR/command-worker"
+JAVA_DIR="$ROOT_DIR/backend_java"
+JAVA_JAR="ppt-agent-bootstrap/target/ppt-agent.jar"
 WORK_ROOT="$HOME/.dasi/ppt"
 DB_PATH="$WORK_ROOT/db/ppt.db"
-SQL_DIR="$ROOT_DIR/backend_java/sql"
-if [ "$RUN_MODE" = "web" ]; then
-  BACKEND_ADDR="$(cd "$BACKEND_DIR" && go run ./cmd/server --print-address)"
-  BACKEND_PORT="${BACKEND_ADDR##*:}"
-fi
-FRONTEND_URL="http://localhost:5173"
+SQL_DIR="$JAVA_DIR/sql"
+BACKEND_PORT=8787
+BACKEND_ADDR="127.0.0.1:$BACKEND_PORT"
+FRONTEND_URL="http://127.0.0.1:5173"
 LOG_DIR="$ROOT_DIR/tmp/run"
 mkdir -p "$LOG_DIR"
 
@@ -130,7 +129,7 @@ start_frontend() {
   fi
   [ "$frontend_interrupted" = 0 ] || exit 1
   # Start Vite directly so the PID file owns the server, not a pnpm wrapper.
-  nohup node "$FRONTEND_DIR/node_modules/vite/bin/vite.js" --port 5173 --strictPort >"$LOG_DIR/frontend.log" 2>&1 &
+  PPT_JAVA_ORIGIN="http://$BACKEND_ADDR" nohup node "$FRONTEND_DIR/node_modules/vite/bin/vite.js" --host 127.0.0.1 --port 5173 --strictPort >"$LOG_DIR/frontend.log" 2>&1 &
   frontend_child_pid=$!
   printf '%s\n' "$frontend_child_pid" >"$LOG_DIR/frontend.pid"
   [ "$frontend_interrupted" = 0 ] || exit 1
@@ -140,25 +139,16 @@ start_frontend() {
 }
 
 start_backend() {
-  if ! (
-    cd "$RENDERER_DIR" || exit 1
-    [ -f node_modules/playwright-core/package.json ] || pnpm install --frozen-lockfile --ignore-scripts || exit 1
-    cd "$COMMAND_WORKER_DIR" || exit 1
-    npm ci --omit=dev --ignore-scripts --no-audit --no-fund || exit 1
-  ) >"$LOG_DIR/backend-dependencies.log" 2>&1; then
-    print_result "$STEP_3" '❌' '启动失败:依赖准备失败（日志:tmp/run/backend-dependencies.log）'
+  if ! (cd "$JAVA_DIR" && mvn -q -DskipTests package) >"$LOG_DIR/backend-build.log" 2>&1; then
+    print_result "$STEP_3" '❌' 'Java 构建失败（日志:tmp/run/backend-build.log）'
     return 1
   fi
-  if ! (
-    cd "$BACKEND_DIR" || exit 1
-    PPT_COMMAND_WORKER="$COMMAND_WORKER_DIR/worker.mjs" nohup go run ./cmd/server >"$LOG_DIR/backend.log" 2>&1 &
+  (
+    cd "$JAVA_DIR" || exit 1
+    nohup java -jar "$JAVA_JAR" --server.port="$BACKEND_PORT" --ppt.database="$DB_PATH" </dev/null >"$LOG_DIR/backend.log" 2>&1 &
     printf '%s\n' "$!" >"$LOG_DIR/backend.pid"
-  ); then
-    print_result "$STEP_3" '❌' '启动失败（日志:tmp/run/backend.log）'
-    return 1
-  fi
-  # Backend readiness already includes its persistent render worker's health.
-  if wait_for_url "http://$BACKEND_ADDR/api/v1/healthz" "$(<"$LOG_DIR/backend.pid")"; then
+  ) || return 1
+  if wait_for_url "http://$BACKEND_ADDR/api/healthz" "$(<"$LOG_DIR/backend.pid")"; then
     print_result "$STEP_3" '✅' "port=$BACKEND_PORT pid=$(<"$LOG_DIR/backend.pid")"
   else
     print_result "$STEP_3" '❌' '启动失败:进程退出或健康检查超时（日志:tmp/run/backend.log）'
@@ -211,13 +201,24 @@ close_running_processes() {
       esac
     done
   fi
+  # 同时识别手动从 backend_java 启动、尚无 PID 文件的项目实例。
+  for pid in $(lsof -nP -tiTCP:"$BACKEND_PORT" -sTCP:LISTEN 2>/dev/null || true); do
+    command="$(ps -p "$pid" -o command= || true)"
+    cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' || true)"
+    if [ "$cwd" = "$JAVA_DIR" ]; then
+      case " $command " in
+        *" -jar $JAVA_JAR "*|*" -jar $JAVA_DIR/$JAVA_JAR "*) pids="$pids $pid" ;;
+      esac
+    fi
+  done
   for pid in $(lsof -nP -tiTCP:5173 -sTCP:LISTEN 2>/dev/null || true); do
     command="$(ps -p "$pid" -o command= || true)"
     case "$command" in
       *"$FRONTEND_DIR/"*vite*) pids="$pids $pid" ;;
     esac
   done
-  for pid in $(recorded_process_pid "$LOG_DIR/backend.pid" "$BACKEND_DIR") \
+  for pid in $(recorded_process_pid "$LOG_DIR/backend.pid" "$JAVA_DIR") \
+    $(recorded_process_pid "$LOG_DIR/backend.pid" "$BACKEND_DIR") \
     $(recorded_process_pid "$LOG_DIR/frontend.pid" "$FRONTEND_DIR"); do
     pids="$pids $pid"
   done
@@ -341,7 +342,7 @@ start_frontend >"$LOG_DIR/frontend-startup.log" 2>&1 &
 frontend_job=$!
 initialize_project || exit 1
 start_backend || exit 1
-if wait "$frontend_job" && wait_for_url "$FRONTEND_URL" "$(<"$LOG_DIR/frontend.pid")"; then
+if wait "$frontend_job" && wait_for_url "$FRONTEND_URL/api/healthz" "$(<"$LOG_DIR/frontend.pid")"; then
   print_result "$STEP_4" '✅' "port=5173 pid=$(<"$LOG_DIR/frontend.pid")"
 else
   print_result "$STEP_4" '❌' '启动失败（日志:tmp/run/frontend-startup.log、tmp/run/frontend.log）'

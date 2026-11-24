@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.domain.agent.service.run;
 
-import com.dasi.ppt.agent.domain.agent.gateway.ILlmGateway;
+import com.dasi.ppt.agent.domain.gateway.ILlmGateway;
 import com.dasi.ppt.agent.domain.agent.service.command.handler.CompactCommandHandler;
 import com.dasi.ppt.agent.domain.agent.service.context.ContextService;
 import com.dasi.ppt.agent.domain.agent.service.hook.HookDispatcher;

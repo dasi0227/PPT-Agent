@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.domain.agent.service.tool.builtin;
 
-import com.dasi.ppt.agent.domain.agent.gateway.ILlmGateway;
+import com.dasi.ppt.agent.domain.gateway.ILlmGateway;
 import com.dasi.ppt.agent.domain.agent.model.ToolCall;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.ToolName;
 import com.dasi.ppt.agent.domain.agent.model.result.ToolResult;
@@ -9,6 +9,10 @@ import com.dasi.ppt.agent.domain.agent.service.run.RunState;
 import com.dasi.ppt.agent.domain.agent.service.tool.AgentTool;
 import com.dasi.ppt.agent.domain.project.model.Deck;
 import com.dasi.ppt.agent.domain.project.service.DeckService;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -32,10 +36,13 @@ public class ReviewPptTool implements AgentTool {
         throw new UnsupportedOperationException();
     }
 
-    public record Input(
-            RunState state,
-            String requirements,
-            Deck deck
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class Input {
+        private RunState state;
+        private String requirements;
+        private Deck deck;
     }
 }

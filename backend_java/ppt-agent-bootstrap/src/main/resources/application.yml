@@ -10,11 +10,11 @@ spring:
   profiles:
     active: dev
   datasource:
-    url: "jdbc:sqlite:file:${ppt.database}?mode=rw"
+    url: "jdbc:sqlite:file:${ppt.database}?mode=rw&transaction_mode=IMMEDIATE"
     driver-class-name: org.sqlite.JDBC
     hikari:
       connection-init-sql: PRAGMA foreign_keys = ON
-      connection-timeout: 1500
+      connection-timeout: 3000
       initialization-fail-timeout: -1
       minimum-idle: 0
 

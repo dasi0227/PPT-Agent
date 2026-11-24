@@ -129,7 +129,7 @@
 ## assets
 
 - `content` 保存四类资产的正文原文。
-- `snippet` 名称按去首尾空白后的 Unicode 小写值比较，在同类资产中唯一，其余资产名称允许重复。
+- 资产名称按去首尾空白后的 Unicode 小写值比较，在同一 `type` 内唯一，不同类型允许同名。
 - 正文、元数据、标签关系与 `updated_at` 的变更同事务提交，同值保存保留原时间。
 - 已被 `projects.theme` 引用的主题限制删除。
 
@@ -147,26 +147,26 @@
 ## settings_fileopen
 
 - 以 `id=1` 保存全局文件打开设置。
-- `custom_apps` 按添加顺序保存规范化的应用绝对路径，排除重复项和内置应用。
-- 自定义打开方式引用的路径必须存在于 `custom_apps`。
-- 移除应用时，同事务将引用它的 `default_open` 改为 `system`，`json_open` 和 `html_open` 改为 `inherit`。
+- `custom_apps` 保存规范化的应用绝对路径，Windows 使用 `.exe`，其他平台使用 `.app`。重复路径只保留首次出现的一项。
+- 指定应用时，保存其在 `custom_apps` 中登记的路径。合法路径未登记时，`default_open` 保存为 `system`，`json_open`、`html_open` 保存为 `inherit`。
 
 ## settings_shortcut
 
 - 以 `id=1` 保存全局快捷键设置。
-- 快捷键按 `Primary`、`Alt`、`Shift`、`KeyboardEvent.code` 顺序用 `+` 连接，仅存启用的修饰键，字符串中不含空格。
-- `Primary` 表示 Command 或 Ctrl，`Alt` 表示 Option 或 Alt。
+- 操作快捷键按提交值保存，格式为单个修饰键加 `+` 加普通键的 `KeyboardEvent.code`。修饰键可取 `Primary`（Command 或 Ctrl）、`Option` 或 `Alt`。
+- `select_suggestion` 只存共用修饰键前缀，默认值为 `Option`。数字 1、2、3 由建议序号决定。检查组合键冲突时，`Option` 与 `Alt` 视为同一修饰键。
 - 交换多项快捷键或重置默认值时，在同一事务内更新原记录。
 
 ## settings_llm
 
-- `name` 为模型配置主键，至少保留一条模型配置。
+- `id` 为模型配置主键，由服务端生成唯一字符串。每个配置的 ID 固定，`name` 可修改且全局唯一，至少保留一条模型配置。
+- `provider` 保存用户选择的模型品牌，取值为deepseek、kimi、mimo、gpt、claude、gemini、qwen、minimax、glm、grok。
 - `key` 必须为非空白字符串。
 
 ## settings_route
 
-- 以 `id=1` 保存全局路由，与 `settings_llm` 在同一事务校验并保存。
-- 路由引用 `settings_llm.name`，模型改名时级联更新，仍被引用的配置限制删除。
+- 以 `id=1` 保存全局路由。一次只更新指定的路由字段，目标模型的存在性校验与路由写入在同一事务完成。
+- 各路由字段引用 `settings_llm.id`。事务提交时校验外键。模型改名后路由仍指向原配置；删除单个模型时，在同一事务确认它未被使用且至少还剩一个模型。
 
 ## settings_behavior
 

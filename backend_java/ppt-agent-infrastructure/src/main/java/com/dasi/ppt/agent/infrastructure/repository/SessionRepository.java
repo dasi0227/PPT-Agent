@@ -14,7 +14,6 @@ import org.springframework.stereotype.Repository;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
-import java.util.Optional;
 
 @Repository
 @RequiredArgsConstructor
@@ -29,7 +28,7 @@ public class SessionRepository implements ISessionRepository {
     private final ObjectMapper objectMapper;
 
     @Override
-    public Optional<Session> findSession(String sessionId) {
+    public Session findSession(String sessionId) {
         throw new UnsupportedOperationException();
     }
 

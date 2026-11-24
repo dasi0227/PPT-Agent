@@ -44,8 +44,23 @@ export function ShortcutSettingsPanel({ refreshKey, onDirtyChange, onSavingChang
 
   const change = (id: string, binding: ShortcutBinding) => {
     clearShortcutResetUndo();
+    const row = shortcutCatalog.find(def => def.id === id);
+    const suggestion = row?.field === 'select_suggestion';
+    if (suggestion && binding.code !== row.default.code) {
+      setError('建议快捷键需使用对应数字键');
+      return;
+    }
     setError('');
-    setDraft(current => current ? { ...current, bindings: { ...current.bindings, [id]: binding } } : current);
+    setDraft(current => {
+      if (!current) return current;
+      const next = { ...current.bindings, [id]: binding };
+      if (suggestion) {
+        for (const def of shortcutCatalog.filter(item => item.field === 'select_suggestion')) {
+          next[def.id] = { ...binding, code: def.default.code };
+        }
+      }
+      return { ...current, bindings: next };
+    });
   };
   useEffect(() => {
     if (!draft || !dirty || invalid || stale || saving || loading || error) return;

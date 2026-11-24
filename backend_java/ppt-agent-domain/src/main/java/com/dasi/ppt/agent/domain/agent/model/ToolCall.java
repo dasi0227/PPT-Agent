@@ -1,8 +1,16 @@
 package com.dasi.ppt.agent.domain.agent.model;
 
-public record ToolCall(
-        String toolCallId,
-        String name,
-        String arguments
-) {
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+@Builder
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public final class ToolCall {
+    private String toolCallId;
+    private String name;
+    private String arguments;
 }

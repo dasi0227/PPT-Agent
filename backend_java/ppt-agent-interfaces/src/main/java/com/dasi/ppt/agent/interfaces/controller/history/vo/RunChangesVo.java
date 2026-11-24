@@ -7,75 +7,117 @@ import com.dasi.ppt.agent.domain.project.model.enumeration.DiffType;
 import com.dasi.ppt.agent.domain.project.model.enumeration.OutlineNodeType;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.util.List;
 
-public record RunChangesVo(List<RunChangeDetailVo> items) {
+@Builder
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public final class RunChangesVo {
+    private List<RunChangeDetailVo> items;
 
+    @Builder
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record ChangeTargetVo(
-            ChangePart part,
-            String slideId,
-            String path
-    ) {
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class ChangeTargetVo {
+        private ChangePart part;
+        private String slideId;
+        private String path;
     }
 
-    public record RunChangeDetailVo(
-            ChangeTargetVo target,
-            ChangeStatus status,
-            @JsonUnwrapped ChangeDiffVo diff
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class RunChangeDetailVo {
+        private ChangeTargetVo target;
+        private ChangeStatus status;
+        @JsonUnwrapped
+        private ChangeDiffVo diff;
     }
 
+    @Builder
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record ChangeDiffVo(
-            DiffType type,
-            List<FieldDiffVo> fields,
-            List<OutlineDiffGroupVo> groups,
-            List<TextDiffHunkVo> hunks,
-            String reason
-    ) {
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class ChangeDiffVo {
+        private DiffType type;
+        private List<FieldDiffVo> fields;
+        private List<OutlineDiffGroupVo> groups;
+        private List<TextDiffHunkVo> hunks;
+        private String reason;
     }
 
+    @Builder
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record FieldDiffVo(
-            String field,
-            String label,
-            List<FieldDiffRowVo> rows
-    ) {
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class FieldDiffVo {
+        private String field;
+        private String label;
+        private List<FieldDiffRowVo> rows;
     }
 
-    public record FieldDiffRowVo(DiffRowType type, String value) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class FieldDiffRowVo {
+        private DiffRowType type;
+        private String value;
     }
 
-    public record OutlineDiffGroupVo(List<OutlineDiffRowVo> rows) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class OutlineDiffGroupVo {
+        private List<OutlineDiffRowVo> rows;
     }
 
+    @Builder
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record OutlineDiffRowVo(
-            DiffRowType type,
-            OutlineNodeType node,
-            int depth,
-            String title,
-            Integer order
-    ) {
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class OutlineDiffRowVo {
+        private DiffRowType type;
+        private OutlineNodeType node;
+        private int depth;
+        private String title;
+        private Integer order;
     }
 
-    public record TextDiffHunkVo(
-            int oldStart,
-            int oldCount,
-            int newStart,
-            int newCount,
-            List<TextDiffRowVo> rows
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class TextDiffHunkVo {
+        private int oldStart;
+        private int oldCount;
+        private int newStart;
+        private int newCount;
+        private List<TextDiffRowVo> rows;
     }
 
+    @Builder
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record TextDiffRowVo(
-            DiffRowType type,
-            String text,
-            Integer oldLine,
-            Integer newLine
-    ) {
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class TextDiffRowVo {
+        private DiffRowType type;
+        private String text;
+        private Integer oldLine;
+        private Integer newLine;
     }
 }

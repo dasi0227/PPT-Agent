@@ -1,12 +1,19 @@
 package com.dasi.ppt.agent.domain.agent.model.event;
 
-import com.dasi.ppt.agent.domain.setting.model.RunConfig;
+import com.dasi.ppt.agent.domain.agent.model.RunConfig;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
-public record RunCompletedEvent(
-        String projectId,
-        String sessionId,
-        String runId,
-        String lastInstructionId,
-        RunConfig config
-) {
+@Builder
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public final class RunCompletedEvent {
+    private String projectId;
+    private String sessionId;
+    private String runId;
+    private String lastInstructionId;
+    private RunConfig config;
 }

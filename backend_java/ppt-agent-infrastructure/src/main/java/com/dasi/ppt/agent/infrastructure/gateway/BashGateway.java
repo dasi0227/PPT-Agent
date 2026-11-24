@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.infrastructure.gateway;
 
-import com.dasi.ppt.agent.domain.agent.gateway.IBashGateway;
+import com.dasi.ppt.agent.domain.gateway.IBashGateway;
 import com.dasi.ppt.agent.infrastructure.persistence.filesystem.PathResolver;
 import com.dasi.ppt.agent.infrastructure.properties.SandboxProperties;
 import lombok.RequiredArgsConstructor;

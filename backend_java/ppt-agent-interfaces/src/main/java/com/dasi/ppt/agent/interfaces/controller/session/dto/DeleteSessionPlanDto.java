@@ -1,4 +1,15 @@
 package com.dasi.ppt.agent.interfaces.controller.session.dto;
 
-public record DeleteSessionPlanDto(String sessionId, String expectedRevision) {
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+@Builder
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public final class DeleteSessionPlanDto {
+    private String sessionId;
+    private String expectedRevision;
 }

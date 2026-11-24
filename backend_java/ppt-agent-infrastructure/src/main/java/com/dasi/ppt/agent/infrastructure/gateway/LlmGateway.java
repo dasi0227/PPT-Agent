@@ -1,9 +1,9 @@
 package com.dasi.ppt.agent.infrastructure.gateway;
 
-import com.dasi.ppt.agent.domain.agent.gateway.ILlmGateway;
+import com.dasi.ppt.agent.domain.gateway.ILlmGateway;
 import com.dasi.ppt.agent.domain.agent.model.LlmRequest;
 import com.dasi.ppt.agent.domain.agent.model.LlmResponse;
-import com.dasi.ppt.agent.domain.setting.model.entity.LlmConfig;
+import com.dasi.ppt.agent.domain.setting.model.entity.ModelConfigSettings;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.anthropic.AnthropicChatModel;
 import org.springframework.ai.openai.responses.OpenAiResponsesChatModel;
@@ -20,7 +20,7 @@ public class LlmGateway implements ILlmGateway {
     private final ObjectProvider<AnthropicChatModel.Builder> anthropicBuilders;
 
     @Override
-    public LlmResponse call(LlmRequest request, LlmConfig model, LlmConfig fallback, BooleanSupplier cancelled) {
+    public LlmResponse call(LlmRequest request, ModelConfigSettings model, ModelConfigSettings fallback, BooleanSupplier cancelled) {
         throw new UnsupportedOperationException();
     }
 }

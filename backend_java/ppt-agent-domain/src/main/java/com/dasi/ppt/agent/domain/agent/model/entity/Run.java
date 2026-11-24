@@ -4,26 +4,33 @@ import com.dasi.ppt.agent.domain.agent.model.RunScope;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.RunMode;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.RunStatus;
 import com.dasi.ppt.agent.domain.project.model.DeckChange;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import tools.jackson.databind.JsonNode;
 
 import java.util.List;
 
-public record Run(
-        String id,
-        String sessionId,
-        RunMode mode,
-        String model,
-        RunScope scope,
-        RunStatus status,
-        List<DeckChange> changes,
-        JsonNode error,
-        long inputTokens,
-        long outputTokens,
-        long totalTokens,
-        long callCount,
-        long activeDuration,
-        Long activeSince,
-        long createdAt,
-        long updatedAt
-) {
+@Builder
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+public final class Run {
+    private String id;
+    private String sessionId;
+    private RunMode mode;
+    private String model;
+    private RunScope scope;
+    private RunStatus status;
+    private List<DeckChange> changes;
+    private JsonNode error;
+    private long inputTokens;
+    private long outputTokens;
+    private long totalTokens;
+    private long callCount;
+    private long activeDuration;
+    private Long activeSince;
+    private long createdAt;
+    private long updatedAt;
 }

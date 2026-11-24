@@ -4,7 +4,7 @@ import { ShortcutSettingsPanel } from './ShortcutSettingsPanel';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useBlocker } from 'react-router-dom';
 import { Bot, Cpu, Eye, EyeOff, Files, Keyboard, Loader2, Plus, Route, Trash2 } from 'lucide-react';
-import { settingsApi, SIDE_PURPOSES, type SidePurpose, type ModelProtocol } from '../../api/settings';
+import { settingsApi, providers, type Route as ModelRoute, SIDE_PURPOSES, type SidePurpose, type ModelProtocol } from '../../api/settings';
 import { ModelProviderIcon } from '../../components/ui/ModelProviderIcon';
 import { FollowDefaultIcon } from '../../components/ui/FollowDefaultIcon';
 import { ConfirmModal } from '../../components/ui/modal-confirm';
@@ -14,7 +14,7 @@ import { Select } from '../../components/ui/select';
 import { useComposerStore } from '../../stores/composerStore';
 import { showGlobalError, showGlobalSuccess, showGlobalWarning } from '../../stores/toastStore';
 import { cn } from '../../lib/utils';
-import { applySavedSettings, canKeepKey, makeDraft, modelChanged, prepareModelSave, savedSnapshot, settingsPayload, validation, type Draft, type DraftModel, type Editable } from './modelSettingsDraft';
+import { savedModel, modelChanged, validation, type Draft, type DraftModel, type Editable } from './modelSettingsDraft';
 import './settings.css';
 
 const protocolNames: Record<ModelProtocol, string> = { responses: 'Responses', anthropic: 'Anthropic' };
@@ -61,19 +61,22 @@ function ModelCard({ row, edit, open, protocols, busy, saving, changed, error, o
           onSubmit={(event) => { event.preventDefault(); onSave(); }} autoComplete="off" noValidate>
           <fieldset disabled={busy}>
             <label><span>名称</span><input data-model-name value={edit.name} onChange={(event) => update('name', event.target.value)} maxLength={80} placeholder="配置名称" /></label>
+            <label><span>厂商</span><Select aria-label="厂商" ownerId={row.id} value={edit.provider} placeholder="请选择厂商"
+              options={providers.map(value => ({ value, label: value }))} onValueChange={value => update('provider', value)}
+              disabled={busy} className="text-xs" /></label>
+            <label><span>地址</span><input aria-label="API 基础地址" type="url" value={edit.base_url}
+              onChange={(event) => update('base_url', event.target.value)}
+              spellCheck={false} autoCapitalize="off" placeholder="https://gateway.example.com/v1" /></label>
             <label><span>协议</span><Select
               aria-label="API 协议" ownerId={row.id} value={edit.protocol}
               onValueChange={(value) => update('protocol', value as ModelProtocol)}
               options={protocols.map((protocol) => ({ value: protocol, label: protocolNames[protocol] }))}
               disabled={busy} className="text-xs"
             /></label>
-            <label><span>地址</span><input aria-label="API 基础地址" type="url" value={edit.base_url}
-              onChange={(event) => update('base_url', event.target.value)}
-              spellCheck={false} autoCapitalize="off" placeholder="https://gateway.example.com/v1" /></label>
             <label><span>模型</span><input value={edit.model} onChange={(event) => update('model', event.target.value)} spellCheck={false} autoCapitalize="off" placeholder="模型标识" /></label>
             <label><span>密钥</span><span className="settings-key">
               <input type={showKey ? 'text' : 'password'} value={edit.key} onChange={(event) => update('key', event.target.value)}
-                spellCheck={false} autoCapitalize="off" placeholder={canKeepKey(row) ? '已配置，留空保留' : '输入 API key'} autoComplete="new-password" />
+                spellCheck={false} autoCapitalize="off" placeholder={row.saved ? '已配置，留空保留' : '输入 API key'} autoComplete="new-password" />
               <IconButton className="absolute right-0.5 top-1/2 -translate-y-1/2" onClick={() => setShowKey(!showKey)} label={showKey ? '隐藏密钥' : '显示密钥'} aria-pressed={showKey}>
                 {showKey ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
               </IconButton>
@@ -82,9 +85,9 @@ function ModelCard({ row, edit, open, protocols, busy, saving, changed, error, o
           <div className="settings-card-actions">
             <p id={`error-${row.id}`} className="settings-card-error" role="alert">{error}</p>
             <div className="flex items-center gap-2">
-              <Button type="submit" variant="primary" className="min-w-0 flex-1" disabled={busy} icon={saving ? Loader2 : undefined} iconClassName="animate-spin motion-reduce:animate-none">{saving ? '保存中…' : '保存'}</Button>
-              <Button type="button" variant="ghost" onClick={onCancel} disabled={busy}>取消</Button>
-              <IconButton label="删除模型" type="button" title="删除模型" aria-label={`删除 ${row.name || '新模型'}`} onClick={onDelete} disabled={busy} className="text-danger ui-danger"><Trash2 size={16} /></IconButton>
+              <IconButton label="删除模型" type="button" title="删除模型" aria-label={`删除 ${row.name || '新模型'}`} onClick={onDelete} disabled={busy} className="mr-auto text-text-500 ui-danger"><Trash2 size={16} /></IconButton>
+              <Button type="button" variant="secondary" className="min-w-16 border-border bg-surface text-[13px]" onClick={onCancel} disabled={busy}>取消</Button>
+              <Button type="submit" variant="ghost" className="settings-model-save min-w-16 text-[13px]" disabled={busy} icon={saving ? Loader2 : undefined} iconClassName="animate-spin motion-reduce:animate-none">{saving ? '保存中…' : '保存'}</Button>
             </div>
           </div>
         </form>
@@ -118,7 +121,7 @@ export function SettingsPage() {
   const [reloadPrompt, setReloadPrompt] = useState(false);
   const grid = useRef<HTMLDivElement>(null);
   const leaving = useRef(false);
-  const dirty = shortcutDirty || !!draft?.llm.some((row) => modelChanged(row, edits[row.id]));
+  const dirty = shortcutDirty || !!draft?.models.some((row) => modelChanged(row, edits[row.id]));
   const settingsSaving = saving || shortcutSaving || fileSaving || agentSaving;
   const blocker = useBlocker(({ currentLocation, nextLocation }) => (dirty || settingsSaving) && currentLocation.pathname !== nextLocation.pathname);
   useEffect(() => {
@@ -127,9 +130,10 @@ export function SettingsPage() {
   const load = useCallback(async () => {
     setLoading(true); setError('');
     try {
-      const value = makeDraft(await settingsApi.reload());
+      const result = await settingsApi.get();
+      const value = { models: result.models.map(savedModel), routes: result.routes };
       setDraft(value); setEdits({}); setCardErrors({}); setOpenCard(null);
-      useComposerStore.getState().reconcileModels(value.llm.map((row) => row.name), value.main_road.default);
+      useComposerStore.getState().reconcileModels(value.models.map(row => row.name), value.models.find(row => row.id === value.routes.main_default)?.name ?? '');
       window.dispatchEvent(new Event('model-settings-saved'));
     } catch (cause) { setError(cause instanceof Error ? cause.message : '模型设置加载失败。'); }
     finally { setLoading(false); }
@@ -156,17 +160,18 @@ export function SettingsPage() {
     document.addEventListener('pointerdown', close);
     return () => document.removeEventListener('pointerdown', close);
   }, [openCard]);
-  async function persist(next: Draft, message: string, completedId?: string): Promise<boolean> {
+  async function persist(action: () => Promise<Draft>, message: string, completedId?: string): Promise<boolean> {
     if (saveInFlight.current) return false;
     saveInFlight.current = true;
     setSaving(true); setSavingModelId(completedId ?? null); setError('');
     try {
-      const result = await settingsApi.save(settingsPayload(next));
-      const selected = useComposerStore.getState();
-      const renamed = next.llm.find((row) => row.previous_name === selected.modelProfileName);
-      if (selected.modelSelectionExplicit && renamed && renamed.name !== renamed.previous_name) selected.setModelProfileName(renamed.name);
-      useComposerStore.getState().reconcileModels(result.llm.map((row) => row.name), result.main_road.default);
-      setDraft((current) => applySavedSettings(result, next, current ?? next));
+      const next = await action();
+      const composer = useComposerStore.getState();
+      const previous = draft?.models.find(row => row.saved && row.name === composer.modelProfileName);
+      const renamed = previous && next.models.find(row => row.id === previous.id);
+      if (composer.modelSelectionExplicit && renamed && renamed.name !== previous?.name) composer.setModelProfileName(renamed.name);
+      composer.reconcileModels(next.models.filter(row => row.saved).map(row => row.name), next.models.find(row => row.id === next.routes.main_default)?.name ?? '');
+      setDraft(next);
       if (completedId) {
         setEdits((current) => { const rest = { ...current }; delete rest[completedId]; return rest; });
         setCardErrors((current) => { const rest = { ...current }; delete rest[completedId]; return rest; });
@@ -189,36 +194,28 @@ export function SettingsPage() {
   async function saveCard(row: DraftModel) {
     if (!draft || saveInFlight.current || loading) return;
     const edit = edits[row.id] ?? row;
-    // Validate before trimming so pasted line breaks cannot be silently accepted.
-    const message = validation({ ...row, ...edit }, savedSnapshot(draft).llm);
-    if (message) { setCardErrors((current) => ({ ...current, [row.id]: message })); return; }
-    const next = prepareModelSave(draft, row, edit);
-    await persist(next, '模型已保存，新任务将使用新配置。', row.id);
+    const message = validation({ ...row, ...edit }, draft.models);
+    if (message || !edit.provider) { setCardErrors(current => ({ ...current, [row.id]: message })); return; }
+    const input = { name: edit.name, protocol: edit.protocol, provider: edit.provider, base_url: edit.base_url, model: edit.model };
+    await persist(async () => {
+      const saved = row.saved
+        ? await settingsApi.update({ id: row.id, ...Object.fromEntries(Object.entries(input).filter(([field, value]) => row[field as keyof Editable] !== value)), ...(edit.key.trim() ? { key: edit.key } : {}) })
+        : await settingsApi.create({ ...input, key: edit.key });
+      return { ...draft, models: draft.models.map(item => item.id === row.id ? savedModel(saved) : item) };
+    }, '模型已保存，新任务将使用新配置。', row.id);
   }
 
-  async function saveRouting(road: 'main_road' | 'side_road', key: 'default' | 'fallback' | SidePurpose, value: string) {
-    if (!draft || saveInFlight.current || loading) return;
-    if (road === 'main_road' && key !== 'default' && key !== 'fallback') return;
-    const previous = draft;
-    const next = savedSnapshot(draft);
-    const current = key === 'default' || key === 'fallback' ? draft[road][key] : draft.side_road[key];
-    if ((current ?? '') === value) return;
-    if (key === 'default' && !value) return;
-    if (value && !next.llm.some((row) => row.name === value)) return;
-    if (road === 'main_road' && (key === 'default' || key === 'fallback')) {
-      next.main_road = { ...next.main_road, [key]: value };
-    } else {
-      next.side_road = { ...next.side_road, [key]: value };
-    }
-    setDraft({ ...draft, [road]: next[road] });
-    if (!await persist(next, '模型分配已保存。')) {
-      setDraft((current) => current ? { ...current, main_road: previous.main_road, side_road: previous.side_road } : current);
-    }
+  async function saveRouting(route: ModelRoute, value: string) {
+    if (!draft || value === draft.routes[route]) return;
+    await persist(async () => {
+      await settingsApi.saveRoute(route, value || null);
+      return { ...draft, routes: { ...draft.routes, [route]: value || null } };
+    }, '模型分配已保存。');
   }
 
   function cancelCard(row: DraftModel) {
     if (saveInFlight.current) return;
-    if (!row.previous_name) setDraft((current) => current ? { ...current, llm: current.llm.filter((item) => item.id !== row.id) } : current);
+    if (!row.saved) setDraft((current) => current ? { ...current, models: current.models.filter((item) => item.id !== row.id) } : current);
     setEdits((current) => { const rest = { ...current }; delete rest[row.id]; return rest; });
     setCardErrors((current) => { const rest = { ...current }; delete rest[row.id]; return rest; });
     setOpenCard(null);
@@ -226,25 +223,26 @@ export function SettingsPage() {
 
   function addModel() {
     if (!draft || saveInFlight.current || loading) return;
-    const row: DraftModel = { id: crypto.randomUUID(), name: '', provider: 'custom', protocol: 'responses', base_url: '', model: '', key: '', has_key: false };
-    setDraft({ ...draft, llm: [...draft.llm, row] }); setOpenCard(row.id);
+    const row: DraftModel = { id: crypto.randomUUID(), name: '', provider: '', protocol: 'responses', base_url: '', model: '', key: '', saved: false };
+    setDraft({ ...draft, models: [...draft.models, row] }); setOpenCard(row.id);
   }
 
   function removeModel(row: DraftModel) {
     if (!draft || saveInFlight.current) return;
-    if (!row.previous_name) { cancelCard(row); return; }
-    if ([...Object.values(draft.main_road), ...Object.values(draft.side_road)].includes(row.previous_name)) {
+    if (!row.saved) { cancelCard(row); return; }
+    if (Object.values(draft.routes).includes(row.id)) {
       showGlobalWarning('此模型正在被使用，请先到“模型分配”解除引用。'); return;
     }
-    if (savedSnapshot(draft).llm.length === 1) { showGlobalWarning('至少保留一个模型。'); return; }
+    if (draft.models.filter(item => item.saved).length === 1) { showGlobalWarning('至少保留一个模型。'); return; }
     setDeleting(row);
   }
 
   async function confirmDelete() {
     if (!draft || !deleting || saveInFlight.current) return;
-    const next = savedSnapshot(draft);
-    next.llm = next.llm.filter((row) => row.id !== deleting.id);
-    if (!await persist(next, '模型已删除。', deleting.id)) {
+    if (!await persist(async () => {
+      await settingsApi.delete(deleting.id);
+      return { ...draft, models: draft.models.filter(row => row.id !== deleting.id) };
+    }, '模型已删除。', deleting.id)) {
       // Keep the confirmation open for retry; the original model remains intact.
       throw new Error('模型删除失败');
     }
@@ -267,7 +265,7 @@ export function SettingsPage() {
         ...(empty ? [{ value: '', label: empty,
           icon: empty === '跟随默认' ? <FollowDefaultIcon /> : undefined,
         }] : []),
-        ...(draft?.llm.filter((row) => row.previous_name).map((row) => ({ value: row.name, label: row.name,
+        ...(draft?.models.filter((row) => row.saved).map((row) => ({ value: row.id, label: row.name,
           icon: <ModelProviderIcon provider={row.provider} size={20} className="h-5 w-5 shrink-0 object-contain" />,
         })) ?? []),
       ]}
@@ -304,20 +302,20 @@ export function SettingsPage() {
             {error && <div className="mb-5 rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger" role="alert">{error}</div>}
             {loading ? <div className="flex items-center gap-2 py-16 text-sm text-text-600"><Loader2 size={17} className="animate-spin" />正在读取设置…</div> : draft && (
               section === 'models' ? <div ref={grid} className="settings-grid">
-                {draft.llm.map((row) => <ModelCard key={row.id} row={row} edit={edits[row.id] ?? row} open={openCard === row.id} protocols={draft.protocols} busy={saving} saving={savingModelId === row.id} changed={modelChanged(row, edits[row.id])} error={cardErrors[row.id]}
+                {draft.models.map((row) => <ModelCard key={row.id} row={row} edit={edits[row.id] ?? row} open={openCard === row.id} protocols={['responses', 'anthropic']} busy={saving} saving={savingModelId === row.id} changed={modelChanged(row, edits[row.id])} error={cardErrors[row.id]}
                   onOpen={() => setOpenCard(row.id)} onEdit={(edit) => { setEdits((current) => ({ ...current, [row.id]: edit })); setCardErrors((current) => ({ ...current, [row.id]: '' })); }}
                   onSave={() => void saveCard(row)} onCancel={() => cancelCard(row)} onDelete={() => removeModel(row)} />)}
               </div> : <div className="settings-routing">
                 <h2>主路</h2>
                 <div className="settings-group">
-                  <div className="settings-row"><div><h3>默认模型</h3><p>聊天区没有手动选择时使用。</p></div>{modelSelect(draft.main_road.default, (value) => { void saveRouting('main_road', 'default', value); }, '主路默认模型')}</div>
-                  <div className="settings-row"><div><h3>备用模型</h3><p>原模型重试失败后接替，本轮持续使用。</p></div>{modelSelect(draft.main_road.fallback, (value) => { void saveRouting('main_road', 'fallback', value); }, '主路备用模型', '不启用备用模型')}</div>
+                  <div className="settings-row"><div><h3>默认模型</h3><p>聊天区没有手动选择时使用。</p></div>{modelSelect(draft.routes.main_default, (value) => { void saveRouting('main_default', value); }, '主路默认模型')}</div>
+                  <div className="settings-row"><div><h3>备用模型</h3><p>原模型重试失败后接替，本轮持续使用。</p></div>{modelSelect(draft.routes.main_fallback, (value) => { void saveRouting('main_fallback', value); }, '主路备用模型', '不启用备用模型')}</div>
                 </div>
                 <h2>旁路</h2>
                 <div className="settings-group">
-                  <div className="settings-row"><div><h3>默认模型</h3><p>未单独指定模型的旁路使用此配置。</p></div>{modelSelect(draft.side_road.default, (value) => { void saveRouting('side_road', 'default', value); }, '旁路默认模型')}</div>
-                  <div className="settings-row"><div><h3>备用模型</h3><p>具体用途模型或默认模型重试失败后接替。</p></div>{modelSelect(draft.side_road.fallback, (value) => { void saveRouting('side_road', 'fallback', value); }, '旁路备用模型', '不启用备用模型')}</div>
-                  {SIDE_PURPOSES.map((purpose) => <div key={purpose} className="settings-row"><div><h3>{purposeLabels[purpose][0]}</h3>{purposeLabels[purpose][1] && <p>{purposeLabels[purpose][1]}</p>}</div>{modelSelect(draft.side_road[purpose], (value) => { void saveRouting('side_road', purpose, value); }, `${purposeLabels[purpose][0]}模型`, '跟随默认')}</div>)}
+                  <div className="settings-row"><div><h3>默认模型</h3><p>未单独指定模型的旁路使用此配置。</p></div>{modelSelect(draft.routes.side_default, (value) => { void saveRouting('side_default', value); }, '旁路默认模型')}</div>
+                  <div className="settings-row"><div><h3>备用模型</h3><p>具体用途模型或默认模型重试失败后接替。</p></div>{modelSelect(draft.routes.side_fallback, (value) => { void saveRouting('side_fallback', value); }, '旁路备用模型', '不启用备用模型')}</div>
+                  {SIDE_PURPOSES.map((purpose) => <div key={purpose} className="settings-row"><div><h3>{purposeLabels[purpose][0]}</h3>{purposeLabels[purpose][1] && <p>{purposeLabels[purpose][1]}</p>}</div>{modelSelect(draft.routes[purpose], (value) => { void saveRouting(purpose, value); }, `${purposeLabels[purpose][0]}模型`, '跟随默认')}</div>)}
                 </div>
               </div>
             )}

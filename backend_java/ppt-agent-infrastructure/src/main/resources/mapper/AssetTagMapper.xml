@@ -5,4 +5,15 @@
         <id column="asset_id" property="assetId"/>
         <id column="tag_id" property="tagId"/>
     </resultMap>
+
+    <insert id="insert">
+        INSERT INTO asset_tags (asset_id, tag_id) VALUES
+        <foreach collection="tagIds" item="tagId" separator=",">
+            (#{assetId}, #{tagId})
+        </foreach>
+    </insert>
+
+    <delete id="deleteByAsset">
+        DELETE FROM asset_tags WHERE asset_id = #{assetId}
+    </delete>
 </mapper>

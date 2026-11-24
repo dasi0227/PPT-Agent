@@ -1,4 +1,14 @@
 package com.dasi.ppt.agent.interfaces.controller.export.dto;
 
-public record CancelExportDto(String exportId) {
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+@Builder
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public final class CancelExportDto {
+    private String exportId;
 }

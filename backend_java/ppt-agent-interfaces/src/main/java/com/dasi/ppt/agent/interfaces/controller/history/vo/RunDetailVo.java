@@ -7,57 +7,79 @@ import com.dasi.ppt.agent.domain.agent.model.enumeration.RunStatus;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.ToolResultStatus;
 import com.dasi.ppt.agent.domain.shared.enumeration.RunActivity;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.util.List;
 
-public record RunDetailVo(
-        RunStatus status,
-        RunMode mode,
-        String model,
-        List<String> scope,
-        String revision,
-        RunUsageVo usage,
-        long activeDurationMs,
-        Long activeSince,
-        long createdAt,
-        long updatedAt,
-        ExecutionFailureVo failure,
-        RunActivity activity,
-        String commentary,
-        List<PendingInteractionVo> pending,
-        List<RunMessageVo> messages
-) {
+@Builder
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public final class RunDetailVo {
+    private RunStatus status;
+    private RunMode mode;
+    private String model;
+    private List<String> scope;
+    private String revision;
+    private RunUsageVo usage;
+    private long activeDurationMs;
+    private Long activeSince;
+    private long createdAt;
+    private long updatedAt;
+    private ExecutionFailureVo failure;
+    private RunActivity activity;
+    private String commentary;
+    private List<PendingInteractionVo> pending;
+    private List<RunMessageVo> messages;
 
+    @Builder
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record RunMessageVo(
-            String id,
-            String seq,
-            MessageType type,
-            long createdAt,
-            String text,
-            String name,
-            RunChangesVo.ChangeTargetVo target,
-            String toolCallId,
-            ToolResultStatus status,
-            Boolean hasDetail
-    ) {
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class RunMessageVo {
+        private String id;
+        private String seq;
+        private MessageType type;
+        private long createdAt;
+        private String text;
+        private String name;
+        private RunChangesVo.ChangeTargetVo target;
+        private String toolCallId;
+        private ToolResultStatus status;
+        private Boolean hasDetail;
     }
 
-    public record RunUsageVo(
-            long inputTokens,
-            long outputTokens,
-            long totalTokens,
-            long callCount
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class RunUsageVo {
+        private long inputTokens;
+        private long outputTokens;
+        private long totalTokens;
+        private long callCount;
     }
 
-    public record PendingInteractionVo(
-            String toolCallId,
-            InteractionType type,
-            String version
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class PendingInteractionVo {
+        private String toolCallId;
+        private InteractionType type;
+        private String version;
     }
 
-    public record ExecutionFailureVo(String code, String message) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class ExecutionFailureVo {
+        private String code;
+        private String message;
     }
 }

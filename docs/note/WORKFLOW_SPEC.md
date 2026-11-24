@@ -8,7 +8,7 @@
 
 1. `ExecutionController` 转换请求，`RunService` 协调 `InputService` 按全局唯一的 `message_id` 检查归属。同一会话同参重发返回原 Run ID，跨会话复用或异参返回 `IDEMPOTENCY_CONFLICT`。先识别重发，再对新请求做占用和分支校验，避免网络重发创建第二次执行。
 2. 校验所属会话、模式、模型、引用和授权范围。同一会话最多一个非终态 Run，且与本会话的手动压缩互斥。同项目不同会话可以并行，但新 Run 须避开项目历史切换、Git 提交等排他操作。处于回退位置时，同时核对 `branch_revision`。
-3. 在项目写锁内，`CheckpointService` 从同一次一致读取取得 Run 开始前的会话、文稿和外观。这份读取同时提供用于历史恢复的持久检查点和本 Run 审查用的内存文件基准。`SettingService` 将本次主模型、旁路路由、备用配置、两项审批开关和自动命名／建议开关解析成不可变的 `RunConfig`。`RunService` 将它和审查基准放入本次 `RunState`。
+3. 在项目写锁内，`CheckpointService` 从同一次一致读取取得 Run 开始前的会话、文稿和外观。这份读取同时提供用于历史恢复的持久检查点和本 Run 审查用的内存文件基准。`RunService` 从 `SettingService` 取得全局设置，按本次模型选择和路由组装 `RunConfig`，固定主模型、旁路及备用模型、两项审批开关和自动命名／建议开关，再将配置和审查基准放入本次 `RunState`。
 4. `IRunRepository` 在同一 SQLite 事务中写入普通检查点、`pending` Run、首条 `queued` 指令和 `create_run` 凭据，同时更新会话版本。需要放弃返回入口时，在该事务内清理。事务失败不调度执行。
 5. 执行材料就绪且事务成功后，`RunService` 释放项目写锁，调度后台循环。耗时的模型请求与人工等待均在锁外进行。[执行接口](API_SPEC.md#执行) · [检查点](DATABASE_SPEC.md#checkpoints) · [提交凭据](DATABASE_SPEC.md#receipts)
 

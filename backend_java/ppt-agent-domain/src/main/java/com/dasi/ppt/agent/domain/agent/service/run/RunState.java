@@ -2,27 +2,35 @@ package com.dasi.ppt.agent.domain.agent.service.run;
 
 import com.dasi.ppt.agent.domain.agent.model.ContextEstimate;
 import com.dasi.ppt.agent.domain.agent.model.RunChangeSet;
+import com.dasi.ppt.agent.domain.agent.model.RunConfig;
 import com.dasi.ppt.agent.domain.agent.model.entity.Run;
-import com.dasi.ppt.agent.domain.setting.model.RunConfig;
-import com.dasi.ppt.agent.domain.setting.model.entity.LlmConfig;
+import com.dasi.ppt.agent.domain.setting.model.entity.ModelConfigSettings;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.util.Map;
 
+@Builder
 @Getter
-@RequiredArgsConstructor
+@AllArgsConstructor
+@NoArgsConstructor
 public class RunState {
 
-    private final Run run;
-    private final RunConfig config;
-    private final Map<String, byte[]> reviewBaseline;
-    private final RunChangeSet changes;
+    private Run run;
+    private RunConfig config;
+    private Map<String, byte[]> reviewBaseline;
+    private RunChangeSet changes;
 
     @Setter
-    private LlmConfig currentRoute;
+    private ModelConfigSettings currentRoute;
 
     @Setter
     private volatile ContextEstimate contextEstimate;
+
+    public RunState(Run run, RunConfig config, Map<String, byte[]> reviewBaseline, RunChangeSet changes) {
+        this(run, config, reviewBaseline, changes, null, null);
+    }
 }

@@ -1,7 +1,7 @@
 import { Cpu } from 'lucide-react';
 
 const logos: Record<string, string> = {
-  openai: 'openai', anthropic: 'claude', deepseek: 'deepseek', kimi: 'kimi',
+  gpt: 'openai', claude: 'claude', glm: 'zai', openai: 'openai', anthropic: 'claude', deepseek: 'deepseek', kimi: 'kimi',
   mimo: 'mimo', gemini: 'gemini', qwen: 'qwen', minimax: 'minimax', zai: 'zai',
 };
 

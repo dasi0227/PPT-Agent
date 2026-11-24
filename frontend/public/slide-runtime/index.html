@@ -2,11 +2,11 @@
 <html lang="en">
 <head>
   <link rel="stylesheet" href="/interaction-tokens.css">
-  <link rel="stylesheet" href="/api/v1/runtime/fonts.css">
-  <script src="/api/v1/runtime/font-loader.js"></script>
+  <link rel="stylesheet" href="/api/runtime/fonts.css">
+  <script src="/api/runtime/font-loader.js"></script>
   <meta charset="UTF-8">
   <title>Slide Runtime</title>
-  <script src="/api/v1/runtime/decorations.js"></script>
+  <script src="/api/runtime/decorations.js"></script>
   <style>
     body {
       margin: 0;
@@ -208,12 +208,12 @@
         }
       });
       const links = [
-        ['fonts-link','/api/v1/runtime/fonts.css'], ['base-link','/api/v1/runtime/base.css'],
+        ['fonts-link','/api/runtime/fonts.css'], ['base-link','/api/runtime/base.css'],
         ['theme-link',appearance?.theme_css_url || '']
       ].map(([id,href])=>{const link=document.createElement('link');link.id=id;link.rel='stylesheet';if(href)link.href=href;return link;});
       head.prepend(...links);
-      const fontLoader=document.createElement('script');fontLoader.src='/api/v1/runtime/font-loader.js';head.appendChild(fontLoader);
-      const themeBridge=document.createElement('script');themeBridge.src='/api/v1/runtime/theme-bridge.js';themeBridge.dataset.slideId=slideID;
+      const fontLoader=document.createElement('script');fontLoader.src='/api/runtime/font-loader.js';head.appendChild(fontLoader);
+      const themeBridge=document.createElement('script');themeBridge.src='/api/runtime/theme-bridge.js';themeBridge.dataset.slideId=slideID;
       document.body.appendChild(themeBridge);
 		document.querySelectorAll('img[src], source[src]').forEach((node) => {
 			const bridged = attachmentContentURL(projectID, node.getAttribute('src'), resourceHash);

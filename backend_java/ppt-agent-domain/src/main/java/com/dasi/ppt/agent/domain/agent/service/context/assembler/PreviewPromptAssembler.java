@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.domain.agent.service.context.assembler;
 
-import com.dasi.ppt.agent.domain.agent.gateway.IJevGateway;
+import com.dasi.ppt.agent.domain.gateway.IJevGateway;
 import com.dasi.ppt.agent.domain.agent.service.context.PromptAssembler;
 import com.dasi.ppt.agent.domain.agent.service.tool.builtin.RenderSlideTool;
 import lombok.RequiredArgsConstructor;

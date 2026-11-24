@@ -1,6 +1,17 @@
 package com.dasi.ppt.agent.domain.agent.model.result;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
 import java.util.List;
 
-public record BeforeRunCompletedResult(boolean completed, List<String> issues) {
+@Builder
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public final class BeforeRunCompletedResult {
+    private boolean completed;
+    private List<String> issues;
 }

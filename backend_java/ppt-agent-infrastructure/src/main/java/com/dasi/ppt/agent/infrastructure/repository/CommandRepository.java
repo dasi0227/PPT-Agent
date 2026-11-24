@@ -12,8 +12,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 import tools.jackson.databind.ObjectMapper;
 
-import java.util.Optional;
-
 @Repository
 @RequiredArgsConstructor
 public class CommandRepository implements ICommandRepository {
@@ -27,7 +25,7 @@ public class CommandRepository implements ICommandRepository {
     private final ObjectMapper objectMapper;
 
     @Override
-    public Optional<Command> findCommand(String commandId) {
+    public Command findCommand(String commandId) {
         throw new UnsupportedOperationException();
     }
 }

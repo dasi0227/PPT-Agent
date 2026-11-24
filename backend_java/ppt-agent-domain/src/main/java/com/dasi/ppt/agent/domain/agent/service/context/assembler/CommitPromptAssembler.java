@@ -1,8 +1,12 @@
 package com.dasi.ppt.agent.domain.agent.service.context.assembler;
 
-import com.dasi.ppt.agent.domain.agent.gateway.IGitGateway;
+import com.dasi.ppt.agent.domain.gateway.IGitGateway;
 import com.dasi.ppt.agent.domain.agent.model.LlmRequest;
 import com.dasi.ppt.agent.domain.agent.service.context.PromptAssembler;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
@@ -18,6 +22,12 @@ public class CommitPromptAssembler implements PromptAssembler<CommitPromptAssemb
         throw new UnsupportedOperationException();
     }
 
-    public record Input(IGitGateway.StagedChanges changes, String userInstruction) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class Input {
+        private IGitGateway.StagedChanges changes;
+        private String userInstruction;
     }
 }

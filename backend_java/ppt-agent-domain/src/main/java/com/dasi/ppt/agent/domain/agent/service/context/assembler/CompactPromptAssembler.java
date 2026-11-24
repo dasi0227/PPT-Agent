@@ -3,6 +3,10 @@ package com.dasi.ppt.agent.domain.agent.service.context.assembler;
 import com.dasi.ppt.agent.domain.agent.model.LlmRequest;
 import com.dasi.ppt.agent.domain.agent.model.entity.Message;
 import com.dasi.ppt.agent.domain.agent.service.context.PromptAssembler;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
@@ -20,10 +24,13 @@ public class CompactPromptAssembler implements PromptAssembler<CompactPromptAsse
         throw new UnsupportedOperationException();
     }
 
-    public record Input(
-            String previousSummary,
-            List<Message> compressedContext,
-            List<Message> retainedContext
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class Input {
+        private String previousSummary;
+        private List<Message> compressedContext;
+        private List<Message> retainedContext;
     }
 }

@@ -1,6 +1,17 @@
 package com.dasi.ppt.agent.domain.agent.model;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
 import java.util.List;
 
-public record Plan(String runId, List<PlanStep> steps) {
+@Builder
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public final class Plan {
+    private String runId;
+    private List<PlanStep> steps;
 }

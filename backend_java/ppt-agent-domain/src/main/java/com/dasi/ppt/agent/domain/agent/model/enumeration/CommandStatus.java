@@ -1,20 +1,32 @@
 package com.dasi.ppt.agent.domain.agent.model.enumeration;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.dasi.ppt.agent.domain.shared.exception.InvalidEnumValueException;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 
+@Getter
+@AllArgsConstructor
 public enum CommandStatus {
-    @JsonProperty("pending")
-    PENDING,
-    @JsonProperty("running")
-    RUNNING,
-    @JsonProperty("cancelling")
-    CANCELLING,
-    @JsonProperty("done")
-    DONE,
-    @JsonProperty("failed")
-    FAILED,
-    @JsonProperty("interrupted")
-    INTERRUPTED,
-    @JsonProperty("cancelled")
-    CANCELLED
+    PENDING("pending"),
+    RUNNING("running"),
+    CANCELLING("cancelling"),
+    DONE("done"),
+    FAILED("failed"),
+    INTERRUPTED("interrupted"),
+    CANCELLED("cancelled");
+
+    @JsonValue
+    private final String value;
+
+    @JsonCreator
+    public static CommandStatus fromValue(String value) {
+        for (CommandStatus candidate : values()) {
+            if (candidate.value.equals(value)) {
+                return candidate;
+            }
+        }
+        throw new InvalidEnumValueException(CommandStatus.class, value);
+    }
 }

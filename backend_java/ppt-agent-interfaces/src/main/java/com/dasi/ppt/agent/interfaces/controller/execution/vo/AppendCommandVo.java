@@ -1,4 +1,14 @@
 package com.dasi.ppt.agent.interfaces.controller.execution.vo;
 
-public record AppendCommandVo(String id) {
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+@Builder
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public final class AppendCommandVo {
+    private String id;
 }

@@ -1,12 +1,19 @@
 package com.dasi.ppt.agent.interfaces.controller.interaction.dto;
 
 import com.dasi.ppt.agent.domain.agent.model.enumeration.PlanDecision;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
-public record AnswerPlanDto(
-        String runId,
-        String toolCallId,
-        String version,
-        PlanDecision decision,
-        String feedback
-) {
+@Builder
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public final class AnswerPlanDto {
+    private String runId;
+    private String toolCallId;
+    private String version;
+    private PlanDecision decision;
+    private String feedback;
 }

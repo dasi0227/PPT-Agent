@@ -18,8 +18,39 @@
         <result column="toggle_source" property="toggleSource"/>
         <result column="switch_theme" property="switchTheme"/>
         <result column="submit_request" property="submitRequest"/>
-        <result column="suggestion_1" property="suggestion1"/>
-        <result column="suggestion_2" property="suggestion2"/>
-        <result column="suggestion_3" property="suggestion3"/>
+        <result column="select_suggestion" property="selectSuggestion"/>
     </resultMap>
+
+    <select id="read" resultMap="shortcutSettingsPo">
+        SELECT * FROM settings_shortcut WHERE id = 1
+    </select>
+
+    <insert id="save">
+        INSERT INTO settings_shortcut (
+            id, command_trigger, reference_trigger, component_trigger, slide_trigger, snippet_trigger,
+            previous_slide, next_slide, zoom_in, zoom_out, toggle_overview, export_deck, toggle_view,
+            toggle_source, switch_theme, submit_request, select_suggestion
+        ) VALUES (
+            #{id}, #{commandTrigger}, #{referenceTrigger}, #{componentTrigger}, #{slideTrigger},
+            #{snippetTrigger}, #{previousSlide}, #{nextSlide}, #{zoomIn}, #{zoomOut}, #{toggleOverview},
+            #{exportDeck}, #{toggleView}, #{toggleSource}, #{switchTheme}, #{submitRequest}, #{selectSuggestion}
+        )
+        ON CONFLICT (id) DO UPDATE SET
+            command_trigger = excluded.command_trigger,
+            reference_trigger = excluded.reference_trigger,
+            component_trigger = excluded.component_trigger,
+            slide_trigger = excluded.slide_trigger,
+            snippet_trigger = excluded.snippet_trigger,
+            previous_slide = excluded.previous_slide,
+            next_slide = excluded.next_slide,
+            zoom_in = excluded.zoom_in,
+            zoom_out = excluded.zoom_out,
+            toggle_overview = excluded.toggle_overview,
+            export_deck = excluded.export_deck,
+            toggle_view = excluded.toggle_view,
+            toggle_source = excluded.toggle_source,
+            switch_theme = excluded.switch_theme,
+            submit_request = excluded.submit_request,
+            select_suggestion = excluded.select_suggestion
+    </insert>
 </mapper>

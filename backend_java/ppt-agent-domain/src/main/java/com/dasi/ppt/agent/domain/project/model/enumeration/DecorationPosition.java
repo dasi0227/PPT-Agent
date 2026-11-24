@@ -1,18 +1,31 @@
 package com.dasi.ppt.agent.domain.project.model.enumeration;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.dasi.ppt.agent.domain.shared.exception.InvalidEnumValueException;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 
+@Getter
+@AllArgsConstructor
 public enum DecorationPosition {
-    @JsonProperty("none")
-    NONE,
-    @JsonProperty("top-left")
-    TOP_LEFT,
-    @JsonProperty("top-center")
-    TOP_CENTER,
-    @JsonProperty("top-right")
-    TOP_RIGHT,
-    @JsonProperty("bottom-left")
-    BOTTOM_LEFT,
-    @JsonProperty("bottom-right")
-    BOTTOM_RIGHT
+    NONE("none"),
+    TOP_LEFT("top-left"),
+    TOP_CENTER("top-center"),
+    TOP_RIGHT("top-right"),
+    BOTTOM_LEFT("bottom-left"),
+    BOTTOM_RIGHT("bottom-right");
+
+    @JsonValue
+    private final String value;
+
+    @JsonCreator
+    public static DecorationPosition fromValue(String value) {
+        for (DecorationPosition candidate : values()) {
+            if (candidate.value.equals(value)) {
+                return candidate;
+            }
+        }
+        throw new InvalidEnumValueException(DecorationPosition.class, value);
+    }
 }

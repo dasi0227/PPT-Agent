@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.infrastructure.gateway;
 
-import com.dasi.ppt.agent.domain.agent.gateway.IGitGateway;
+import com.dasi.ppt.agent.domain.gateway.IGitGateway;
 import com.dasi.ppt.agent.infrastructure.persistence.filesystem.PathResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;

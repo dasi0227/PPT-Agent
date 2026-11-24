@@ -3,48 +3,61 @@ package com.dasi.ppt.agent.interfaces.controller.history.vo;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.CommandStatus;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.CommandType;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.util.List;
 
-public record CommandDetailVo(
-        String revision,
-        String operationId,
-        String runId,
-        CommandType type,
-        CommandStatus status,
-        long createdAt,
-        Integer phase,
-        CommandInputVo input,
-        String lastSuccessId,
-        CommandResultVo result,
-        RunDetailVo.ExecutionFailureVo failure
-) {
+@Builder
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public final class CommandDetailVo {
+    private String revision;
+    private String operationId;
+    private String runId;
+    private CommandType type;
+    private CommandStatus status;
+    private long createdAt;
+    private Integer phase;
+    private CommandInputVo input;
+    private String lastSuccessId;
+    private CommandResultVo result;
+    private RunDetailVo.ExecutionFailureVo failure;
 
+    @Builder
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record CommandInputVo(
-            String text,
-            String baseId,
-            String feedback
-    ) {
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class CommandInputVo {
+        private String text;
+        private String baseId;
+        private String feedback;
     }
 
+    @Builder
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record CommandResultVo(
-            String title,
-            String content,
-            Boolean changed,
-            List<String> requests,
-            Long beforeTokens,
-            Long afterTokens,
-            Long maxTokens,
-            Boolean empty,
-            String hash,
-            String branch,
-            List<String> items,
-            Integer filesChanged,
-            Integer insertions,
-            Integer deletions,
-            Long committedAt
-    ) {
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class CommandResultVo {
+        private String title;
+        private String content;
+        private Boolean changed;
+        private List<String> requests;
+        private Long beforeTokens;
+        private Long afterTokens;
+        private Long maxTokens;
+        private Boolean empty;
+        private String hash;
+        private String branch;
+        private List<String> items;
+        private Integer filesChanged;
+        private Integer insertions;
+        private Integer deletions;
+        private Long committedAt;
     }
 }

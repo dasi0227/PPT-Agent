@@ -1,16 +1,30 @@
 package com.dasi.ppt.agent.domain.project.model.enumeration;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.dasi.ppt.agent.domain.shared.exception.InvalidEnumValueException;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 
+@Getter
+@AllArgsConstructor
 public enum DiffType {
-    @JsonProperty("fields")
-    FIELDS,
-    @JsonProperty("outline")
-    OUTLINE,
-    @JsonProperty("text")
-    TEXT,
-    @JsonProperty("binary")
-    BINARY,
-    @JsonProperty("unavailable")
-    UNAVAILABLE
+    FIELDS("fields"),
+    OUTLINE("outline"),
+    TEXT("text"),
+    BINARY("binary"),
+    UNAVAILABLE("unavailable");
+
+    @JsonValue
+    private final String value;
+
+    @JsonCreator
+    public static DiffType fromValue(String value) {
+        for (DiffType candidate : values()) {
+            if (candidate.value.equals(value)) {
+                return candidate;
+            }
+        }
+        throw new InvalidEnumValueException(DiffType.class, value);
+    }
 }

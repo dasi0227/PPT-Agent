@@ -16,7 +16,7 @@ public class HealthController {
     private final ApplicationAvailability availability;
     private final IProjectRepository projects;
 
-    @GetMapping("/api/healthz")
+    @GetMapping("/healthz")
     public ResponseEntity<Void> health() {
         if (availability.getReadinessState() == ReadinessState.ACCEPTING_TRAFFIC && projects.isDatabaseAvailable()) {
             return ResponseEntity.ok().build();

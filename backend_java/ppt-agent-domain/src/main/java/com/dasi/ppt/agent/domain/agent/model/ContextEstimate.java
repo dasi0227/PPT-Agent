@@ -1,18 +1,38 @@
 package com.dasi.ppt.agent.domain.agent.model;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
 import java.util.List;
 
-public record ContextEstimate(long current, Details details) {
+@Builder
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public final class ContextEstimate {
+    private long current;
+    private Details details;
 
-    public record Details(
-            List<Item> systemPrompt,
-            List<Item> runtime,
-            List<Item> chatHistory,
-            List<Item> readFile,
-            List<Item> other
-    ) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class Details {
+        private List<Item> systemPrompt;
+        private List<Item> runtime;
+        private List<Item> chatHistory;
+        private List<Item> readFile;
+        private List<Item> other;
     }
 
-    public record Item(String name, long tokens) {
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static final class Item {
+        private String name;
+        private long tokens;
     }
 }
