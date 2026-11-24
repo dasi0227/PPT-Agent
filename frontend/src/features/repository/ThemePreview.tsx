@@ -1,43 +1,19 @@
-import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { PreviewLoading } from '../../components/ui/PreviewLoading';
-import { repositoriesApi } from '../../api/repositories';
 import type { Theme } from '../../api/types';
 import { IsolatedSlidePreview } from '../viewer/IsolatedSlidePreview';
 import type { RuntimeSlide } from '../viewer/previewProtocol';
-import { type ThemeShowcaseMode } from './themeShowcase';
+import chart from './examples/chart.html?raw';
+import content from './examples/content.html?raw';
+import cover from './examples/cover.html?raw';
+import type { ThemeShowcaseMode } from './themeShowcase';
 
-const examples = new Map<string, Promise<string>>();
-let exampleVersion = 0;
-const exampleListeners = new Set<() => void>();
-const subscribeExamples = (listener: () => void) => {
-  exampleListeners.add(listener);
-  return () => { exampleListeners.delete(listener); };
-};
-export function clearThemeExampleCache() {
-  examples.clear();
-  exampleVersion++;
-  exampleListeners.forEach(listener => listener());
-}
-function loadExample(mode: ThemeShowcaseMode) {
-  let pending = examples.get(mode);
-  if (!pending) {
-    pending = repositoriesApi.themeExample(mode).catch(error => {
-      if (examples.get(mode) === pending) examples.delete(mode);
-      throw error;
-    });
-    examples.set(mode, pending);
-  }
-  return pending;
-}
+const examples: Record<ThemeShowcaseMode, string> = { cover, content, chart };
 
 // Same HTML, scaling and iframe execution path as the project canvas.
 export const ThemePreview = memo(function ThemePreview({ theme, mode = 'cover', miniature = false }: { theme: Pick<Theme, 'id' | 'name' | 'appearance' | 'content_state'>; mode?: ThemeShowcaseMode; miniature?: boolean }) {
-  const version = useSyncExternalStore(subscribeExamples, () => exampleVersion);
   const host = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(!miniature);
-  const [html, setHTML] = useState('');
-  const [error, setError] = useState('');
-  const [retry, setRetry] = useState(0);
   useEffect(() => {
     if (!miniature || !host.current) return;
     if (typeof IntersectionObserver === 'undefined') { setVisible(true); return; }
@@ -45,14 +21,8 @@ export const ThemePreview = memo(function ThemePreview({ theme, mode = 'cover', 
     observer.observe(host.current);
     return () => observer.disconnect();
   }, [miniature]);
-  useEffect(() => {
-    if (!visible || theme.content_state !== 'ready') return;
-    let active = true; setError('');
-    void loadExample(mode).then(value => { if (active) setHTML(value); }).catch(cause => { if (active) setError(cause instanceof Error ? cause.message : '示例加载失败'); });
-    return () => { active = false; };
-  }, [mode, visible, retry, version, theme.content_state]);
-  const slides = useMemo<RuntimeSlide[]>(() => html && theme.appearance ? [{
-    id: `example-${mode}`, html,
+  const slides = useMemo<RuntimeSlide[]>(() => theme.content_state === 'ready' && theme.appearance ? [{
+    id: `example-${mode}`, html: examples[mode],
     frame: {
       slide_id: `example-${mode}`, theme_id: theme.id, appearance: theme.appearance,
       canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' }, logo: null, deck_title: '主题契约研究',
@@ -60,10 +30,9 @@ export const ThemePreview = memo(function ThemePreview({ theme, mode = 'cover', 
       section: { id: 'examples', title: '内容与表达', index: 1 },
       decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' },
     },
-  }] : [], [html, mode, theme]);
+  }] : [], [mode, theme]);
   return <div ref={host} className={`relative h-full w-full overflow-hidden ${miniature ? 'pointer-events-none' : ''}`} aria-hidden={miniature || undefined}>
     {visible && slides.length > 0 && <IsolatedSlidePreview passive={miniature} slides={slides} index={0} title={`${theme.name} 主题预览`} className="h-full w-full border-0" />}
-    {visible && !html && !error && <PreviewLoading miniature={miniature} />}
-    {error && !miniature && <div role="alert" className="absolute inset-0 flex items-center justify-center gap-3 text-sm text-danger"><span>{error}</span><button type="button" onClick={() => setRetry(value => value + 1)}>重试</button></div>}
+    {visible && slides.length === 0 && <PreviewLoading miniature={miniature} />}
   </div>;
 });

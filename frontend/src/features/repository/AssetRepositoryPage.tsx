@@ -13,7 +13,6 @@ import { RepositoryCatalog, RepositoryDetail, RepositoryDirectoryItem, Repositor
 import { RepositoryEditDialog } from './RepositoryEditDialog';
 import { RepositoryTagsDialog } from './RepositoryTagsDialog';
 import { AssetPreview } from './AssetPreview';
-import { clearThemeExampleCache } from './ThemePreview';
 
 const sections = {
   theme: ['主题', Palette], component: ['组件', Component], skill: ['技能', BookOpenText], snippet: ['短语', NotebookText],
@@ -79,7 +78,6 @@ export function AssetRepositoryPage({ type, active = true }: { type: ResourceSco
   }, [active, id, updatedAt, currentPreview, refreshVersion]);
   const refresh = async () => {
     setPreview(undefined); setPreviewError(''); setRefreshVersion(version => version + 1);
-    if (type === 'theme') clearThemeExampleCache();
     await Promise.all([loadTags(type), loadList()]);
   };
   async function edit(item: AssetInfo) {
