@@ -27,7 +27,7 @@
 - `PathResolver` 校验传入的相对路径，确保解析结果仍位于指定项目根目录内。
 - `infrastructure/persistence/filesystem/MutationLog` 对应一次文稿写入或历史切换的恢复日志文件，记录核对提交所需的字段及每个文件的 `before` 和 `after`。[日志字段](#项目目录)
 - `infrastructure/persistence/filesystem/MutationLogType` 定义文稿文件恢复日志的 `type`，取 `agent / manual / switch`。
-- `infrastructure` 模块将 `base.css`、`decorations.js` 和 `theme-bridge.js` 直接存放在 `resources/runtime/` 下。主题用 `--font-sans`、`--font-display`、`--font-mono` 指定系统字体族。
+- `infrastructure` 模块将 `base.css`、`decorations.js` 和 `theme-bridge.js` 直接存放在 `resources/runtime/` 下。基础样式定义系统字体、颜色、字号和间距等默认值，预览和导出都先应用基础样式，再应用已选主题和单页样式。
 
 - `interfaces/controller/` 按功能分为 `project`、`asset`、`setting`、`export`、`file`、`session`、`history`、`execution`、`interaction`、`checkpoint` 和 `system`。
 - 每个功能包就近存放 `XxxController.java`。有请求体或结构化响应时，分别将顶层请求类型和响应类型放在 `dto/` 和 `vo/`。
@@ -46,8 +46,6 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 
 | 包 | 所属顶层类 | 静态嵌套类 |
 | --- | --- | --- |
-| `project` | `SaveProjectAppearanceDto` | `DecorationPositionsDto` |
-| `project` | `ProjectListVo` | `ProjectSummaryVo` |
 | `project` | `DeckVo` | `SlideContentVo`、`DeckHashesVo`、`SlideHashesVo` |
 | `project` | `ProjectAppearanceVo` | `DecorationPositionsVo` |
 | `session` | `SessionListVo` | `SessionSummaryVo` |
@@ -63,7 +61,8 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 | `checkpoint` | `RollbackVo` | `RollbackInputVo`、`InitialScopeVo`、`FullReferenceVo` |
 
 - 单个 POST 接口专用的成功响应 VO 按动作命名。有对应请求 DTO 时，两者使用相同的动作名。
-- `CreateProjectDto` 创建项目，`UpdateProjectDto` 修改项目名称，两者共用 `ProjectIdVo` 返回项目 `id`。
+- `CreateProjectDto` 创建项目，`UpdateProjectDto` 修改项目名称。两者均返回顶层 `ProjectInfoVo`，包含已保存的项目 ID、名称和更新时间。`ProjectListVo.items` 复用该类型。
+- `SaveProjectThemeDto` 提交项目主题，`SaveProjectPositionsDto` 提交四项装饰位置，两者分别使用独立的顶层请求结构。
 - 创建标签接口返回顶层 `TagInfoVo`，标签列表的 `TagListVo.items` 复用该类型。
 - 创建与更新资产共用顶层 `AssetInfoVo`，返回保存后的资产信息和正文哈希。`AssetListVo.items` 复用该类型，列表项的 `hash` 为 `null`。
 - 选择本地应用使用 `PickApplicationVo` 返回 `path`，取消选择时该字段为 `null`。
@@ -113,7 +112,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `project/model/enumeration/OutlineNodeType` 标识大纲差异行的节点，取 `section / subsection / slide`。
 - `project/model/enumeration/DiffRowType` 标识差异行，字段差异使用 `added / removed`，大纲和文本差异还可使用 `context`。[差异字段](API.html#history)
 - `project/model/enumeration/DecorationType` 标识装饰种类，取 `slide_pagination / deck_title / section_title / logo`，项目外观与 DOM 选区共用。每种装饰的位置由 `DecorationPosition` 表示。[项目外观](API.html#projects) · [DOM 引用](API.html#runs)
-- `project/model/ExportSnapshot` 是 `ExportTask` 在内存中持有的不可变输入，保存项目管理名称、文稿标题、按页序排列的页面标题与 HTML、每页所属章的标题、主题 CSS、装饰位置和 Logo 字节。[导出契约](API_SPEC.md#导出)
+- `project/model/entity/ExportSnapshot` 是 `ExportTask` 在内存中持有的不可变输入，保存项目管理名称、文稿标题、按页序排列的页面标题与 HTML、每页所属章的标题、可为空的主题 CSS、装饰位置和 Logo 字节。未选主题时，CSS 只取自内置基础样式与页面本身。[导出契约](API_SPEC.md#导出)
 - `IProjectRepository` 负责项目查询与创建、改名、删除，文稿提交及恢复由文稿仓储负责。
 - `domain/gateway/IFileGateway` 供 `AttachmentService`、`SlidePreviewService` 和 `ExportService` 存取各自的项目运行文件。[项目文件布局](#项目目录)
 - `infrastructure/gateway/FileGateway` 实现 `IFileGateway`，通过 `PathResolver` 解析项目路径，通过 `FileStorer` 创建、读取、替换、列举和删除文件。
@@ -128,7 +127,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `agent/model/InstructionReference` 表示一条引用。指令按输入顺序保存引用，供提示词拼装和回退回填使用。
 - `agent/model/DomSelection` 是 DOM 引用的选区内容，保存页面与选区标识、标注序号、提交时的 HTML、源码哈希、注释及元素或装饰定位。[选区字段](API.html#runs)
 - `agent/model/enumeration/InstructionReferenceType` 对应 `references[].type`，取 `skill / component / slide / image / dom`。追加输入只接受 `image` 和 `dom`。[引用字段](API.html#runs)
-- `agent/model/CheckpointSnapshot` 是 `Checkpoint` 的恢复内容，包括目标会话记录与 `agent` 凭据、五类文稿文件、主题 ID、装饰位置及 Logo 字节。普通检查点另含用于回填的原始输入。[快照范围](DATABASE_SPEC.md#checkpoints)
+- `agent/model/CheckpointSnapshot` 是 `Checkpoint` 的恢复内容，包括目标会话记录与 `agent` 凭据、五类文稿文件、可为 `null` 的主题 ID、装饰位置及 Logo 字节。普通检查点另含用于回填的原始输入。[快照范围](DATABASE_SPEC.md#checkpoints)
 - `asset/model/` 存放资产、标签及其类型。
 - `IAssetRepository` 负责资产、标签及关联的持久化。
 - `setting/model/` 存放模型配置和各组全局设置。

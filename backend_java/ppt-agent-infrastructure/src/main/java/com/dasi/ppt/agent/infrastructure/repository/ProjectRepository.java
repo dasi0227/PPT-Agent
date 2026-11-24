@@ -2,7 +2,6 @@ package com.dasi.ppt.agent.infrastructure.repository;
 
 import com.dasi.ppt.agent.domain.project.model.entity.Project;
 import com.dasi.ppt.agent.domain.project.model.enumeration.DecorationPosition;
-import com.dasi.ppt.agent.domain.project.model.enumeration.DecorationType;
 import com.dasi.ppt.agent.domain.project.repository.IProjectRepository;
 import com.dasi.ppt.agent.domain.shared.exception.ErrorCode;
 import com.dasi.ppt.agent.domain.shared.sse.ChangeArea;
@@ -54,12 +53,16 @@ public class ProjectRepository implements IProjectRepository {
     public List<Project> listProjects() {
         return projectMapper.list()
                 .stream()
-                .map(row -> Project.builder()
-                        .id(row.getId())
-                        .title(row.getTitle())
-                        .updatedAt(row.getUpdatedAt())
-                        .build())
+                .map(this::toProject)
                 .toList();
+    }
+
+    private Project toProject(ProjectPo row) {
+        return Project.builder()
+                .id(row.getId())
+                .title(row.getTitle())
+                .updatedAt(row.getUpdatedAt())
+                .build();
     }
 
     @Override
@@ -71,11 +74,10 @@ public class ProjectRepository implements IProjectRepository {
         return Project.builder()
                 .id(row.getId())
                 .theme(row.getTheme())
-                .positions(Map.of(
-                        DecorationType.SLIDE_PAGINATION, DecorationPosition.fromValue(row.getSlidePaginationPosition()),
-                        DecorationType.DECK_TITLE, DecorationPosition.fromValue(row.getDeckTitlePosition()),
-                        DecorationType.SECTION_TITLE, DecorationPosition.fromValue(row.getSectionTitlePosition()),
-                        DecorationType.LOGO, DecorationPosition.fromValue(row.getProjectLogoPosition())))
+                .slidePaginationPosition(DecorationPosition.fromValue(row.getSlidePaginationPosition()))
+                .deckTitlePosition(DecorationPosition.fromValue(row.getDeckTitlePosition()))
+                .sectionTitlePosition(DecorationPosition.fromValue(row.getSectionTitlePosition()))
+                .logoPosition(DecorationPosition.fromValue(row.getProjectLogoPosition()))
                 .logoPresent(row.isLogoPresent())
                 .build();
     }
@@ -87,26 +89,27 @@ public class ProjectRepository implements IProjectRepository {
     }
 
     @Override
-    public void create(Project project) {
-        projectMapper.insert(ProjectPo.builder()
+    public Project create(Project project) {
+        ProjectPo row = projectMapper.insert(ProjectPo.builder()
                 .id(project.getId())
                 .title(project.getTitle())
-                .theme(project.getTheme())
                 .updatedAt(System.currentTimeMillis())
                 .build());
-        fileStorer.createProjectDirectory(pathResolver.projectDirectory(project.getId()));
+        fileStorer.createProjectDirectory(pathResolver.projectDirectory(row.getId()));
+        return toProject(row);
     }
 
     @Override
-    public void updateTitle(Project project) {
-        int updated = projectMapper.updateTitle(ProjectPo.builder()
+    public Project updateTitle(Project project) {
+        ProjectPo row = projectMapper.updateTitle(ProjectPo.builder()
                 .id(project.getId())
                 .title(project.getTitle())
                 .updatedAt(System.currentTimeMillis())
                 .build());
-        if (updated == 0) {
+        if (row == null) {
             throw notFound(ErrorCode.PROJECT_NOT_FOUND);
         }
+        return toProject(row);
     }
 
     @Override
@@ -125,22 +128,32 @@ public class ProjectRepository implements IProjectRepository {
     }
 
     @Override
-    public void updateAppearance(Project project) {
-        Map<DecorationType, DecorationPosition> positions = project.getPositions();
-        projectMapper.updateAppearance(ProjectPo.builder()
+    public boolean updateTheme(String projectId, String themeId) {
+        int updated = projectMapper.updateTheme(projectId, themeId, System.currentTimeMillis());
+        return appearanceChanged(projectId, updated);
+    }
+
+    @Override
+    public boolean updatePositions(Project project) {
+        int updated = projectMapper.updatePositions(ProjectPo.builder()
                 .id(project.getId())
-                .theme(project.getTheme())
-                .slidePaginationPosition(positions.get(DecorationType.SLIDE_PAGINATION).getValue())
-                .deckTitlePosition(positions.get(DecorationType.DECK_TITLE).getValue())
-                .sectionTitlePosition(positions.get(DecorationType.SECTION_TITLE).getValue())
-                .projectLogoPosition(positions.get(DecorationType.LOGO).getValue())
+                .slidePaginationPosition(project.getSlidePaginationPosition().getValue())
+                .deckTitlePosition(project.getDeckTitlePosition().getValue())
+                .sectionTitlePosition(project.getSectionTitlePosition().getValue())
+                .projectLogoPosition(project.getLogoPosition().getValue())
                 .updatedAt(System.currentTimeMillis())
                 .build());
+        return appearanceChanged(project.getId(), updated);
     }
 
     @Override
     public boolean updateLogo(String projectId, byte[] logo) {
-        if (projectMapper.updateLogo(projectId, logo, System.currentTimeMillis()) != 0) {
+        int updated = projectMapper.updateLogo(projectId, logo, System.currentTimeMillis());
+        return appearanceChanged(projectId, updated);
+    }
+
+    private boolean appearanceChanged(String projectId, int updated) {
+        if (updated != 0) {
             return true;
         }
         if (!projectMapper.exists(projectId)) {

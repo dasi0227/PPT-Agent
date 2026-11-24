@@ -198,7 +198,7 @@
               </td>
               <td>
                 <ul class="fields">
-                  <li><code>theme_id</code>：当前主题资产 ID</li>
+                  <li><code>theme_id</code>：当前主题资产 ID，未选择主题时为 <code>null</code></li>
                   <li><code>positions</code>：四个位置字段 <code>slide_pagination、deck_title、section_title、logo</code>，取值为 <code>none / top-left / top-center / top-right / bottom-left / bottom-center / bottom-right</code>，<code>none</code> 表示隐藏</li>
 
                   <li><code>logo</code>：布尔值，已上传为 true，未上传为 false</li>
@@ -239,12 +239,15 @@
               <td><code>POST /api/projects/create</code></td>
               <td>
                 <ul class="fields">
-                  <li><code>title</code>：项目名称，去除首尾空白后为 1–60 个字符</li>
+                  <li><code>title</code>：非空白项目名称，提交值最多 60 个 UTF-16 代码单元，保存时去除首尾空白</li>
                 </ul>
+                <p>新项目默认无主题。</p>
               </td>
               <td>
                 <ul class="fields">
                   <li><code>id</code>：新建项目的 ID</li>
+                  <li><code>title</code>：已保存的项目名称</li>
+                  <li><code>updated_at</code>：更新时间，毫秒时间戳</li>
                 </ul>
               </td>
             </tr>
@@ -254,12 +257,14 @@
               <td>
                 <ul class="fields">
                   <li><code>project_id</code>：需修改的项目 ID</li>
-                  <li><code>title</code>：项目名称，去除首尾空白后为 1–60 个字符</li>
+                  <li><code>title</code>：非空白项目名称，提交值最多 60 个 UTF-16 代码单元，保存时去除首尾空白</li>
                 </ul>
               </td>
               <td>
                 <ul class="fields">
                   <li><code>id</code>：已更新项目的 ID</li>
+                  <li><code>title</code>：已保存的项目名称</li>
+                  <li><code>updated_at</code>：更新时间，毫秒时间戳</li>
                 </ul>
               </td>
             </tr>
@@ -269,20 +274,35 @@
               <td>
                 <ul class="fields">
                   <li><code>project_id</code>：项目 ID</li>
-                  <li><code>file</code>：multipart 图片文件，上传或替换 Logo；PNG，最多 10 MiB、4000 万像素</li>
+                  <li><code>file</code>：用于上传或替换 Logo 的 multipart PNG 文件，最多 2 MB（2,000,000 字节）</li>
                 </ul>
               </td>
               <td>无</td>
             </tr>
             <tr>
-              <th scope="row">保存项目外观</th>
-              <td><code>POST /api/projects/appearance/save</code></td>
+              <th scope="row">保存项目主题</th>
+              <td><code>POST /api/projects/theme/save</code></td>
               <td>
                 <ul class="fields">
-                  <li><code>project_id</code>：字符串，项目 ID</li>
-                  <li><code>theme_id</code>：可选字符串，启用的主题资产 ID</li>
-                  <li><code>positions</code>：可选对象，传入时包含完整四个位置字段 slide_pagination、deck_title、section_title、logo</li>
+                  <li><code>project_id</code>：必填，项目 ID</li>
+                  <li><code>theme_id</code>：必填，主题资产 ID</li>
                 </ul>
+                <p>每次保存都需选择存在、已启用且正文非空白的主题。同值保存也执行校验。</p>
+              </td>
+              <td>无</td>
+            </tr>
+            <tr>
+              <th scope="row">保存装饰位置</th>
+              <td><code>POST /api/projects/positions/save</code></td>
+              <td>
+                <ul class="fields">
+                  <li><code>project_id</code>：必填，项目 ID</li>
+                  <li><code>slide_pagination</code>：必填，页码位置</li>
+                  <li><code>deck_title</code>：必填，文稿标题位置</li>
+                  <li><code>section_title</code>：必填，章节标题位置</li>
+                  <li><code>logo</code>：必填，标志图位置</li>
+                </ul>
+                <p>位置取值与读取项目外观一致。</p>
               </td>
               <td>无</td>
             </tr>
@@ -530,6 +550,7 @@
                   <li><code>enabled</code>：布尔值，true 启用，false 停用</li>
                 </ul>
                 <p>至少提供一个非 null 的可修改字段。可修改字段省略或为 null 时保留原值。</p>
+                <p>停用项目正在使用的主题时返回 <code>ASSET_IN_USE</code>，提示“项目正在使用该主题，无法停用”。</p>
               </td>
               <td>
                 <p>返回保存后的资产信息，字段与<a href="#assets-create">创建资产</a>相同。同值更新保留原 <code>updated_at</code>。</p>
@@ -542,6 +563,7 @@
                 <ul class="fields">
                   <li><code>asset_id</code>：资产 ID</li>
                 </ul>
+                <p>删除项目正在使用的主题时返回 <code>ASSET_IN_USE</code>，提示“项目正在使用该主题，无法删除”。</p>
               </td>
               <td>无</td>
             </tr>

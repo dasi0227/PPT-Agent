@@ -63,7 +63,7 @@
 
 - **日志记录**：需要写日志的类直接使用 `@Slf4j` 自动生成的 `log`，禁止注入或手动创建 `Logger`。
 - **接口语义**：同一作用域内可创建多份的资源使用 `create`，支持修改时另设 `update`；作用域内只有一份的配置或内容使用 `save`。
-- **局部更新**：可修改字段省略或显式传 `null` 默认保留原值。
+- **局部更新**：可选字段省略或显式传 `null` 默认保留原值，`false`、`0`、`[]` 等按提交值校验和处理。DTO 直接使用可空类型，无需为此添加 Jackson 注解。仅当省略与 `null` 具有不同业务含义时才区分两者，并在接口文档中说明。
 - **类的类型**：DTO、VO、PO 和领域实体统一使用普通类，禁止使用 `record`；编码时必须写清楚具体类型，禁止使用 `var`。
 - **枚举定义**：枚举类统一使用 `@Getter` 和 `@AllArgsConstructor`，并且在 `value` 字段上标注 `@JsonValue` 供序列化和写库，在 `fromValue(String)` 上标注 `@JsonCreator` 供反序列化和读库。
 - **依赖注入**：Controller、Service、Repository 等业务 Bean 将注入依赖声明为 `final`，并且通过 `@RequiredArgsConstructor` 生成构造器完成注入。

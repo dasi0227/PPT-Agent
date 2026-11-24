@@ -1,4 +1,4 @@
-package com.dasi.ppt.agent.domain.gateway;
+package com.dasi.ppt.agent.domain.shared.gateway;
 
 import com.dasi.ppt.agent.domain.project.model.enumeration.DecorationPosition;
 import com.dasi.ppt.agent.domain.project.model.enumeration.DecorationType;

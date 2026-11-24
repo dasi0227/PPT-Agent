@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.infrastructure.gateway;
 
-import com.dasi.ppt.agent.domain.gateway.IPlatformGateway;
+import com.dasi.ppt.agent.domain.shared.gateway.IPlatformGateway;
 import com.dasi.ppt.agent.domain.shared.exception.ErrorCode;
 import com.dasi.ppt.agent.infrastructure.persistence.filesystem.PathResolver;
 import lombok.RequiredArgsConstructor;

@@ -15,11 +15,13 @@ public interface ProjectMapper {
 
     ProjectPo findLogo(String id);
 
-    void insert(ProjectPo project);
+    ProjectPo insert(ProjectPo project);
 
-    int updateTitle(ProjectPo project);
+    ProjectPo updateTitle(ProjectPo project);
 
-    void updateAppearance(ProjectPo project);
+    int updateTheme(@Param("id") String id, @Param("theme") String theme, @Param("updatedAt") long updatedAt);
+
+    int updatePositions(ProjectPo project);
 
     int updateLogo(@Param("id") String id, @Param("logo") byte[] logo, @Param("updatedAt") long updatedAt);
 

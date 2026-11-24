@@ -39,7 +39,7 @@
   }
   function waitForLink(link) {
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => done(new Error('主题 CSS 加载超时')), 30000);
+      const timer = setTimeout(() => done(new Error('幻灯片样式加载超时')), 30000);
       const done = error => {
         clearTimeout(timer);
         link.onload = null;
@@ -47,7 +47,7 @@
         error ? reject(error) : resolve();
       };
       link.onload = () => done();
-      link.onerror = () => done(new Error('主题 CSS 加载失败'));
+      link.onerror = () => done(new Error('幻灯片样式加载失败'));
     });
   }
   function stagedLink(href) {
@@ -58,53 +58,53 @@
     return link;
   }
   async function apply(message) {
-    const request = message.request_id;
+    const { request_id: request, theme_id: themeId, appearance } = message;
+    const themeUrl = themeId === null ? null : appearance?.theme_css_url;
     latest = request;
     cancelPending();
-    if (!message.appearance) {
+    if (themeId !== null && !themeUrl) {
       send('themeApplyFailed', { request_id: request, message: '主题不可用，请选择现有主题' });
       return;
     }
+    const appearanceHash = themeId === null ? '' : appearance.hash;
     const previous = document.getElementById('theme-link');
     const previousBase = document.getElementById('base-link');
-    // Initial HTML already links the same theme. Reuse successful loads instead
-    // of requesting both stylesheets a second time during the bridge handshake.
     const currentHash = document.documentElement.dataset.appearance;
-    const reuse = previous?.sheet && previousBase?.sheet
-      && previous.href === new URL(message.appearance.theme_css_url, document.baseURI).href
-      && (!currentHash || currentHash === message.appearance.hash);
-    const link = reuse ? previous : stagedLink(message.appearance.theme_css_url);
-    const base = reuse ? previousBase : stagedLink('/api/runtime/base.css');
-    pending = reuse ? [] : [base, link];
-    const ready = Promise.all(pending.map(waitForLink));
+    const reuse = previousBase?.sheet && (currentHash === undefined || currentHash === appearanceHash)
+      && (themeUrl ? previous?.sheet && previous.href === new URL(themeUrl, document.baseURI).href : !previous);
+    const staged = [];
     if (!reuse) {
-      previousBase.after(base);
-      previous.after(link);
+      staged.push(stagedLink('/api/runtime/base.css'));
+      if (themeUrl) staged.push(stagedLink(themeUrl));
     }
+    pending = staged;
     try {
+      const ready = Promise.all(staged.map(waitForLink));
+      document.head.prepend(...staged);
       await ready;
       if (request !== latest) {
-        if (!reuse) { base.remove(); link.remove(); }
+        staged.forEach(link => link.remove());
         return;
       }
       // One synchronous commit; page CSS remains last in the cascade.
       if (!reuse) {
-        previousBase.remove();
-        previous.remove();
+        previousBase?.remove();
+        previous?.remove();
+        const [base, theme] = staged;
         base.id = 'base-link';
-        link.id = 'theme-link';
-        base.media = 'all';
-        link.media = 'all';
+        if (theme) theme.id = 'theme-link';
+        staged.forEach(link => { link.media = 'all'; });
       }
       pending = [];
-      document.documentElement.dataset.theme = message.theme_id;
-      document.documentElement.dataset.appearance = message.appearance.hash;
+      if (themeId === null) delete document.documentElement.dataset.theme;
+      else document.documentElement.dataset.theme = themeId;
+      document.documentElement.dataset.appearance = appearanceHash;
       window.dispatchEvent(new CustomEvent('ppt:themechange', {
-        detail: { themeId: message.theme_id, appearanceHash: message.appearance.hash },
+        detail: { themeId, appearanceHash },
       }));
-      send('themeApplied', { request_id: request, appearance_hash: message.appearance.hash });
+      send('themeApplied', { request_id: request, appearance_hash: appearanceHash });
     } catch (error) {
-      if (!reuse) { base.remove(); link.remove(); }
+      staged.forEach(link => link.remove());
       if (request === latest) {
         pending = [];
         send('themeApplyFailed', { request_id: request, message: error.message || '主题资源加载失败' });

@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.infrastructure.gateway;
 
-import com.dasi.ppt.agent.domain.gateway.IJevGateway;
+import com.dasi.ppt.agent.domain.shared.gateway.IJevGateway;
 import com.dasi.ppt.agent.infrastructure.properties.JevProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;

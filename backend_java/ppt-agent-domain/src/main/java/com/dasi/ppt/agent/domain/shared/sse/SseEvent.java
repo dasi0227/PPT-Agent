@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.domain.shared.sse;
 
-import com.dasi.ppt.agent.domain.shared.enumeration.RunActivity;
+import com.dasi.ppt.agent.domain.agent.model.enumeration.RunActivity;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;

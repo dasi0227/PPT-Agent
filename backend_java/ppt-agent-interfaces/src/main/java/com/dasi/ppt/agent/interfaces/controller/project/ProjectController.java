@@ -1,15 +1,15 @@
 package com.dasi.ppt.agent.interfaces.controller.project;
 
-import com.dasi.ppt.agent.domain.project.model.entity.ProjectLogo;
 import com.dasi.ppt.agent.domain.project.service.ProjectService;
 import com.dasi.ppt.agent.interfaces.controller.project.dto.CreateProjectDto;
 import com.dasi.ppt.agent.interfaces.controller.project.dto.DeleteProjectDto;
 import com.dasi.ppt.agent.interfaces.controller.project.dto.DeleteProjectLogoDto;
-import com.dasi.ppt.agent.interfaces.controller.project.dto.SaveProjectAppearanceDto;
 import com.dasi.ppt.agent.interfaces.controller.project.dto.SaveProjectLogoDto;
+import com.dasi.ppt.agent.interfaces.controller.project.dto.SaveProjectPositionsDto;
+import com.dasi.ppt.agent.interfaces.controller.project.dto.SaveProjectThemeDto;
 import com.dasi.ppt.agent.interfaces.controller.project.dto.UpdateProjectDto;
 import com.dasi.ppt.agent.interfaces.controller.project.vo.ProjectAppearanceVo;
-import com.dasi.ppt.agent.interfaces.controller.project.vo.ProjectIdVo;
+import com.dasi.ppt.agent.interfaces.controller.project.vo.ProjectInfoVo;
 import com.dasi.ppt.agent.interfaces.controller.project.vo.ProjectListVo;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -36,30 +36,22 @@ public class ProjectController {
     private final ProjectService projectService;
 
     @GetMapping
-    public ResponseEntity<ProjectListVo> list() {
-        List<ProjectListVo.ProjectSummaryVo> items = projectService.listProjects()
+    public ProjectListVo list() {
+        List<ProjectInfoVo> items = projectService.listProjects()
                 .stream()
-                .map(project -> ProjectListVo.ProjectSummaryVo.builder()
-                        .id(project.getId())
-                        .title(project.getTitle())
-                        .updatedAt(project.getUpdatedAt())
-                        .build())
+                .map(ProjectInfoVo::toVo)
                 .toList();
-        return ResponseEntity.ok()
-                .cacheControl(CacheControl.noStore())
-                .body(ProjectListVo.builder().items(items).build());
+        return ProjectListVo.builder().items(items).build();
     }
 
     @PostMapping("/create")
-    public ProjectIdVo create(@Valid @RequestBody CreateProjectDto request) {
-        String id = projectService.createProject(request.getTitle());
-        return ProjectIdVo.builder().id(id).build();
+    public ProjectInfoVo create(@Valid @RequestBody CreateProjectDto request) {
+        return ProjectInfoVo.toVo(projectService.createProject(request.getTitle()));
     }
 
     @PostMapping("/update")
-    public ProjectIdVo update(@Valid @RequestBody UpdateProjectDto request) {
-        projectService.updateProject(request.getProjectId(), request.getTitle());
-        return ProjectIdVo.builder().id(request.getProjectId()).build();
+    public ProjectInfoVo update(@Valid @RequestBody UpdateProjectDto request) {
+        return ProjectInfoVo.toVo(projectService.updateProject(request.getProjectId(), request.getTitle()));
     }
 
     @PostMapping("/delete")
@@ -72,16 +64,19 @@ public class ProjectController {
         return ProjectAppearanceVo.toVo(projectService.findAppearance(projectId));
     }
 
-    @PostMapping("/appearance/save")
-    public void saveAppearance(@Valid @RequestBody SaveProjectAppearanceDto request) {
-        projectService.saveAppearance(request.toProject());
+    @PostMapping("/theme/save")
+    public void saveTheme(@Valid @RequestBody SaveProjectThemeDto request) {
+        projectService.saveTheme(request.toProject());
+    }
+
+    @PostMapping("/positions/save")
+    public void savePositions(@Valid @RequestBody SaveProjectPositionsDto request) {
+        projectService.savePositions(request.toProject());
     }
 
     @PostMapping(value = "/logo/save", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public void saveLogo(@Valid @ModelAttribute SaveProjectLogoDto request) throws IOException {
-        projectService.saveLogo(request.getProjectId(), ProjectLogo.builder()
-                .bytes(request.getFile().getBytes())
-                .build());
+        projectService.saveLogo(request.getProjectId(), request.getFile().getBytes());
     }
 
     @PostMapping("/logo/delete")

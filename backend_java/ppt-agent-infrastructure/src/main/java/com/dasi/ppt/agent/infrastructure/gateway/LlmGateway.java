@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.infrastructure.gateway;
 
-import com.dasi.ppt.agent.domain.gateway.ILlmGateway;
+import com.dasi.ppt.agent.domain.shared.gateway.ILlmGateway;
 import com.dasi.ppt.agent.domain.agent.model.LlmRequest;
 import com.dasi.ppt.agent.domain.agent.model.LlmResponse;
 import com.dasi.ppt.agent.domain.setting.model.entity.ModelConfigSettings;

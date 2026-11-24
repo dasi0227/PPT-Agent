@@ -162,8 +162,8 @@ JEV 的 Intent、Prune、Rechristen、Preview 分别由 `IntentHook`、`ToolPrun
 
 ## 6. 回退、返回与启动恢复
 
-1. **核对预览。** 客户端用相应预览的 `revision` 提交 `expected_revision`。`CheckpointService` 在项目写锁下复核目标、会话版本及主题资产。项目有非终态 Run、目标会话有非终态命令或项目处于互斥操作时拒绝切换。已停用的主题仍可恢复，主题缺失时结束请求。
-2. **准备恢复材料。** 从目标快照取得五类文稿文件、主题 ID、装饰位置、Logo，以及目标会话的标题、计划、消息、Run、命令和 `agent` 凭据。首次回退另从当前状态采集返回快照，连续回退沿用原返回行。目标快照决定文稿文件的内容和存在状态，即使磁盘经过外部编辑也按快照覆盖。主题正文取当前资产版本。附件、历史截图和其他会话的业务历史保留。
+1. **核对预览。** 客户端用相应预览的 `revision` 提交 `expected_revision`。`CheckpointService` 在项目写锁下复核目标和会话版本。项目有非终态 Run、目标会话有非终态命令或项目处于互斥操作时拒绝切换。快照含非空主题 ID 时检查资产是否存在，已停用仍可恢复，资产缺失时结束请求。
+2. **准备恢复材料。** 从目标快照取得五类文稿文件、主题 ID、装饰位置、Logo，以及目标会话的标题、计划、消息、Run、命令和 `agent` 凭据。首次回退另从当前状态采集返回快照，连续回退沿用原返回行。目标快照决定文稿文件的内容和存在状态，即使磁盘经过外部编辑也按快照覆盖。主题 ID 为 `null` 时恢复为未选主题，有值时使用当前资产正文。附件、历史截图和其他会话的业务历史保留。
 3. **先写日志，再改文稿。** 有文件变化时，在 `.runtime/mutations/{operation_hash}.json` 记录 `type=switch`、目标 `session_id`、锁内核对的 `base_revision` 及各变更路径的前后字节或缺失状态。完整日志原子替换并同步到磁盘后才增、改、删文稿文件。文件及目录项全部落盘后再提交数据库。仅涉及数据库的切换直接进入第 4 步。[日志字段](STRUCTURE_SPEC.md#项目目录)
 4. **提交 SQLite。** 同一事务恢复目标快照内的业务记录和项目外观，并按 `session_id` 和 `revision = base_revision` 更新目标会话，恰好命中一行并将版本加一。首次回退在此事务插入 `run_id IS NULL` 的返回行，返回最新时删除该行。共享文稿或外观实际变化时，一并清除同项目其他受影响会话的检查点及返回行，每个受影响会话的版本只加一。会话建议从恢复后的输入和命令读取。[检查点事务](DATABASE_SPEC.md#checkpoints)
 5. **收尾并通知。** 确认数据库提交且文件与目标一致后，持久移除日志，释放项目写锁，再按第 5 节通知。回退成功响应带可回填的原始输入。回退与返回都不续跑历史 Run。提交失败或结果未知时，按下表核对文件后才能开放后续写入。[检查点接口](API_SPEC.md#检查点)
@@ -172,7 +172,7 @@ JEV 的 Intent、Prune、Rechristen、Preview 分别由 `IntentHook`、`ToolPrun
 
 历史位置新开 Run、发起非 `polish` 命令或修订 `handoff`，须在受理事务中核对 `branch_revision` 并清理返回行及脱离当前历史的检查点。`polish` 保留返回入口。手动改名和删除计划使用 `expected_revision`。实际改名或删除计划成功后放弃返回入口，同名或失败时保留。人工实际改动共享文稿或外观时，项目内**所有会话**的检查点失效。历史切换保留原有的 `create_run`、`create_command` 受理凭据。[检查点事务](DATABASE_SPEC.md#checkpoints)
 
-新建导出同样需要采集一致的项目数据。项目内有非终态 Run、正在 Git 提交或切换历史时，创建返回 `PROJECT_BUSY`。`ExportService` 在项目写锁内读取文稿，并从同一数据库读事务取得外观和项目标题，组装不可变的 `ExportSnapshot`。快照含项目管理名称、页序、逐页标题与 HTML、主题 CSS、装饰位置及 Logo 字节。与预览相同，`deck_title` 取 `Meta.title`，每页的 `section_title` 取所属章标题，两者都在锁内固定。后台渲染和打包在释放锁后使用这份快照。[导出接口](API_SPEC.md#导出) · [项目读取约束](DATABASE_SPEC.md#projects)
+新建导出同样需要采集一致的项目数据。项目内有非终态 Run、正在 Git 提交或切换历史时，创建返回 `PROJECT_BUSY`。`ExportService` 在项目写锁内读取文稿，并从同一数据库读事务取得外观和项目标题，组装不可变的 `ExportSnapshot`。快照含项目管理名称、页序、逐页标题与 HTML、装饰位置及 Logo 字节。已选主题时同时读取并固定主题 CSS。与预览相同，`deck_title` 取 `Meta.title`，每页的 `section_title` 取所属章标题，两者都在锁内固定。后台渲染和打包在释放锁后使用这份快照，按基础样式、可选主题 CSS、单页样式的顺序应用。[导出接口](API_SPEC.md#导出) · [项目读取约束](DATABASE_SPEC.md#projects)
 
 ### 启动恢复
 

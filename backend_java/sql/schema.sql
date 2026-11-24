@@ -23,7 +23,7 @@ CREATE TABLE tags (
 CREATE TABLE projects (
     id TEXT NOT NULL PRIMARY KEY,
     title TEXT NOT NULL,
-    theme TEXT NOT NULL REFERENCES assets(id) ON DELETE RESTRICT,
+    theme TEXT DEFAULT NULL REFERENCES assets(id) ON DELETE RESTRICT,
     logo BLOB DEFAULT NULL,
     slide_pagination_position TEXT NOT NULL DEFAULT 'bottom-right',
     deck_title_position TEXT NOT NULL DEFAULT 'none',

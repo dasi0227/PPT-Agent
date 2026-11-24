@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.domain.agent.service.tool.builtin;
 
-import com.dasi.ppt.agent.domain.gateway.ILlmGateway;
+import com.dasi.ppt.agent.domain.shared.gateway.ILlmGateway;
 import com.dasi.ppt.agent.domain.agent.model.ToolCall;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.ToolName;
 import com.dasi.ppt.agent.domain.agent.model.result.ToolResult;

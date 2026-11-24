@@ -95,6 +95,9 @@ public class AssetService {
                 && content.equals(current.getContent()) && enabled == current.getEnabled() && !tagsChanged) {
             return current;
         }
+        if (current.getType() == AssetType.THEME && current.getEnabled() && !enabled && assetRepository.isUsed(current.getId())) {
+            throw conflict(ErrorCode.ASSET_IN_USE, "项目正在使用该主题，无法停用");
+        }
         Asset updated = Asset.builder()
                 .id(current.getId())
                 .type(current.getType())

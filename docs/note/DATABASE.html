@@ -203,10 +203,10 @@
             <tr id="projects-theme">
               <th scope="row"><code>theme</code></th>
               <td><code>TEXT</code></td>
-              <td class="nullable">否</td>
-              <td>无</td>
-              <td>当前选中的主题 ID；不保存主题 CSS。</td>
-              <td class="decision">外键 <code>assets.id</code>；目标 <code>type</code> 为 <code>theme</code>。</td>
+              <td class="nullable">是</td>
+              <td><code>NULL</code></td>
+              <td>当前选中的主题 ID，<code>NULL</code> 表示未选择主题。</td>
+              <td class="decision">非空值引用 <code>assets.id</code>，目标 <code>type</code> 为 <code>theme</code>。</td>
             </tr>
             <tr id="projects-logo">
               <th scope="row"><code>logo</code></th>
@@ -808,7 +808,7 @@
               <td class="nullable">否</td>
               <td>无</td>
               <td>该检查点的完整恢复数据。</td>
-              <td class="decision">JSON 对象；含会话标题、计划、消息、Run、命令及 agent 凭据，项目文稿文件、主题 ID、四项装饰位置、Logo 字节。普通检查点另含原始输入正文、引用、最初的模型名、模式及范围。文本文件用 JSON 字符串，二进制内容用 Base64。</td>
+              <td class="decision">JSON 对象，含会话标题、计划、消息、Run、命令及 agent 凭据，项目文稿文件、可为 <code>null</code> 的主题 ID、四项装饰位置、Logo 字节。普通检查点另含原始输入正文、引用、最初的模型名、模式及范围。文本文件用 JSON 字符串，二进制内容用 Base64。</td>
             </tr>
           </tbody>
         </table>
@@ -964,7 +964,7 @@
               <td class="nullable">否</td>
               <td><code>1</code></td>
               <td>是否启用该资产。</td>
-              <td class="decision"><code>1</code> 为启用，<code>0</code> 为停用。</td>
+              <td class="decision"><code>1</code> 为启用，<code>0</code> 为停用。主题被项目引用时禁止从启用改为停用。</td>
             </tr>
             <tr id="assets-updated-at">
               <th scope="row"><code>updated_at</code></th>

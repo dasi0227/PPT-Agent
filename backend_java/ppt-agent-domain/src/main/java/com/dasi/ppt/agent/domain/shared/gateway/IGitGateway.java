@@ -1,4 +1,4 @@
-package com.dasi.ppt.agent.domain.gateway;
+package com.dasi.ppt.agent.domain.shared.gateway;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

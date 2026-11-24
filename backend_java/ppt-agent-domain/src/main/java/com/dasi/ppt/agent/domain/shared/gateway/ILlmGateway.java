@@ -1,4 +1,4 @@
-package com.dasi.ppt.agent.domain.gateway;
+package com.dasi.ppt.agent.domain.shared.gateway;
 
 import com.dasi.ppt.agent.domain.agent.model.LlmRequest;
 import com.dasi.ppt.agent.domain.agent.model.LlmResponse;

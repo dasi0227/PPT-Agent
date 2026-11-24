@@ -1,7 +1,7 @@
 package com.dasi.ppt.agent.domain.setting.service;
 
 import com.dasi.ppt.agent.domain.setting.model.entity.BehaviorSettings;
-import com.dasi.ppt.agent.domain.gateway.IPlatformGateway;
+import com.dasi.ppt.agent.domain.shared.gateway.IPlatformGateway;
 import com.dasi.ppt.agent.domain.setting.model.entity.FileOpenSettings;
 import com.dasi.ppt.agent.domain.setting.model.entity.ModelSettings;
 import com.dasi.ppt.agent.domain.setting.model.entity.ShortcutSettings;

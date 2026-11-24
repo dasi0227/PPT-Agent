@@ -12,15 +12,5 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 public final class ProjectListVo {
-    private List<ProjectSummaryVo> items;
-
-    @Builder
-    @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
-    public static final class ProjectSummaryVo {
-        private String id;
-        private String title;
-        private long updatedAt;
-    }
+    private List<ProjectInfoVo> items;
 }

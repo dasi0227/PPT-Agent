@@ -16,13 +16,15 @@ public interface IProjectRepository {
 
     byte[] findLogo(String projectId);
 
-    void create(Project project);
+    Project create(Project project);
 
-    void updateTitle(Project project);
+    Project updateTitle(Project project);
 
     List<String> delete(String projectId);
 
-    void updateAppearance(Project project);
+    boolean updateTheme(String projectId, String themeId);
+
+    boolean updatePositions(Project project);
 
     boolean updateLogo(String projectId, byte[] logo);
 

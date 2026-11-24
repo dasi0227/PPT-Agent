@@ -1,7 +1,7 @@
 package com.dasi.ppt.agent.domain.agent.service.command.handler;
 
-import com.dasi.ppt.agent.domain.gateway.IGitGateway;
-import com.dasi.ppt.agent.domain.gateway.ILlmGateway;
+import com.dasi.ppt.agent.domain.shared.gateway.IGitGateway;
+import com.dasi.ppt.agent.domain.shared.gateway.ILlmGateway;
 import com.dasi.ppt.agent.domain.agent.model.RunConfig;
 import com.dasi.ppt.agent.domain.agent.model.entity.Command;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.CommandType;

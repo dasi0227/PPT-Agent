@@ -27,30 +27,28 @@ public final class FileOpenSettings {
 
     public void normalize() {
         List<Path> apps = customApps.stream()
-                .map(FileOpenSettings::normalizeAppPath)
+                .map(FileOpenSettings::resolveAppPath)
                 .distinct()
                 .toList();
-        String resolvedDefault = resolvePath(defaultOpen, apps, SYSTEM_OPEN);
-        String resolvedJson = resolvePath(jsonOpen, apps, INHERIT_OPEN);
-        String resolvedHtml = resolvePath(htmlOpen, apps, INHERIT_OPEN);
+
+        defaultOpen = resolvePath(defaultOpen, apps, SYSTEM_OPEN);
+        jsonOpen = resolvePath(jsonOpen, apps, INHERIT_OPEN);
+        htmlOpen = resolvePath(htmlOpen, apps, INHERIT_OPEN);
 
         customApps = apps.stream()
                 .map(Path::toString)
                 .toList();
-        defaultOpen = resolvedDefault;
-        jsonOpen = resolvedJson;
-        htmlOpen = resolvedHtml;
     }
 
     private static String resolvePath(String path, List<Path> apps, String fallback) {
         if (path.equals(SYSTEM_OPEN) || path.equals(fallback)) {
             return path;
         }
-        int index = apps.indexOf(normalizeAppPath(path));
+        int index = apps.indexOf(resolveAppPath(path));
         return index >= 0 ? apps.get(index).toString() : fallback;
     }
 
-    private static Path normalizeAppPath(String path) {
+    private static Path resolveAppPath(String path) {
         Path normalized;
         try {
             normalized = Path.of(path).normalize();

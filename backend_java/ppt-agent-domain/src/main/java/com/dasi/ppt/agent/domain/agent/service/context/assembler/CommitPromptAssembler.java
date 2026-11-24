@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.domain.agent.service.context.assembler;
 
-import com.dasi.ppt.agent.domain.gateway.IGitGateway;
+import com.dasi.ppt.agent.domain.shared.gateway.IGitGateway;
 import com.dasi.ppt.agent.domain.agent.model.LlmRequest;
 import com.dasi.ppt.agent.domain.agent.service.context.PromptAssembler;
 import lombok.AllArgsConstructor;
