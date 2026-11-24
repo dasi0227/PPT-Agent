@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <link rel="stylesheet" href="/api/runtime/base.css">
   <link rel="stylesheet" href="/interaction-tokens.css">
   <meta charset="UTF-8">
   <title>Slide Runtime</title>
@@ -85,7 +86,7 @@
         && (value.frame.appearance === null || (value.frame.appearance && typeof value.frame.appearance.hash === 'string' && typeof value.frame.appearance.theme_css_url === 'string' && value.frame.appearance.decoration_tokens))
         && (value.frame.logo === null || (value.frame.logo && typeof value.frame.logo.src === 'string' && typeof value.frame.logo.hash === 'string'))
         && window.PPTDecorations.isValid(value.frame.decorations)
-        && typeof value.frame.theme_id === 'string'
+        && (value.frame.theme_id === null || typeof value.frame.theme_id === 'string')
         && Number.isInteger(value.frame.ordinal)
         && Number.isInteger(value.frame.total);
     }
@@ -191,7 +192,8 @@
       ));
     }
 
-    function normalizeSlideHTML(source, appearance, projectID, slideID, visible, resourceHash) {
+    function normalizeSlideHTML(source, frame, visible, resourceHash) {
+      const { appearance, project_id: projectID, slide_id: slideID, theme_id: themeID } = frame;
 		const document = new DOMParser().parseFromString(bridgeAttachmentPaths(source, projectID, resourceHash), 'text/html');
       const head = document.head;
       document.documentElement.dataset.previewActive = String(visible);
@@ -205,10 +207,17 @@
           link.remove();
         }
       });
-      const links = [
-        ['base-link','/api/runtime/base.css'],
-        ['theme-link',appearance?.theme_css_url || '']
-      ].map(([id,href])=>{const link=document.createElement('link');link.id=id;link.rel='stylesheet';if(href)link.href=href;return link;});
+      const stylesheets = [['base-link', '/api/runtime/base.css']];
+      if (themeID !== null && appearance?.theme_css_url) {
+        stylesheets.push(['theme-link', appearance.theme_css_url]);
+      }
+      const links = stylesheets.map(([id, href]) => {
+        const link = document.createElement('link');
+        link.id = id;
+        link.rel = 'stylesheet';
+        link.href = href;
+        return link;
+      });
       head.prepend(...links);
       const themeBridge=document.createElement('script');themeBridge.src='/api/runtime/theme-bridge.js';themeBridge.dataset.slideId=slideID;
       document.body.appendChild(themeBridge);
@@ -250,9 +259,13 @@
       }
     }
 
+    function expectedAppearanceHash(frame) {
+      return frame.theme_id === null ? '' : frame.appearance?.hash || 'unavailable';
+    }
+
     function prepareNeighbors() {
       clearTimeout(preloadTimer);
-      if (!state.visible || !state.activeExecution?.appliedHash) return;
+      if (!state.visible || state.activeExecution?.appliedHash == null) return;
       preloadTimer = setTimeout(() => {
         if (!state.visible) return;
         for (const index of [state.activeIndex + 1, state.activeIndex - 1]) {
@@ -264,7 +277,7 @@
             state.executions.delete(slide.id);
             execution = createExecution(slide, index);
           }
-          if (execution.ready && execution.requestedHash !== (slide.frame.appearance?.hash || 'unavailable')) {
+          if (execution.ready && execution.requestedHash !== expectedAppearanceHash(slide.frame)) {
             requestAppearance(slide, false, execution);
           }
         }
@@ -298,8 +311,8 @@
       }
       execution.container.dataset.index = String(index);
       execution.container.querySelector('iframe').title = `Slide ${index + 1}`;
-      const hash = slide.frame.appearance?.hash || 'unavailable';
-      if (execution.appliedHash === hash) {
+      const hash = expectedAppearanceHash(slide.frame);
+      if (execution.appliedHash === hash && execution.requestedHash === hash && !execution.error) {
         applyRuntimeFrame(execution.container, slide.frame);
         window.parent.postMessage({type:'themeApplied',slide_id:slide.id,resource_hash:slide.resource_hash || '',appearance_hash:hash}, '*');
         prepareNeighbors();
@@ -315,7 +328,7 @@
     }
 
     function createExecution(slide, index, visible = false) {
-      const normalizedHTML = normalizeSlideHTML(slide.html, slide.frame.appearance, slide.frame.project_id, slide.id, visible, slide.resource_hash);
+      const normalizedHTML = normalizeSlideHTML(slide.html, slide.frame, visible, slide.resource_hash);
       const container = document.createElement('div');
       container.className = 'runtime-slide';
       container.dataset.slideFrame = 'true';
@@ -379,14 +392,16 @@
     let appearanceSequence=0;
     function requestAppearance(slide, force=false, execution=state.activeExecution) {
       if(!execution || execution.slideID!==slide.id || !execution.ready) return;
-      const hash=slide.frame.appearance?.hash || 'unavailable';
+      const hash=expectedAppearanceHash(slide.frame);
       if(!force && execution.requestedHash===hash && !execution.error)return;
       execution.error = null;
       const request=++appearanceSequence;execution.requestID=request;execution.requestedHash=hash;
       execution.container.querySelector('iframe').contentWindow.postMessage({bridge:'ppt-theme-v1',type:'cancelTheme',slide_id:slide.id,request_id:request},'*');
       if (execution === state.activeExecution) window.parent.postMessage({type:'themeApplying',slide_id:slide.id,resource_hash:slide.resource_hash || '',appearance_hash:slide.frame.appearance?.hash || ''},'*');
       try {
-        if(!slide.frame.appearance)throw new Error('当前主题不可用，请从主题仓库选择现有主题');
+        if (slide.frame.theme_id !== null && !slide.frame.appearance) {
+          throw new Error('当前主题不可用，请从主题仓库选择现有主题');
+        }
         execution.container.querySelector('iframe').contentWindow.postMessage({bridge:'ppt-theme-v1',type:'applyTheme',slide_id:slide.id,request_id:request,appearance:slide.frame.appearance,theme_id:slide.frame.theme_id},'*');
       }catch(error){
         if(state.executions.get(slide.id)===execution && request===execution.requestID) {
@@ -526,7 +541,7 @@
           sendVisibility(execution);
           requestAppearance(current, true, execution);
         } else if (message.request_id === execution.requestID
-          && execution.requestedHash === (current.frame.appearance?.hash || 'unavailable')) {
+          && execution.requestedHash === expectedAppearanceHash(current.frame)) {
           if (message.type === 'themeApplied' && message.appearance_hash === execution.requestedHash) {
             execution.appliedHash = message.appearance_hash;
             execution.error = null;

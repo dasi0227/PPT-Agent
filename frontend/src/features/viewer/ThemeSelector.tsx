@@ -13,9 +13,11 @@ import { showGlobalError } from '../../stores/toastStore';
 import { useAuthoringBlock } from './useAuthoringBlock';
 
 export function ThemeSelector({ projectId }: { projectId: string | null }) {
-  const themeId = useProjectStore(state => projectId
-    ? state.contentByProjectId[projectId]?.theme ?? state.projects.find(project => project.id === projectId)?.theme ?? ''
-    : '');
+  const themeId = useProjectStore(state => {
+    if (!projectId) return '';
+    const snapshot = state.contentByProjectId[projectId];
+    return (snapshot ? snapshot.theme : state.projects.find(project => project.id === projectId)?.theme) ?? '';
+  });
   const setProjectTheme = useProjectStore(state => state.setProjectTheme);
   const blocked = useAuthoringBlock(projectId);
   const [open, setOpen] = useState(false);

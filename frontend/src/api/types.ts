@@ -365,7 +365,7 @@ export interface ProjectContentSnapshot {
   scene_revision?: string;
   project_id: string;
   project_title: string;
-  theme: string;
+  theme: string | null;
   decorations: Decorations;
   logo: RuntimeLogo | null;
   appearance: RuntimeAppearance | null;
