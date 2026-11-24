@@ -38,7 +38,7 @@ export function HeaderActions({
   const links = [
     { to: '/settings', label: '设置', text: '设置', icon: <Settings size={16} aria-hidden="true" />, hidden: inSettings },
     { to: repositoryRoute('theme'), label: '仓库', text: '仓库', icon: <Archive size={16} aria-hidden="true" />, hidden: inRepository },
-    { to: workspaceReturnTo, label: '返回主页', text: '主页', icon: <HomeLogo />, hidden: inWorkspace },
+    { to: workspaceReturnTo ?? homeRoute, label: '返回主页', text: '主页', icon: <HomeLogo />, hidden: inWorkspace || path === homeRoute },
   ];
 
   return (
@@ -48,7 +48,7 @@ export function HeaderActions({
         disabled={refreshDisabled || refreshing} aria-busy={refreshing}>
         <RefreshCw size={16} aria-hidden="true" className={refreshing ? 'animate-spin motion-reduce:animate-none' : undefined} />
       </IconButton>
-      {links.filter(link => !link.hidden).map(link => link.to ? (
+      {links.filter(link => !link.hidden).map(link => (
         <Link key={link.text} to={link.to} state={navigationState} aria-label={link.label} title={link.label}
           aria-disabled={navigationDisabled || undefined} tabIndex={navigationDisabled ? -1 : undefined}
           onClick={navigationDisabled ? event => event.preventDefault() : undefined}
@@ -59,11 +59,6 @@ export function HeaderActions({
           {link.icon}
           <span aria-hidden="true" className="expandable-icon-label">{link.text}</span>
         </Link>
-      ) : (
-        <IconButton key={link.text} label={link.label} expandableLabel={link.text} disabled={navigationDisabled}
-          onClick={() => document.dispatchEvent(new CustomEvent('open-project-picker'))}>
-          {link.icon}
-        </IconButton>
       ))}
     </div>
   );
