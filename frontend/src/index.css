@@ -889,6 +889,10 @@
   height: auto;
   object-fit: contain;
   user-select: none;
+}
+
+.workspace-home-logo,
+.not-found-mascot {
   transform-origin: 50% 100%;
   animation: workspace-home-logo-sway 3.6s ease-in-out infinite;
   transition: --welcome-logo-sway-angle 260ms ease, --welcome-logo-sway-shift 260ms ease;
@@ -904,7 +908,8 @@
 }
 
 @media (hover: hover) {
-  .workspace-home-logo:hover {
+  .workspace-home-logo:hover,
+  .not-found-mascot:hover {
     --welcome-logo-sway-angle: 4deg;
     --welcome-logo-sway-shift: 8px;
   }
@@ -1244,11 +1249,13 @@
   .workspace-home-dasi::after,
   .workspace-home-agent::after,
   .workspace-home-slide-front,
-  .workspace-home-logo {
+  .workspace-home-logo,
+  .not-found-mascot {
     animation: none;
   }
 
-  .workspace-home-logo {
+  .workspace-home-logo,
+  .not-found-mascot {
     transition: none;
   }
 

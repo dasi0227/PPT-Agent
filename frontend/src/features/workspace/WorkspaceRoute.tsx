@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navigate, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useProjectStore } from '../../stores/projectStore';
 import { AppShell } from './AppShell';
 import { homeRoute, projectRoute } from './routes';
@@ -116,8 +116,4 @@ export function WorkspaceRoute() {
   }, [loadProjects, navigate, projectId]);
 
   return <AppShell />;
-}
-
-export function UnknownRouteRedirect() {
-  return <Navigate to={homeRoute} replace />;
 }

@@ -10,7 +10,8 @@ import { SettingsPage } from './features/settings/SettingsPage';
 import { GlobalToasts } from './components/ui/GlobalToasts';
 import { DeletionFeedback } from './features/workspace/DeletionFeedback';
 import { GlobalModals } from './features/workspace/GlobalModals';
-import { UnknownRouteRedirect, WorkspaceRoute } from './features/workspace/WorkspaceRoute';
+import { NotFoundPage } from './features/workspace/NotFoundPage';
+import { WorkspaceRoute } from './features/workspace/WorkspaceRoute';
 
 export function App() {
   useEffect(() => {
@@ -80,7 +81,7 @@ const router = createBrowserRouter([{
     { path: '/assets/skill', element: <AssetRepositoryPage key="Skill" type="skill" /> },
     { path: '/assets/snippet', element: <AssetRepositoryPage key="Snippet" type="snippet" /> },
     { path: '/settings', element: <SettingsPage /> },
-    { path: '*', element: <UnknownRouteRedirect /> },
+    { path: '*', element: <NotFoundPage /> },
   ],
 }]);
 
