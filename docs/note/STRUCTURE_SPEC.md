@@ -18,6 +18,8 @@
 - `infrastructure/persistence/` 按存储介质分为 `database/` 和 `filesystem/`。
 - `infrastructure/persistence/database/po/` 为每张业务表定义一个 `XxxPo`。
 - `infrastructure/persistence/database/mapper/` 为每张业务表定义一个同名前缀的 `XxxMapper` 接口。
+- Mapper 读写整组字段时使用 PO，返回多条记录时使用 PO 列表。按 ID 修改单项、查询单值或批量绑定 ID 时直接使用对应的标量或集合。领域实体、枚举与持久化表示的转换由 Repository 完成。
+- 项目 Logo 通过 `ProjectPo.logo` 的字段级 `ByteArrayTypeHandler` 读取 SQLite BLOB，Repository 返回 `byte[]`。该处理器使用当前 SQLite JDBC 驱动支持的 `getBytes()`。
 - Mapper XML 位于 `ppt-agent-infrastructure/src/main/resources/mapper/`。
 - SQLite `TEXT` 列在 PO、Mapper 参数及结果映射中统一使用 `String`，包括状态、类型、模式和协议。
 - `infrastructure/persistence/database/ReceiptType` 定义数据库凭据类型 `create_run / create_command / agent / manual`，由仓储与 `ReceiptPo.type` 的字符串值相互转换。[凭据类型](DATABASE_SPEC.md#receipts)

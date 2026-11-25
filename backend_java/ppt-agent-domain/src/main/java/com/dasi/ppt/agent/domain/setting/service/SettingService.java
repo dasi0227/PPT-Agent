@@ -13,9 +13,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.SYSTEM_OPEN;
-import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.INHERIT_OPEN;
+import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.*;
 import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.*;
 
 @Service
@@ -25,7 +26,8 @@ public class SettingService {
     private final ISettingRepository settingRepository;
     private final IPlatformGateway platformGateway;
 
-    private static final String APPLICATION_SUFFIX = System.getProperty("os.name").startsWith("Windows") ? ".exe" : ".app";
+    private static final Pattern SHORTCUT = Pattern.compile("(Primary|Option|Alt)\\+([^+\\s]+)", Pattern.UNICODE_CHARACTER_CLASS);
+    private static final Set<String> MODIFIER_KEYS = Set.of("Primary", "Option", "Alt", "AltLeft", "AltRight", "AltGraph", "Shift", "ShiftLeft", "ShiftRight", "Ctrl", "Control", "ControlLeft", "ControlRight", "Command", "Meta", "MetaLeft", "MetaRight", "OSLeft", "OSRight", "Fn");
     private static final Set<String> RESERVED_SHORTCUTS = Set.of("Primary+KeyA", "Primary+KeyC", "Primary+KeyV", "Primary+KeyX", "Primary+KeyZ", "Primary+KeyY", "Primary+KeyF", "Primary+KeyL", "Primary+KeyQ", "Primary+KeyW", "Primary+KeyR", "Primary+KeyN");
 
     public FileOpenSettings getFileOpenSettings() {
@@ -77,23 +79,32 @@ public class SettingService {
 
     @Transactional
     public void saveShortcutSettings(ShortcutSettings settings) {
-        List<String> triggers = List.of(settings.getCommandTrigger(), settings.getReferenceTrigger(),
-                settings.getComponentTrigger(), settings.getSlideTrigger(), settings.getSnippetTrigger());
+        List<String> triggers = List.of(
+                settings.getCommandTrigger(), settings.getReferenceTrigger(),
+                settings.getComponentTrigger(), settings.getSlideTrigger(),
+                settings.getSnippetTrigger()
+        );
         if (new HashSet<>(triggers).size() != triggers.size()) {
             throw invalid("输入触发符不能重复");
         }
 
         String suggestion = settings.getSelectSuggestion();
-        List<String> shortcuts = List.of(settings.getPreviousSlide(), settings.getNextSlide(), settings.getZoomIn(),
+        List<String> shortcuts = List.of(
+                settings.getPreviousSlide(), settings.getNextSlide(), settings.getZoomIn(),
                 settings.getZoomOut(), settings.getToggleOverview(), settings.getExportDeck(), settings.getToggleView(),
                 settings.getToggleSource(), settings.getSwitchTheme(), settings.getSubmitRequest(),
-                suggestion + "+Digit1", suggestion + "+Digit2", suggestion + "+Digit3");
+                suggestion + "+Digit1", suggestion + "+Digit2", suggestion + "+Digit3"
+        );
         Set<String> assigned = new HashSet<>();
         for (String shortcut : shortcuts) {
+            Matcher binding = SHORTCUT.matcher(shortcut);
+            if (!binding.matches() || MODIFIER_KEYS.contains(binding.group(2))) {
+                throw invalid("快捷键需由一个修饰键和一个普通键组成：" + shortcut);
+            }
             if (RESERVED_SHORTCUTS.contains(shortcut)) {
                 throw invalid("该快捷键已由系统保留：" + shortcut);
             }
-            String signature = shortcut.startsWith("Option+") ? "Alt+" + shortcut.substring("Option+".length()) : shortcut;
+            String signature = "Option".equals(binding.group(1)) ? "Alt+" + binding.group(2) : shortcut;
             if (!assigned.add(signature)) {
                 throw invalid("快捷键重复：" + shortcut);
             }
@@ -119,8 +130,7 @@ public class SettingService {
 
     @Transactional
     public String createModel(ModelConfigSettings config) {
-        config.removeTrailingSlashes();
-        if (settingRepository.existsConflictingModelName(config.getName(), null)) {
+        if (settingRepository.existsModelName(config.getName(), null)) {
             throw invalid("模型配置名不能重复");
         }
         config.setId(IdUtil.genModelId());
@@ -130,15 +140,7 @@ public class SettingService {
 
     @Transactional
     public void updateModel(ModelConfigSettings config) {
-        if (config.hasNoChanges()) {
-            if (!settingRepository.existsModelById(config.getId())) {
-                throw notFound(ErrorCode.MODEL_NOT_FOUND);
-            }
-            return;
-        }
-        config.removeTrailingSlashes();
-        String name = config.getName();
-        if (name != null && settingRepository.existsConflictingModelName(name, config.getId())) {
+        if (config.getName() != null && settingRepository.existsModelName(config.getName(), config.getId())) {
             throw invalid("模型配置名不能重复");
         }
         if (settingRepository.updateModel(config) == 0) {
@@ -151,8 +153,7 @@ public class SettingService {
         if (settingRepository.isLastModel(id)) {
             throw invalid("至少保留一个模型配置");
         }
-        if (settingRepository.getModelRoutes()
-                .usesModel(id)) {
+        if (settingRepository.getModelRoutes().usesModel(id)) {
             throw conflict(ErrorCode.MODEL_IN_USE);
         }
         if (settingRepository.deleteModel(id) == 0) {
@@ -165,7 +166,7 @@ public class SettingService {
         if (modelId == null && (route == ModelRoute.MAIN_DEFAULT || route == ModelRoute.SIDE_DEFAULT)) {
             throw invalid("默认路由需指定模型配置 ID");
         }
-        if (modelId != null && !settingRepository.existsModelById(modelId)) {
+        if (modelId != null && !settingRepository.existsById(modelId)) {
             throw notFound(ErrorCode.MODEL_NOT_FOUND);
         }
         settingRepository.saveModelRoute(route, modelId);
@@ -177,8 +178,6 @@ public class SettingService {
 
     @Transactional
     public void saveBehaviorSettings(BehaviorSettings settings) {
-        if (!settings.hasNoChanges()) {
-            settingRepository.saveBehaviorSettings(settings);
-        }
+        settingRepository.saveBehaviorSettings(settings);
     }
 }

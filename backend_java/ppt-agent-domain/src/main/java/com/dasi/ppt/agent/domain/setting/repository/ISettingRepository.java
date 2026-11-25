@@ -29,9 +29,9 @@ public interface ISettingRepository {
 
     ModelRouteSettings getModelRoutes();
 
-    boolean existsConflictingModelName(String name, String modelId);
+    boolean existsModelName(String name, String modelId);
 
-    boolean existsModelById(String id);
+    boolean existsById(String id);
 
     boolean isLastModel(String id);
 

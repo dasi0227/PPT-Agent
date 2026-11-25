@@ -20,7 +20,7 @@ public class AssetPo {
     private String name;
     private String description;
     private String content;
-    private boolean enabled;
+    private Boolean enabled;
     private long updatedAt;
     private List<String> tagIds;
 }

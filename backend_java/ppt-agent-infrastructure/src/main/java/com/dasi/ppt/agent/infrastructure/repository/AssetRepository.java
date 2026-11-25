@@ -104,7 +104,7 @@ public class AssetRepository implements IAssetRepository {
 
     @Override
     public void updateAsset(Asset asset) {
-        assetMapper.updateAsset(asset, System.currentTimeMillis());
+        assetMapper.updateAsset(toPo(asset));
         List<String> tagIds = asset.getTagIds();
         if (tagIds != null) {
             String id = asset.getId();
@@ -133,7 +133,7 @@ public class AssetRepository implements IAssetRepository {
                 .name(po.getName())
                 .description(po.getDescription())
                 .content(po.getContent())
-                .enabled(po.isEnabled())
+                .enabled(po.getEnabled())
                 .tagIds(po.getTagIds())
                 .updatedAt(po.getUpdatedAt())
                 .build();
@@ -142,7 +142,7 @@ public class AssetRepository implements IAssetRepository {
     private static AssetPo toPo(Asset asset) {
         return AssetPo.builder()
                 .id(asset.getId())
-                .type(asset.getType().getValue())
+                .type(asset.getType() == null ? null : asset.getType().getValue())
                 .name(asset.getName())
                 .description(asset.getDescription())
                 .content(asset.getContent())

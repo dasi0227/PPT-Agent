@@ -104,11 +104,7 @@ public class ProjectRepository implements IProjectRepository {
     @Override
     public Project update(Project project) {
         fileStorer.requireWritable(pathResolver.projectDirectory(project.getId()));
-        ProjectPo row = projectMapper.updateTitle(ProjectPo.builder()
-                .id(project.getId())
-                .title(project.getTitle())
-                .updatedAt(System.currentTimeMillis())
-                .build());
+        ProjectPo row = projectMapper.updateTitle(project.getId(), project.getTitle(), System.currentTimeMillis());
         if (row == null) {
             throw notFound(ErrorCode.PROJECT_NOT_FOUND);
         }

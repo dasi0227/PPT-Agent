@@ -18,13 +18,4 @@ public class ModelConfigSettings {
     private String model;
     private String key;
 
-    public boolean hasNoChanges() {
-        return name == null && protocol == null && provider == null && baseUrl == null && model == null && key == null;
-    }
-
-    public void removeTrailingSlashes() {
-        if (baseUrl != null) {
-            baseUrl = baseUrl.replaceFirst("([^/])/+$", "$1");
-        }
-    }
 }

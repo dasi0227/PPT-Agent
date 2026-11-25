@@ -17,6 +17,7 @@
     <update id="saveBehaviorSettings">
         UPDATE settings_behavior
         <set>
+            id = id,
             <if test="autoRenameEnabled != null">auto_rename_enabled = #{autoRenameEnabled},</if>
             <if test="autoSuggestEnabled != null">auto_suggest_enabled = #{autoSuggestEnabled},</if>
             <if test="showToolFailures != null">show_tool_failures = #{showToolFailures},</if>

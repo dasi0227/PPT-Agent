@@ -63,13 +63,15 @@
     </insert>
 
     <update id="updateAsset">
-        UPDATE assets SET
-            name = COALESCE(#{asset.name}, name),
-            description = COALESCE(#{asset.description}, description),
-            content = COALESCE(#{asset.content}, content),
-            enabled = COALESCE(#{asset.enabled}, enabled),
-            updated_at = MAX(updated_at + 1, #{now})
-        WHERE id = #{asset.id}
+        UPDATE assets
+        <set>
+            <if test="name != null">name = #{name},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="content != null">content = #{content},</if>
+            <if test="enabled != null">enabled = #{enabled},</if>
+            updated_at = MAX(updated_at + 1, #{updatedAt})
+        </set>
+        WHERE id = #{id}
     </update>
 
     <update id="updateAssetTimestampsByTagId">

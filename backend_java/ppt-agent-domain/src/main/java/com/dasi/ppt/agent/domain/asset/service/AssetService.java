@@ -64,6 +64,7 @@ public class AssetService {
         if (tagIds != null && !tagIds.isEmpty() && assetRepository.countTagsByTypeAndIds(type, tagIds) != tagIds.size()) {
             throw invalid("标签需存在、同类且不重复");
         }
+        asset.setUpdatedAt(System.currentTimeMillis());
         assetRepository.updateAsset(asset);
     }
 

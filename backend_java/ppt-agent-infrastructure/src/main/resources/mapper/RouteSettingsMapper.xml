@@ -20,6 +20,6 @@
     </select>
 
     <update id="saveModelRoute">
-        UPDATE settings_route SET "${route.value}" = #{modelId} WHERE id = 1
+        UPDATE settings_route SET "${routeColumn}" = #{modelId} WHERE id = 1
     </update>
 </mapper>

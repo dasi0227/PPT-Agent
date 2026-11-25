@@ -17,7 +17,7 @@ public interface ProjectMapper {
 
     ProjectPo insert(ProjectPo project);
 
-    ProjectPo updateTitle(ProjectPo project);
+    ProjectPo updateTitle(@Param("id") String id, @Param("title") String title, @Param("updatedAt") long updatedAt);
 
     int updateTheme(@Param("id") String id, @Param("theme") String theme, @Param("updatedAt") long updatedAt);
 

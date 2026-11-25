@@ -48,6 +48,8 @@
     <update id="updateModel">
         UPDATE settings_models
         <set>
+            <!-- 只传 ID 时也按匹配行数判断模型是否存在。 -->
+            id = id,
             <if test="name != null">name = #{name},</if>
             <if test="protocol != null">protocol = #{protocol},</if>
             <if test="provider != null">provider = #{provider},</if>

@@ -1,6 +1,5 @@
 package com.dasi.ppt.agent.infrastructure.persistence.database.mapper;
 
-import com.dasi.ppt.agent.domain.asset.model.entity.Asset;
 import com.dasi.ppt.agent.infrastructure.persistence.database.po.AssetPo;
 import org.apache.ibatis.annotations.Param;
 
@@ -18,7 +17,7 @@ public interface AssetMapper {
 
     void insertAsset(AssetPo asset);
 
-    int updateAsset(@Param("asset") Asset asset, @Param("now") long now);
+    int updateAsset(AssetPo asset);
 
     void updateAssetTimestampsByTagId(@Param("tagId") String tagId, @Param("updatedAt") long updatedAt);
 

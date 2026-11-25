@@ -91,12 +91,12 @@ public class SettingRepository implements ISettingRepository {
     }
 
     @Override
-    public boolean existsConflictingModelName(String name, String modelId) {
+    public boolean existsModelName(String name, String modelId) {
         return llmConfigMapper.existsConflictingModelName(name, modelId);
     }
 
     @Override
-    public boolean existsModelById(String id) {
+    public boolean existsById(String id) {
         return llmConfigMapper.existsModelById(id);
     }
 
@@ -122,7 +122,7 @@ public class SettingRepository implements ISettingRepository {
 
     @Override
     public void saveModelRoute(ModelRoute route, String modelId) {
-        if (routeSettingsMapper.saveModelRoute(route, modelId) == 0) {
+        if (routeSettingsMapper.saveModelRoute(route.getValue(), modelId) == 0) {
             throw new DataRetrievalFailureException("缺少 settings_route 初始化记录");
         }
     }
