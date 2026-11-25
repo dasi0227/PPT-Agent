@@ -48,7 +48,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 
 | 包 | 所属顶层类 | 静态嵌套类 |
 | --- | --- | --- |
-| `project` | `DeckVo` | `SlideContentVo`、`DeckHashesVo`、`SlideHashesVo` |
+| `project` | `DeckInfoVo` | `SlideContentVo`、`DeckHashesVo`、`SlideHashesVo` |
 | `project` | `ProjectAppearanceVo` | `DecorationPositionsVo` |
 | `session` | `SessionListVo` | `SessionSummaryVo` |
 | `session` | `SessionStateVo` | `PlanVo`、`PlanStepVo`、`ContextWindowVo`、`ContextDetailsVo`、`TokenBreakdownItemVo` |
@@ -99,9 +99,9 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `project/model/enumeration/SlidePurpose` 对应 `Spec.purpose`，取 `cover / introduction / transition / content_explanation / content_comparison / content_example / content_guidance / content_other / conclusion / other`。
 - `project/model/enumeration/SlideElementType` 对应 `Spec.elements[].type`，取 `text / list / metric / quote / table / chart / diagram / code / asset`。
 - `project/model/Outline` 对应 `.outline.json`，维护章、节与页面的层级、顺序、标题和稳定 ID。
-- `Outline.java` 在 `Outline` 内声明 `Section` 和 `Subsection` 两个内部类。
-- `Outline.Section` 保存章 ID、标题、有序的直属页面和有序的节。[大纲字段](API.html#projects)
-- `Outline.Subsection` 保存节 ID、标题和有序页面。章和节均以页面 ID 和标题引用页面。[大纲字段](API.html#projects)
+- `Outline.java` 在 `Outline` 内声明 `Chapter` 和 `Section` 两个内部类。
+- `Outline.Chapter` 保存章 ID、标题、有序的直属页面和有序的节。[大纲字段](API.html#projects)
+- `Outline.Section` 保存节 ID、标题和有序页面。章和节均以页面 ID 和标题引用页面。[大纲字段](API.html#projects)
 - `project/model/Constraint` 对应 `.constraint.json`，分别保存内容约束和视觉约束的要求与禁用项。
 - `project/model/ChangeTarget` 是文稿变更目标的值对象，包含 `part`、项目内相对路径 `path` 和页面目标的 `slide_id`。
 - `project/model/DeckEditCandidate` 表示一个 `ChangeTarget` 的待提交修改，携带待写入的完整文件内容或明确的删除操作。
@@ -110,9 +110,9 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `project/model/enumeration/ChangePart` 对应 `ChangeTarget.part`。项目级取 `meta / constraint / outline`，页面级取 `spec / html`。
 - `project/model/enumeration/ChangeStatus` 表示文稿目标的新增、修改或删除，取 `added / modified / deleted`。审批候选、工具实际提交和 Run 净修改使用同一组取值。
 - `project/model/enumeration/DiffType` 决定文稿差异明细的结构，取 `fields / outline / text / binary / unavailable`。[差异与工具详情](API.html#history)
-- `project/model/enumeration/OutlineNodeType` 标识大纲差异行的节点，取 `section / subsection / slide`。
+- `project/model/enumeration/OutlineNodeType` 标识大纲差异行的节点，取 `chapter / section / slide`。
 - `project/model/enumeration/DiffRowType` 标识差异行，字段差异使用 `added / removed`，大纲和文本差异还可使用 `context`。[差异字段](API.html#history)
-- `project/model/enumeration/DecorationType` 标识装饰种类，取 `slide_pagination / deck_title / section_title / logo`，项目外观与 DOM 选区共用。每种装饰的位置由 `DecorationPosition` 表示。[项目外观](API.html#projects) · [DOM 引用](API.html#runs)
+- `project/model/enumeration/DecorationType` 标识装饰种类，取 `slide_pagination / deck_title / chapter_title / logo`，项目外观与 DOM 选区共用。每种装饰的位置由 `DecorationPosition` 表示。[项目外观](API.html#projects) · [DOM 引用](API.html#runs)
 - `project/model/entity/ExportSnapshot` 是 `ExportTask` 在内存中持有的不可变输入，保存项目管理名称、文稿标题、按页序排列的页面标题与 HTML、每页所属章的标题、可为空的主题 CSS、装饰位置和 Logo 字节。未选主题时，CSS 只取自内置基础样式与页面本身。[导出契约](API_SPEC.md#导出)
 - `IProjectRepository` 负责项目查询与创建、改名、删除，文稿提交及恢复由文稿仓储负责。
 - `domain/gateway/IFileGateway` 供 `AttachmentService`、`SlidePreviewService` 和 `ExportService` 存取各自的项目运行文件。[项目文件布局](#项目目录)
@@ -121,7 +121,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `agent/model/entity/PendingInteraction` 是由 `InteractionService` 管理的内存实体，以 `run_id + tool_call_id` 标识一项待答交互，持有 `InteractionType`、当前表单及其 `version`。[待答与答复](API_SPEC.md#人工)
 - `agent/model/` 存放会话的 `Plan` 和 `PlanStep`。
 - `agent/model/RunConfig` 由 `RunService` 在受理时根据全局设置组装，包含本次 Run 的主模型、旁路及备用模型、审批开关和自动命令开关，由 `RunState` 持有并在整次 Run 中复用。[受理与执行材料](WORKFLOW_SPEC.md#新开-run)
-- `agent/model/RunScope` 表示已生效的页面授权。`InputService` 在受理时将 `section_ids`（章）或 `subsection_ids`（节）展开为页面 ID，`ToolGuard` 按生效范围核对目标页。
+- `agent/model/RunScope` 表示已生效的页面授权。`InputService` 在受理时将 `chapter_ids`（章）或 `section_ids`（节）展开为页面 ID，`ToolGuard` 按生效范围核对目标页。
 - `agent/model/RunChangeSet` 按 `ChangeTarget` 合并归属本 Run 的已提交 `DeckChange`，抵消本 Run 自身撤销的修改，供独立审查和 Run 收尾使用。[净修改归属](DATABASE_SPEC.md#runs)
 - `agent/model/ContextEstimate` 保存一次完整请求的上下文 Token 总量与分类明细，由 `ContextService` 整体更新，供压缩判断和会话状态查询使用。[会话上下文](API.html#sessions)
 - `AppendRunDto` 保留 `scope` 是否出现。追加指令时，省略则沿用当前 `RunScope`，显式 `null` 授权全部页面，显式 `slide_ids=[]` 不增加授权。[执行契约](API_SPEC.md#执行)
@@ -205,7 +205,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - 切换最新截图前先删除旧缩略图，删除失败时保留原索引。
 - 截图评分及复用所需的基准存入数据库的工具结果，评估中的临时状态仅保留在内存。
 - `.runtime/exports/{export_id}/` 的根目录只存一个最终成品，文件名为 `{filename}.pdf`、`{filename}.zip` 或 `{filename}.html`。
-- 导出使用创建时固定的完整输入，`ExportSnapshot` 只在任务内存保留。预览和导出都用 `Meta.title` 填充 `deck_title`，用页面所属 `Outline.Section.title` 填充 `section_title`。
+- 导出使用创建时固定的完整输入，`ExportSnapshot` 只在任务内存保留。预览和导出都用 `Meta.title` 填充 `deck_title`，用页面所属 `Outline.Chapter.title` 填充 `chapter_title`。
 - PNG 和 PDF 导出的逐页图片存入任务的 `work/{序号}-{标题}.png`，序号补零，标题规范化。
 - HTML 导出直接生成单文件，内嵌播放器、样式、脚本和 Logo。文本按主题指定的系统字体族排版，项目内不创建播放目录。
 - 导出成品写完并关闭后清理 `work/`，保留待下载成品。

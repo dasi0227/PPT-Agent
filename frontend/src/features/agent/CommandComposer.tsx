@@ -45,24 +45,29 @@ import { getStarterTarget, pendingStarterSlots, starterTokens, type StarterTempl
 function composerScopeInput(
   composer: ReturnType<typeof useComposerStore.getState>,
   currentSlideId: string | undefined,
-): CreateRunScopeInput | null {
+): CreateRunScopeInput | undefined {
 
   if (composer.scopeSelection === 'current_page') {
     return currentSlideId
-      ? { selection: { kind: 'current_page', current_slide_id: currentSlideId } }
-      : null;
+      ? { current_slide_id: currentSlideId }
+      : undefined;
   }
   if (composer.scopeSelection === 'custom_pages') {
     return composer.customSlideIds.length > 0
-      ? { selection: { kind: 'custom_pages', slide_ids: composer.customSlideIds } }
-      : null;
+      ? { slide_ids: composer.customSlideIds }
+      : undefined;
+  }
+  if (composer.scopeSelection === 'custom_chapters') {
+    return composer.customChapterIds.length > 0
+      ? { chapter_ids: composer.customChapterIds }
+      : undefined;
   }
   if (composer.scopeSelection === 'custom_sections') {
     return composer.customSectionIds.length > 0
-      ? { selection: { kind: 'custom_sections', section_ids: composer.customSectionIds } }
-      : null;
+      ? { section_ids: composer.customSectionIds }
+      : undefined;
   }
-  return { selection: { kind: 'all_pages' } };
+  return null;
 }
 
 function formatFileSize(size: number): string {
@@ -250,14 +255,17 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
     htmlState: slide.html_state ?? 'missing' as const,
   })), [slides]);
   const scopePages = useMemo(() => pageCandidates.map((page) => ({ id: page.slideId, ordinal: page.ordinal, title: page.title })), [pageCandidates]);
-  const scopeSections = useMemo(() => (activeSnapshot?.outline.sections ?? []).map((section) => ({
-    id: section.id,
-    title: section.title,
-  })), [activeSnapshot]);
+  const scopeChapters = useMemo(() => activeSnapshot?.outline.chapters ?? [], [activeSnapshot]);
+  const scopeSections = useMemo(() => scopeChapters.flatMap((chapter, chapterIndex) =>
+    chapter.sections.map((section, index) => ({
+      id: section.id, title: section.title, ordinal: `第 ${chapterIndex + 1}.${index + 1} 节`,
+    }))
+  ), [scopeChapters]);
   const currentSlide = slides.find((slide) => slide.id === currentSlideId);
   const isEmptyProject = Boolean(activeProjectId) && projectContentReady && slides.length === 0;
   const scopeSelectionEmpty = (composer.scopeSelection === 'current_page' && !currentSlide)
     || (composer.scopeSelection === 'custom_pages' && composer.customSlideIds.length === 0)
+    || (composer.scopeSelection === 'custom_chapters' && composer.customChapterIds.length === 0)
     || (composer.scopeSelection === 'custom_sections' && composer.customSectionIds.length === 0);
   const slashCommands = useMemo(() => resolveSlashCommands({
     runActive,
@@ -372,8 +380,8 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
 	}, [suggestionKey, suggestionsVisible]);
   useEffect(() => {
     if (activeThreadId && useComposerStore.getState().restoredInputs[activeThreadId]) return;
-    useComposerStore.getState().reconcileScopeIds(scopePages.map((page) => page.id), scopeSections.map((section) => section.id));
-  }, [activeThreadId, scopePages, scopeSections]);
+    useComposerStore.getState().reconcileScopeIds(scopePages.map((page) => page.id), scopeChapters.map((chapter) => chapter.id), scopeSections.map((section) => section.id));
+  }, [activeThreadId, scopePages, scopeChapters, scopeSections]);
   useEffect(() => {
     let current = true;
     let request = 0;
@@ -534,8 +542,8 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
       return;
     }
     const restored = composer.restoredInputs[threadId];
-    const scope = restored?.scope ?? composerScopeInput(composer, currentSlide?.id);
-    if (!scope) {
+    const scope = restored?.scope !== undefined ? restored.scope : composerScopeInput(composer, currentSlide?.id);
+    if (scope === undefined) {
       showGlobalError('请选择有效的页面范围；空项目请选择全部页');
       return;
     }
@@ -721,11 +729,14 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
           <TargetSelector
             selection={composer.scopeSelection}
             selectedSlideIds={composer.customSlideIds}
+            selectedChapterIds={composer.customChapterIds}
             selectedSectionIds={composer.customSectionIds}
             pages={scopePages}
+            chapters={scopeChapters}
             sections={scopeSections}
             onSelectionChange={composer.setScopeSelection}
             onToggleSlide={composer.toggleCustomSlide}
+            onToggleChapter={composer.toggleCustomChapter}
             onToggleSection={composer.toggleCustomSection}
             disabled={disabled}
             emptyProject={isEmptyProject}

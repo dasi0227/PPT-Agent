@@ -16,7 +16,7 @@ public interface IProjectRepository {
 
     int deleteProject(String projectId);
 
-    void requireWritableProjectFiles(String projectId);
+    boolean hasPendingFileOperation(String projectId);
 
     boolean existsProject(String projectId);
 

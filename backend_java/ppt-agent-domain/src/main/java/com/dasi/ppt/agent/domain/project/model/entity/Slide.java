@@ -13,4 +13,6 @@ public final class Slide {
     private String slideId;
     private Spec spec;
     private String html;
+    private String specHash;
+    private String htmlHash;
 }

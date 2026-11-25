@@ -1,5 +1,6 @@
 package com.dasi.ppt.agent.interfaces.controller.session.vo;
 
+import com.dasi.ppt.agent.domain.agent.model.entity.Session;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.RunStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -25,5 +26,15 @@ public final class SessionListVo {
         private long updatedAt;
         private RunStatus runStatus;
         private boolean hasActiveCommands;
+
+        public static SessionSummaryVo toVo(Session session) {
+            return SessionSummaryVo.builder()
+                    .id(session.getId())
+                    .title(session.getTitle())
+                    .updatedAt(session.getUpdatedAt())
+                    .runStatus(session.getRunStatus())
+                    .hasActiveCommands(session.isHasActiveCommands())
+                    .build();
+        }
     }
 }

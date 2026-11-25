@@ -217,7 +217,7 @@ export const Timeline: React.FC<{
                   text={item.text}
                   timestamp={item.timestamp}
                   label="复制用户消息"
-                  scopeLabel={item.scope ? targetLabel(item.scope) : undefined}
+                  scopeLabel={item.scope !== undefined ? targetLabel(item.scope) : undefined}
                 ><RollbackButton runId={item.runId} steering={item.steering} /></MessageMetaActions>
               </div>
             </div>

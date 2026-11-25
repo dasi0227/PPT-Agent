@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, ChevronsDown, ChevronsUp, Ellipsis, FilePlus2, FileText, Folder, FolderInput, FolderOpen, FolderPlus, GripVertical, List, Pencil, Plus, Trash2, X } from 'lucide-react';
-import type { Outline, OutlineSection, OutlineSlideNode, OutlineSubsection } from '../../api/types';
+import type { Outline, OutlineChapter, OutlineSlideNode, OutlineSection } from '../../api/types';
 import { Button, IconButton } from '../../components/ui/primitives';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from '../../components/ui/dropdown-menu';
 import { ConfirmModal } from '../../components/ui/modal-confirm';
@@ -13,7 +13,7 @@ import { applyOutlineCommand, findOutlineNode, newOutlineNode, outlineDestinatio
 import './outline.css';
 
 type Edit = { id: string; title: string; version: string; base: Outline; addition?: Extract<OutlineCommand, { type: 'insert' }> };
-const labels = { section: '章节', subsection: '小节', slide: '页面' };
+const labels = { chapter: '章节', section: '小节', slide: '页面' };
 
 export function OutlineEditor({ value, version, blocked, notice, commit, saveDraft, restoreDraft, canRestore = false, draftMode = false, onEditingChange, onDraftSaved, openSlide }: {
   value: Outline; version: string; blocked?: string; notice?: ReactNode;
@@ -43,8 +43,8 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
   const unavailable = blocked ?? (stale ? '目录已更新，请取消后重新编辑。' : undefined);
   const locked = Boolean(blocked) || busy || Boolean(edit);
   const displayed = edit ? edit.addition ? applyOutlineCommand(edit.base, edit.addition) : edit.base : value;
-  const empty = displayed.sections.length === 0;
-  const pages = displayed.sections.flatMap(section => [...section.slides, ...section.subsections.flatMap(sub => sub.slides)]);
+  const empty = displayed.chapters.length === 0;
+  const pages = displayed.chapters.flatMap(chapter => [...chapter.slides, ...chapter.sections.flatMap(sub => sub.slides)]);
 
   useEffect(() => {
     useDeckStore.getState().setSourceBlocked(isEditing || busy);
@@ -67,7 +67,7 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
   function focusRow(id?: string) {
     requestAnimationFrame(() => {
       const row = id ? root.current?.querySelector<HTMLElement>(`[data-node-id="${id}"] .outline-title`) : undefined;
-      (row ?? root.current?.querySelector<HTMLElement>('.outline-add-section'))?.focus({ preventScroll: true });
+      (row ?? root.current?.querySelector<HTMLElement>('.outline-add-chapter'))?.focus({ preventScroll: true });
     });
   }
   function cancel() {
@@ -177,19 +177,19 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
     const item = findOutlineNode(displayed, node.id)!;
     const index = item.siblings.findIndex(value => value.id === node.id);
     const destinations = outlineDestinations(displayed, kind, item.parent?.id);
-    const section = node as OutlineSection;
-    const promote = !draftMode && kind === 'subsection' && (node as OutlineSubsection).slides.length > 0;
-    const removeDisabled = !draftMode && (kind === 'section' ? Boolean(section.slides.length || section.subsections.length)
-      : promote && item.parent && 'subsections' in item.parent ? item.parent.subsections.length > 1 : false);
+    const chapter = node as OutlineChapter;
+    const promote = !draftMode && kind === 'section' && (node as OutlineSection).slides.length > 0;
+    const removeDisabled = !draftMode && (kind === 'chapter' ? Boolean(chapter.slides.length || chapter.sections.length)
+      : promote && item.parent && 'sections' in item.parent ? item.parent.sections.length > 1 : false);
     return <DropdownMenu><DropdownMenuTrigger asChild><IconButton label={`${node.title}操作`} disabled={locked}><Ellipsis /></IconButton></DropdownMenuTrigger>
       <DropdownMenuContent align="end" sideOffset={6}>
         <DropdownMenuItem onSelect={() => start(node.id)}><Pencil className="mr-2 h-3.5 w-3.5" />编辑{labels[kind]}</DropdownMenuItem>
-        {kind !== 'slide' && !(kind === 'section' && section.subsections.length) && <DropdownMenuItem disabled={(node as OutlineSubsection).slides.length >= 200} onSelect={() => add('slide', node.id)}><FilePlus2 className="mr-2 h-3.5 w-3.5" />新增页面</DropdownMenuItem>}
-        {kind === 'section' && <DropdownMenuItem disabled={section.subsections.length >= 64} onSelect={() => add('subsection', node.id)}><FolderPlus className="mr-2 h-3.5 w-3.5" />新增小节</DropdownMenuItem>}
+        {kind !== 'slide' && !(kind === 'chapter' && chapter.sections.length) && <DropdownMenuItem disabled={(node as OutlineSection).slides.length >= 200} onSelect={() => add('slide', node.id)}><FilePlus2 className="mr-2 h-3.5 w-3.5" />新增页面</DropdownMenuItem>}
+        {kind === 'chapter' && <DropdownMenuItem disabled={chapter.sections.length >= 64} onSelect={() => add('section', node.id)}><FolderPlus className="mr-2 h-3.5 w-3.5" />新增小节</DropdownMenuItem>}
         <DropdownMenuSeparator />
         <DropdownMenuItem disabled={index === 0} onSelect={() => siblingMove(node.id, -1)}><ArrowUp className="mr-2 h-3.5 w-3.5" />上移</DropdownMenuItem>
         <DropdownMenuItem disabled={index === item.siblings.length - 1} onSelect={() => siblingMove(node.id, 1)}><ArrowDown className="mr-2 h-3.5 w-3.5" />下移</DropdownMenuItem>
-        {kind !== 'section' && <DropdownMenuSub><DropdownMenuSubTrigger disabled={!destinations.length}><FolderInput className="mr-2 h-3.5 w-3.5" />移动到…<ChevronRight className="ml-auto h-3.5 w-3.5" /></DropdownMenuSubTrigger>
+        {kind !== 'chapter' && <DropdownMenuSub><DropdownMenuSubTrigger disabled={!destinations.length}><FolderInput className="mr-2 h-3.5 w-3.5" />移动到…<ChevronRight className="ml-auto h-3.5 w-3.5" /></DropdownMenuSubTrigger>
           <DropdownMenuSubContent>{destinations.map(target => <DropdownMenuItem key={target.id} onSelect={() => {
             void change({ type: 'move', id: node.id, position: { parent_id: target.id } }).then(done => { if (done) setCollapsed(current => { const next = new Set(current); next.delete(target.id); return next; }); });
           }}>{target.title}</DropdownMenuItem>)}</DropdownMenuSubContent>
@@ -217,7 +217,7 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
       {kind === 'slide' && <span className="outline-ordinal">{String(ordinal).padStart(2, '0')}</span>}
       {kind === 'slide' && openSlide ? <button type="button" className="outline-node-link ui-interactive" aria-label={`查看${node.title}设计稿`} title="查看设计稿" disabled={isEditing || busy} onClick={() => openSlide(node.id)}><Icon className="outline-node-icon" aria-hidden="true" /></button>
         : <Icon className="outline-node-icon" aria-hidden="true" />}
-      {container && <span className="outline-ordinal">第 <strong>{ordinal}</strong> {kind === 'section' ? '章' : '节'}</span>}
+      {container && <span className="outline-ordinal">第 <strong>{ordinal}</strong> {kind === 'chapter' ? '章' : '节'}</span>}
       <div className="outline-copy">{titleField(node, kind)}</div>
       <div className="outline-row-actions">
         {editing ? <><IconButton label="确认编辑" className="outline-confirm" disabled={busy || Boolean(unavailable)} onClick={() => void confirmEdit()}><Check /></IconButton><IconButton label="取消编辑" disabled={busy} onClick={cancel}><X /></IconButton></>
@@ -229,15 +229,15 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
     return slides.length ? slides.map(slide => <div key={slide.id}>{row(slide, 'slide', pages.findIndex(page => page.id === slide.id) + 1)}</div>)
       : <Button variant="ghost" className="outline-add-page" disabled={locked} onClick={() => add('slide', parentId)}><Plus />新增页面</Button>;
   }
-  const allFolded = displayed.sections.length > 0 && displayed.sections.every(section => collapsed.has(section.id));
+  const allFolded = displayed.chapters.length > 0 && displayed.chapters.every(chapter => collapsed.has(chapter.id));
   const deletingItem = deleting && findOutlineNode(value, deleting.id);
-  const promote = !draftMode && deletingItem?.kind === 'subsection' && (deletingItem.node as OutlineSubsection).slides.length > 0;
+  const promote = !draftMode && deletingItem?.kind === 'section' && (deletingItem.node as OutlineSection).slides.length > 0;
   const feedback = busy ? undefined : error || (stale ? '目录已更新，请取消后重新编辑。' : undefined);
   const status = feedback ? <span className="management-feedback" role="alert">{feedback}</span> : undefined;
   if (showJSON && !edit && !busy) return <JSONPreview title="目录结构" value={value} notice={notice} />;
   return <>
-    <DocumentCanvas title="目录结构" icon={List} status={!busy && !notice ? blocked : undefined} actions={<div className="outline-heading-actions"><span>{displayed.sections.length} 章 · {pages.length} 页</span>
-      <IconButton className="outline-collapse-all" label={allFolded ? '展开全部' : '收起全部'} disabled={Boolean(edit) || !displayed.sections.length} onClick={() => setCollapsed(allFolded ? new Set() : new Set(displayed.sections.map(section => section.id)))}>{allFolded ? <ChevronsDown /> : <ChevronsUp />}</IconButton></div>}
+    <DocumentCanvas title="目录结构" icon={List} status={!busy && !notice ? blocked : undefined} actions={<div className="outline-heading-actions"><span>{displayed.chapters.length} 章 · {pages.length} 页</span>
+      <IconButton className="outline-collapse-all" label={allFolded ? '展开全部' : '收起全部'} disabled={Boolean(edit) || !displayed.chapters.length} onClick={() => setCollapsed(allFolded ? new Set() : new Set(displayed.chapters.map(chapter => chapter.id)))}>{allFolded ? <ChevronsDown /> : <ChevronsUp />}</IconButton></div>}
       footer={draftMode ? <div className="outline-footer">{status}<div className="ml-auto flex gap-2">
         <Button variant="ghost" disabled={busy || Boolean(blocked) || (!edit && !canRestore)} onClick={() => void restore()}>恢复</Button>
         <Button variant="ghost" disabled={busy || Boolean(unavailable)} onClick={() => void save()}>{busy ? '保存中…' : '保存'}</Button>
@@ -246,16 +246,16 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
       {!draftMode && status}
       <div ref={root} className="outline-tree" data-empty={empty || undefined}>
         {empty && <IllustratedEmptyState illustration="outline" />}
-        {displayed.sections.map((section, sectionIndex) => <section className="outline-section" key={section.id}>
-          {row(section, 'section', sectionIndex + 1)}
-          {!collapsed.has(section.id) && <div className="outline-section-children">
-            {section.subsections.length ? section.subsections.map((sub, subIndex) => <section className="outline-subsection" key={sub.id}>
-              {row(sub, 'subsection', `${sectionIndex + 1}.${subIndex + 1}`)}
-              {!collapsed.has(sub.id) && <div className="outline-subsection-children">{slideRows(sub.slides, sub.id)}</div>}
-            </section>) : slideRows(section.slides, section.id)}
+        {displayed.chapters.map((chapter, chapterIndex) => <section className="outline-chapter" key={chapter.id}>
+          {row(chapter, 'chapter', chapterIndex + 1)}
+          {!collapsed.has(chapter.id) && <div className="outline-chapter-children">
+            {chapter.sections.length ? chapter.sections.map((sub, subIndex) => <section className="outline-section" key={sub.id}>
+              {row(sub, 'section', `${chapterIndex + 1}.${subIndex + 1}`)}
+              {!collapsed.has(sub.id) && <div className="outline-section-children">{slideRows(sub.slides, sub.id)}</div>}
+            </section>) : slideRows(chapter.slides, chapter.id)}
           </div>}
         </section>)}
-        <Button variant="ghost" className="outline-add-section" disabled={locked || displayed.sections.length >= 32} onClick={() => add('section')}><FolderPlus />新增章节</Button>
+        <Button variant="ghost" className="outline-add-chapter" disabled={locked || displayed.chapters.length >= 32} onClick={() => add('chapter')}><FolderPlus />新增章节</Button>
       </div>
     </DocumentCanvas>
     <ConfirmModal open={Boolean(deletingItem)} onOpenChange={open => { if (!open) setDeleting(undefined); }} title={promote ? '取消小节' : `删除${deletingItem ? labels[deletingItem.kind] : ''}`}

@@ -19,4 +19,6 @@ public class SessionPo {
     private String title;
     private String plan;
     private long updatedAt;
+    private String runStatus;
+    private boolean hasActiveCommands;
 }

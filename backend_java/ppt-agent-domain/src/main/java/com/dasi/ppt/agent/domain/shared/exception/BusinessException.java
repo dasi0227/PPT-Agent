@@ -15,6 +15,14 @@ public class BusinessException extends RuntimeException {
         return new BusinessException(ErrorCode.INVALID_ARGUMENT, message);
     }
 
+    public static BusinessException illegal() {
+        return illegal(ErrorCode.ILLEGAL_STATE.getDefaultMessage());
+    }
+
+    public static BusinessException illegal(String message) {
+        return new BusinessException(ErrorCode.ILLEGAL_STATE, message);
+    }
+
     public static BusinessException notFound(ErrorCode code) {
         return notFound(code, code.getDefaultMessage());
     }

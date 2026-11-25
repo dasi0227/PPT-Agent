@@ -8,7 +8,7 @@ import { cn } from '../../lib/utils';
 import { decorationTypeLabel } from './semanticLabels';
 import './decorationPlacement.css';
 
-const fields: DecorationType[] = ['slide_pagination', 'deck_title', 'section_title', 'logo'];
+const fields: DecorationType[] = ['slide_pagination', 'deck_title', 'chapter_title', 'logo'];
 const positions: { value: DecorationPlacement; label: string }[] = [
   { value: 'top-left', label: '左上' }, { value: 'top-center', label: '上中' }, { value: 'top-right', label: '右上' },
   { value: 'bottom-left', label: '左下' }, { value: 'bottom-center', label: '下中' }, { value: 'bottom-right', label: '右下' },
@@ -18,9 +18,9 @@ type Slot = DecorationPlacement | typeof poolSlots[number];
 type Layout = Record<Slot, DecorationType | null>;
 const allSlots: Slot[] = [...positions.map(position => position.value), ...poolSlots];
 const icons: Record<DecorationType, LucideIcon> = {
-  slide_pagination: Hash, deck_title: Heading1, section_title: Heading2, logo: FileImage,
+  slide_pagination: Hash, deck_title: Heading1, chapter_title: Heading2, logo: FileImage,
 };
-const defaults: Decorations = { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'top-left', logo: 'none' };
+const defaults: Decorations = { slide_pagination: 'bottom-right', deck_title: 'none', chapter_title: 'top-left', logo: 'none' };
 
 function makeLayout(value: Decorations, previous?: Layout): Layout {
   const layout = Object.fromEntries(allSlots.map(slot => [slot, null])) as Layout;
@@ -41,7 +41,7 @@ function makeLayout(value: Decorations, previous?: Layout): Layout {
 }
 
 function toPositions(layout: Layout): Decorations {
-  const value: Decorations = { slide_pagination: 'none', deck_title: 'none', section_title: 'none', logo: 'none' };
+  const value: Decorations = { slide_pagination: 'none', deck_title: 'none', chapter_title: 'none', logo: 'none' };
   for (const position of positions) {
     const field = layout[position.value];
     if (field) value[field] = position.value;

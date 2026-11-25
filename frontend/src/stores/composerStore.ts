@@ -24,6 +24,7 @@ export interface ComposerState {
   threadResourceMentions: Record<string, Pick<CreateRunRequest, 'component_names' | 'mentioned_slide_ids'>>;
   scopeSelection: ScopeSelectionKind;
   customSlideIds: string[];
+  customChapterIds: string[];
   customSectionIds: string[];
   mode: RunMode;
   appliedApprovalByThread: Record<string, string>;
@@ -40,6 +41,7 @@ export interface ComposerState {
   editingSelectionIdByThread: Record<string, string | undefined>;
   setScopeSelection: (selection: ScopeSelectionKind) => void;
   toggleCustomSlide: (slideId: string) => void;
+  toggleCustomChapter: (chapterId: string) => void;
   toggleCustomSection: (sectionId: string) => void;
   setIntent: (mode: RunMode) => void;
   setModelProfileName: (name: string) => void;
@@ -55,7 +57,7 @@ export interface ComposerState {
   setEditingDOMSelection: (threadId: string, selectionId?: string) => void;
   toggleSkill: (id: string) => void;
   reconcileSkills: (validIds: string[]) => void;
-  reconcileScopeIds: (slideIds: string[], sectionIds: string[]) => void;
+  reconcileScopeIds: (slideIds: string[], chapterIds: string[], sectionIds: string[]) => void;
   resetForProject: () => void;
 }
 
@@ -71,6 +73,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
   threadResourceMentions: {},
   scopeSelection: 'all_pages',
   customSlideIds: [],
+  customChapterIds: [],
   customSectionIds: [],
   mode: 'create',
   appliedApprovalByThread: {},
@@ -92,6 +95,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
   editingSelectionIdByThread: {},
   setScopeSelection: (scopeSelection) => set((state) => ({ restoredInputs: clearRestoredScopes(state), scopeSelection })),
   toggleCustomSlide: (slideId) => set((state) => ({ restoredInputs: clearRestoredScopes(state), customSlideIds: toggleId(state.customSlideIds, slideId) })),
+  toggleCustomChapter: (chapterId) => set((state) => ({ restoredInputs: clearRestoredScopes(state), customChapterIds: toggleId(state.customChapterIds, chapterId) })),
   toggleCustomSection: (sectionId) => set((state) => ({ restoredInputs: clearRestoredScopes(state), customSectionIds: toggleId(state.customSectionIds, sectionId) })),
   setIntent: (mode) => set({ mode }),
   setModelProfileName: (name) => {
@@ -174,19 +178,22 @@ export const useComposerStore = create<ComposerState>((set) => ({
     return selectedSkillIds.length === state.selectedSkillIds.length && selectedSkillIds.every((id, index) => id === state.selectedSkillIds[index])
       ? state : { selectedSkillIds };
   }),
-  reconcileScopeIds: (slideIds, sectionIds) => set((state) => {
+  reconcileScopeIds: (slideIds, chapterIds, sectionIds) => set((state) => {
     const slides = new Set(slideIds);
+    const chapters = new Set(chapterIds);
     const sections = new Set(sectionIds);
     const customSlideIds = state.customSlideIds.filter((id) => slides.has(id));
+    const customChapterIds = state.customChapterIds.filter((id) => chapters.has(id));
     const customSectionIds = state.customSectionIds.filter((id) => sections.has(id));
-    return customSlideIds.length === state.customSlideIds.length && customSectionIds.length === state.customSectionIds.length
+    return customSlideIds.length === state.customSlideIds.length && customChapterIds.length === state.customChapterIds.length
+      && customSectionIds.length === state.customSectionIds.length
       ? state
-      : { customSlideIds, customSectionIds };
+      : { customSlideIds, customChapterIds, customSectionIds };
   }),
   resetForProject: () => set({
     restoredInputs: {},
     threadResourceMentions: {},
-    scopeSelection: 'all_pages', customSlideIds: [], customSectionIds: [],
+    scopeSelection: 'all_pages', customSlideIds: [], customChapterIds: [], customSectionIds: [],
     mode: 'create', appliedApprovalByThread: {}, polishing: false, selectedSkillIds: [], threadDrafts: {}, threadTemplateTokens: {}, threadReferences: {}, nextMarkerByThread: {}, editingSelectionIdByThread: {},
   }),
 }));
@@ -199,7 +206,7 @@ export function composerScene(): Partial<ComposerState> {
   const s = useComposerStore.getState();
   return {
     scopeSelection: s.scopeSelection,
-    customSlideIds:s.customSlideIds, customSectionIds:s.customSectionIds, mode:s.mode,
+    customSlideIds:s.customSlideIds, customChapterIds:s.customChapterIds, customSectionIds:s.customSectionIds, mode:s.mode,
     appliedApprovalByThread:s.appliedApprovalByThread,
     modelProfileName:s.modelProfileName, modelSelectionExplicit:s.modelSelectionExplicit, selectedSkillIds:s.selectedSkillIds,
     threadDrafts:s.threadDrafts, threadTemplateTokens:s.threadTemplateTokens, threadReferences:s.threadReferences, nextMarkerByThread:s.nextMarkerByThread,

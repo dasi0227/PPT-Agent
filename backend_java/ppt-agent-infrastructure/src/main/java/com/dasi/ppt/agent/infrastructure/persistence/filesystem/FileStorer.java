@@ -1,6 +1,5 @@
 package com.dasi.ppt.agent.infrastructure.persistence.filesystem;
 
-import com.dasi.ppt.agent.domain.shared.exception.ErrorCode;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.ProjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -11,14 +10,21 @@ import org.springframework.util.FileSystemUtils;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
+import java.nio.channels.SeekableByteChannel;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.util.List;
 
-import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.conflict;
+import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.illegal;
 import static java.nio.file.LinkOption.NOFOLLOW_LINKS;
 import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
+import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 
 @Slf4j
 @Component
@@ -32,25 +38,86 @@ public class FileStorer {
     private final PathResolver pathResolver;
     private final ProjectMapper projectMapper;
 
-    public void requireWritable(Path directory) {
-        // 判断是否正在创建中
-        Path creatingTag = directory.resolveSibling(CREATING + directory.getFileName());
-        if (Files.exists(creatingTag, NOFOLLOW_LINKS)) {
-            throw conflict(ErrorCode.PROJECT_BUSY);
+    public byte[] readFile(Path file) {
+        try (SeekableByteChannel channel = Files.newByteChannel(file, StandardOpenOption.READ, NOFOLLOW_LINKS)) {
+            return Channels.newInputStream(channel).readAllBytes();
+        } catch (NoSuchFileException ex) {
+            return null;
+        } catch (IOException ex) {
+            throw new UncheckedIOException(ex);
         }
-        // 判断是否正在删除中
-        Path deletingTag = directory.resolveSibling(DELETING + directory.getFileName());
-        if (Files.exists(deletingTag, NOFOLLOW_LINKS)) {
-            throw conflict(ErrorCode.PROJECT_BUSY);
+    }
+
+    public List<Path> listMutationLogs(Path directory) {
+        try (var entries = Files.list(directory.resolve(MUTATING))) {
+            return entries.filter(path -> path.getFileName().toString().endsWith(".json"))
+                    .sorted()
+                    .toList();
+        } catch (NoSuchFileException ex) {
+            return List.of();
+        } catch (IOException ex) {
+            throw new UncheckedIOException(ex);
         }
-        // 判断是否正在更改中
-        Path mutatingTag = directory.resolve(MUTATING);
-        try (DirectoryStream<Path> logs = Files.newDirectoryStream(mutatingTag, "*.json")) {
-            if (logs.iterator().hasNext()) {
-                throw conflict(ErrorCode.PROJECT_BUSY);
+    }
+
+    public Path mutationLogPath(Path directory, String operationHash) {
+        return directory.resolve(MUTATING).resolve(operationHash + ".json");
+    }
+
+    public void writeMutationLog(Path path, byte[] log) {
+        Path mutations = path.getParent();
+        try {
+            Files.createDirectories(mutations);
+            syncDirectory(mutations.getParent().getParent());
+            syncDirectory(mutations.getParent());
+        } catch (IOException ex) {
+            throw new UncheckedIOException(ex);
+        }
+        replaceFile(path, log);
+    }
+
+    public void replaceFile(Path path, byte[] bytes) {
+        Path directory = path.getParent();
+        try {
+            if (bytes == null) {
+                Files.deleteIfExists(path);
+            } else {
+                Path temp = Files.createTempFile(directory, ".writing-", ".tmp");
+                try {
+                    try (FileChannel channel = FileChannel.open(temp, StandardOpenOption.WRITE)) {
+                        ByteBuffer buffer = ByteBuffer.wrap(bytes);
+                        while (buffer.hasRemaining()) {
+                            channel.write(buffer);
+                        }
+                        channel.force(true);
+                    }
+                    Files.move(temp, path, ATOMIC_MOVE, REPLACE_EXISTING);
+                } finally {
+                    Files.deleteIfExists(temp);
+                }
             }
+            syncDirectory(directory);
+        } catch (IOException ex) {
+            throw new UncheckedIOException(ex);
+        }
+    }
+
+    private void syncDirectory(Path directory) throws IOException {
+        try (FileChannel channel = FileChannel.open(directory, StandardOpenOption.READ)) {
+            channel.force(true);
+        }
+    }
+
+    public boolean hasPendingFileOperation(Path directory) {
+        Path creatingTag = directory.resolveSibling(CREATING + directory.getFileName());
+        Path deletingTag = directory.resolveSibling(DELETING + directory.getFileName());
+        if (Files.exists(creatingTag, NOFOLLOW_LINKS) || Files.exists(deletingTag, NOFOLLOW_LINKS)) {
+            return true;
+        }
+        try (DirectoryStream<Path> logs = Files.newDirectoryStream(directory.resolve(MUTATING), "*.json")) {
+            return logs.iterator().hasNext();
         } catch (NoSuchFileException ignored) {
-            // 尚无写入日志。
+            return false;
         } catch (IOException ex) {
             throw new UncheckedIOException(ex);
         }
@@ -68,7 +135,7 @@ public class FileStorer {
                 String projectId = name.substring((isCreating ? CREATING : DELETING).length());
                 Path directory = pathResolver.projectDirectory(projectId);
                 if (!projectsRoot.equals(directory.getParent())) {
-                    throw new IOException("项目恢复标记无效：" + pending);
+                    throw illegal("项目恢复标记无效：" + pending);
                 }
                 alignProjectDirectoryWithDatabase(directory, pending, isCreating, projectMapper.existsProject(projectId));
             }

@@ -26,4 +26,8 @@ public interface ProjectMapper {
     int updateProjectLogo(@Param("projectId") String projectId, @Param("logo") byte[] logo, @Param("updatedAt") long updatedAt);
 
     int deleteProject(String projectId);
+
+    boolean hasActiveDocumentOperation(String projectId);
+
+    void updateProjectTime(@Param("projectId") String projectId, @Param("updatedAt") long updatedAt);
 }

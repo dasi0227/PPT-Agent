@@ -22,7 +22,7 @@ public final class ProjectAppearanceVo {
                 .positions(DecorationPositionsVo.builder()
                         .slidePagination(project.getSlidePaginationPosition())
                         .deckTitle(project.getDeckTitlePosition())
-                        .sectionTitle(project.getSectionTitlePosition())
+                        .chapterTitle(project.getChapterTitlePosition())
                         .logo(project.getLogoPosition())
                         .build())
                 .logo(project.isLogoPresent())
@@ -36,7 +36,7 @@ public final class ProjectAppearanceVo {
     public static final class DecorationPositionsVo {
         private DecorationPosition slidePagination;
         private DecorationPosition deckTitle;
-        private DecorationPosition sectionTitle;
+        private DecorationPosition chapterTitle;
         private DecorationPosition logo;
     }
 }

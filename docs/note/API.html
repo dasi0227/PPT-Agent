@@ -180,10 +180,10 @@
                 <ul class="fields">
                   <li><code>meta</code>：基本信息对象，含 title、language、count、audience、goal 五个字符串；未建立为 null</li>
                   <li><code>constraint</code>：约束对象，content 与 visual 各含 requirements、prohibitions 字符串数组；未建立为 null</li>
-                  <li><code>outline</code>：大纲对象，未建立为 null。<code>sections</code> 为有序章数组，章含 <code>id、title、slides、subsections</code>，节含 <code>id、title、slides</code>，幻灯片含 <code>id、title</code>。空列表为 <code>[]</code></li>
+                  <li><code>outline</code>：大纲对象，未建立为 null。<code>chapters</code> 为有序章数组，章含 <code>id、title、slides、sections</code>，节含 <code>id、title、slides</code>，幻灯片含 <code>id、title</code>。空列表为 <code>[]</code></li>
 
-                  <li><code>slides</code>：按 <code>slide_id</code> 索引，每项包含 <code>spec</code> 与 <code>html</code>。<code>spec</code> 沿用 <code>{slide_id}.json</code>，含 <code>purpose、core、elements、layout</code>；格式错误时返回 null。<code>html</code> 为源码字符串，已存在的空 HTML 返回空串。文件缺失时对应值为 null，没有幻灯片时为 <code>{}</code></li>
-                  <li><code>hashes</code>：含 <code>meta、constraint、outline</code> 的哈希及 <code>hashes.slides</code>，其中页键与 <code>slides</code> 相同。缺失文件的哈希为 null；损坏的规格保留原始文件哈希</li>
+                  <li><code>slides</code>：按 <code>slide_id</code> 索引，每项包含 <code>spec</code> 与 <code>html</code>。<code>spec</code> 沿用 <code>{slide_id}.json</code>，含 <code>purpose、core、elements、layout</code>。文稿 JSON 文件格式错误时，整次读取返回 <code>ILLEGAL_STATE</code>。<code>html</code> 为源码字符串，已存在的空 HTML 返回空串。文件缺失时对应值为 null，没有幻灯片时为 <code>{}</code></li>
+                  <li><code>hashes</code>：含 <code>meta、constraint、outline</code> 的哈希及 <code>hashes.slides</code>，其中页键与 <code>slides</code> 相同。缺失文件的哈希为 null</li>
 
                 </ul>
               </td>
@@ -199,7 +199,7 @@
               <td>
                 <ul class="fields">
                   <li><code>theme_id</code>：当前主题资产 ID，未选择主题时为 <code>null</code></li>
-                  <li><code>positions</code>：四个位置字段 <code>slide_pagination、deck_title、section_title、logo</code>，取值为 <code>none / top-left / top-center / top-right / bottom-left / bottom-center / bottom-right</code>，<code>none</code> 表示隐藏</li>
+                  <li><code>positions</code>：四个位置字段 <code>slide_pagination、deck_title、chapter_title、logo</code>，取值为 <code>none / top-left / top-center / top-right / bottom-left / bottom-center / bottom-right</code>，<code>none</code> 表示隐藏</li>
 
                   <li><code>logo</code>：布尔值，已上传为 true，未上传为 false</li>
                 </ul>
@@ -287,7 +287,7 @@
                   <li><code>project_id</code>：必填，项目 ID</li>
                   <li><code>slide_pagination</code>：必填，页码位置</li>
                   <li><code>deck_title</code>：必填，文稿标题位置</li>
-                  <li><code>section_title</code>：必填，章节标题位置</li>
+                  <li><code>chapter_title</code>：必填，章节标题位置</li>
                   <li><code>logo</code>：必填，标志图位置</li>
                 </ul>
                 <p>位置取值与读取项目外观一致。</p>
@@ -333,7 +333,7 @@
                 <ul class="fields">
                   <li><code>project_id</code>：项目 ID</li>
                   <li><code>base_hash</code>：打开编辑器时的内容哈希，可为 null，仅在预期文件尚不存在时创建</li>
-                  <li><code>outline</code>：大纲对象，含 sections 有序章数组；空大纲为 {"sections":[]}</li>
+                  <li><code>outline</code>：大纲对象，含 chapters 有序章数组；空大纲为 {"chapters":[]}</li>
                 </ul>
               </td>
               <td>
@@ -1111,7 +1111,7 @@
                   <li><code>items[].status</code>：字符串，必返；added / modified / deleted</li>
                   <li><code>items[].type</code>：字符串，必返；fields / outline / text / binary / unavailable</li>
                   <li><code>items[].fields</code>：数组，仅 fields 时必返；每项含 field、可选 label、rows；行含 type（added / removed）、value</li>
-                  <li><code>items[].groups</code>：数组，仅 outline 时必返；每项含 rows；行含 type（context / added / removed）、node（section / subsection / slide）、depth、title、可选 order</li>
+                  <li><code>items[].groups</code>：数组，仅 outline 时必返；每项含 rows；行含 type（context / added / removed）、node（chapter / section / slide）、depth、title、可选 order</li>
                   <li><code>items[].hunks</code>：数组，仅 text 时必返；每项含 old_start、old_count、new_start、new_count、rows；行含 type（context / added / removed）、text、可选 old_line、new_line</li>
                   <li><code>items[].reason</code>：字符串，仅 unavailable 时必返；无法展示的原因；binary 只展示目标和变更类别</li>
                 </ul>
@@ -1268,7 +1268,7 @@
                   <li><code>text</code>：字符串，必填。只发图片或带非空注释的 DOM 选区时可为空字符串</li>
                   <li><code>mode</code>：新开 Run 时必填，chat / ask / plan / create。追加沿用该模式；gossip 仅切换当轮提示词及工具</li>
                   <li><code>model</code>：字符串，新开 Run 时必填。在受理时解析并固定模型及备用路由，整次 Run 复用</li>
-                  <li><code>scope</code>：新开 Run 时必填。追加时省略则沿用，显式提交则与当前范围合并。null 表示全部，对象只含 <code>current_slide_id</code>、<code>slide_ids</code>、<code>section_ids</code>（章）或 <code>subsection_ids</code>（节）之一</li>
+                  <li><code>scope</code>：新开 Run 时必填。追加时省略则沿用，显式提交则与当前范围合并。null 表示全部，对象只含 <code>current_slide_id</code>、<code>slide_ids</code>、<code>chapter_ids</code>（章）或 <code>section_ids</code>（节）之一</li>
                   <li><code>references</code>：可选，有序引用数组，默认 []；顺序与输入框一致</li>
                   <li><code>references[].type</code>：skill / component 用 asset_id，slide 用 slide_id，image 必填 attachment_id 和 original_name（文件显示名），dom 用下列选区字段。追加仅支持 image / dom</li>
                   <li><code>references[].slide_id</code>：幻灯片或 DOM 引用必填；所属项目由会话确定</li>
@@ -1279,7 +1279,7 @@
                   <li><code>references[].html_hash</code>：DOM 必填，选区所属幻灯片的源码哈希</li>
                   <li><code>references[].region</code>：DOM 选区定位对象，含 type（element / region）及画布坐标 rect（x、y、width、height）；targets 为元素定位数组，decorations 为装饰定位数组；两者至少一项非空</li>
                   <li><code>references[].region.targets</code>：元素含 target_id、tag、fingerprint、rect；fingerprint 含 tag、sibling_index，可附 stable_id、classes、ancestors。坐标以 1920 × 1080 为基准</li>
-                  <li><code>references[].region.decorations</code>：每项含 type（slide_pagination / deck_title / section_title / logo）、placement、text、rect；未选择装饰时为 []</li>
+                  <li><code>references[].region.decorations</code>：每项含 type（slide_pagination / deck_title / chapter_title / logo）、placement、text、rect；未选择装饰时为 []</li>
                   <li><code>branch_revision</code>：十进制字符串，可返回最新时新开 Run 必填。用户确认放弃「返回最新」时的会话版本</li>
                 </ul>
               </td>

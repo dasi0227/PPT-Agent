@@ -2262,7 +2262,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>新 Run 的起始状态，或回退 / 返回请求与预览版本</td>
 <td>起始快照、可用回退目标，或历史恢复结果</td>
-<td>受理时从同一份一致读取生成持久检查点和 Run 内存审查基准。回退与返回均恢复目标会话标题、计划及步骤、历史和建议，以及五类项目文稿文件。共享文稿文件实际变化时清理同项目其他会话的检查点及返回快照。</td>
+<td>受理时从同一份一致读取生成持久检查点和 Run 内存审查基准。回退与返回均恢复目标会话标题、计划及步骤、历史和建议，以及五类项目文稿文件。回退或返回实际改变共享文稿文件时，清理同项目其他会话的检查点及返回快照。</td>
 </tr>
 </tbody>
 <tbody>
@@ -2413,7 +2413,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>带来源归属的资源修改、读取、渲染结果或遗留事务</td>
 <td>已校验的 <code>DeckEditCandidate</code>、带归属的已提交修改事实或读取到的项目内容</td>
-<td>归 domain/project/service；统一资源规则、Schema / 引用校验、内容基准和文件提交，工具与人工保存复用。真实提交时可靠记录来源和实际修改，候选不计入已提交差异；实际变更协调检查点失效。明确业务冲突可抛 BusinessException，由调用边界决定 HTTP 错误响应或失败工具结果；本类不返回工具专属 ToolResult，提交不确定等故障向上传递。</td>
+<td>归 domain/project/service；统一资源规则、Schema / 引用校验、内容基准和文件提交，工具与人工保存复用。真实提交时可靠记录来源和实际修改，候选不计入已提交差异；工具实际写入时协调检查点失效，人工保存保留各会话原有的检查点和版本。明确业务冲突可抛 BusinessException，由调用边界决定 HTTP 错误响应或失败工具结果；本类不返回工具专属 ToolResult，提交不确定等故障向上传递。</td>
 </tr>
 <tr id="class-AssetService">
 <th scope="row">

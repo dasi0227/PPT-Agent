@@ -29,6 +29,6 @@ public final class ExportSnapshot {
     public static final class Page {
         private String title;
         private String html;
-        private String sectionTitle;
+        private String chapterTitle;
     }
 }

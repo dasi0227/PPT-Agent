@@ -12,4 +12,8 @@ public interface ISessionRepository {
     Session findSession(String sessionId);
 
     List<Message> listMessages(String sessionId);
+
+    List<Session> listProjectSessions(String projectId);
+
+    void insertSession(Session session);
 }

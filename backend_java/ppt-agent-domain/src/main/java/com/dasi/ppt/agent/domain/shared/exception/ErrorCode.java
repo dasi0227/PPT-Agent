@@ -9,6 +9,7 @@ import lombok.Getter;
 @AllArgsConstructor
 public enum ErrorCode {
     INVALID_ARGUMENT("INVALID_ARGUMENT", "请求字段缺失、类型或取值不正确"),
+    ILLEGAL_STATE("ILLEGAL_STATE", "已保存的数据状态无效"),
     PROJECT_NOT_FOUND("PROJECT_NOT_FOUND", "项目不存在"),
     ASSET_NOT_FOUND("ASSET_NOT_FOUND", "资产不存在"),
     MODEL_NOT_FOUND("MODEL_NOT_FOUND", "模型配置不存在"),

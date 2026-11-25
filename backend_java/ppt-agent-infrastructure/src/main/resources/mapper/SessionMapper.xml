@@ -8,6 +8,8 @@
         <result column="title" property="title"/>
         <result column="plan" property="plan"/>
         <result column="updated_at" property="updatedAt"/>
+        <result column="run_status" property="runStatus"/>
+        <result column="has_active_commands" property="hasActiveCommands"/>
     </resultMap>
     <select id="exists" resultType="boolean">
         SELECT EXISTS (SELECT 1 FROM sessions WHERE id = #{sessionId})
@@ -17,4 +19,17 @@
         SELECT id FROM sessions WHERE project_id = #{projectId}
     </select>
 
+    <select id="listProjectSessions" resultMap="sessionPo">
+        SELECT s.id, s.title, s.updated_at, r.status AS run_status,
+               EXISTS (SELECT 1 FROM commands c WHERE c.session_id = s.id
+                       AND c.status IN ('pending', 'running', 'cancelling')) AS has_active_commands
+        FROM sessions s LEFT JOIN runs r ON r.session_id = s.id
+                AND r.status IN ('pending', 'running', 'waiting', 'cancelling')
+        WHERE s.project_id = #{projectId}
+        ORDER BY s.updated_at DESC, s.id ASC
+    </select>
+
+    <insert id="insertSession">
+        INSERT INTO sessions (id, project_id, title, updated_at) VALUES (#{id}, #{projectId}, #{title}, #{updatedAt})
+    </insert>
 </mapper>

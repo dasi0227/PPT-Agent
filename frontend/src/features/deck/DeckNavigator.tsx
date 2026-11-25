@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import type {
   MutationPosition,
-  OutlineSection,
+  OutlineChapter,
   OutlineSlideNode,
   ProjectContentSnapshot,
   Slide,
@@ -58,21 +58,21 @@ import { flattenOutline, orderedSlides } from './selectors';
 
 
 type EditTarget =
+  | { kind: 'chapter'; id: string; value: string; hash?: string; scene?: string }
   | { kind: 'section'; id: string; value: string; hash?: string; scene?: string }
-  | { kind: 'subsection'; id: string; value: string; hash?: string; scene?: string }
   | { kind: 'page'; id: string; value: string; hash?: string; scene?: string };
 
 type OutlineRevision = { hash?: string; scene?: string };
 
 type DeleteTarget = OutlineRevision & (
-  | { kind: 'section'; id: string; title: string }
-  | { kind: 'subsection'; id: string; title: string; promote: boolean }
+  | { kind: 'chapter'; id: string; title: string }
+  | { kind: 'section'; id: string; title: string; promote: boolean }
   | { kind: 'page'; id: string; title: string });
 
-type NewSubsectionTarget = OutlineRevision & { section: OutlineSection };
-type NewSubsectionForm = { title: string };
+type NewSectionTarget = OutlineRevision & { chapter: OutlineChapter };
+type NewSectionForm = { title: string };
 
-const newSubsectionInitialValue: NewSubsectionForm = {
+const newSectionInitialValue: NewSectionForm = {
   title: '新子节',
 };
 
@@ -86,7 +86,7 @@ const OverflowTrigger = forwardRef<
     aria-label={label}
     title="更多操作"
     className={cn(
-      'grid h-7 w-7 place-items-center rounded-md text-text-400 opacity-0 transition-[opacity,background-color,color] ui-interactive focus-visible:opacity-100 disabled:pointer-events-none disabled:opacity-30 group-hover/section:opacity-100 group-hover/subsection:opacity-100 group-hover/page:opacity-100 data-[state=open]:opacity-100',
+      'grid h-7 w-7 place-items-center rounded-md text-text-400 opacity-0 transition-[opacity,background-color,color] ui-interactive focus-visible:opacity-100 disabled:pointer-events-none disabled:opacity-30 group-hover/chapter:opacity-100 group-hover/section:opacity-100 group-hover/page:opacity-100 data-[state=open]:opacity-100',
       className,
     )}
     onClick={(event) => {
@@ -106,10 +106,10 @@ function MenuIcon({ children }: { children: ReactNode }) {
 
 function DeckNavigatorChrome({
   pageCount,
-  sectionCount,
+  chapterCount,
 }: {
   pageCount: number;
-  sectionCount: number;
+  chapterCount: number;
 }) {
   const toggleLeftPanel = useUIStore((state) => state.toggleLeftPanel);
   const activeDocument = useDeckStore((state) => state.activeDocument);
@@ -137,7 +137,7 @@ function DeckNavigatorChrome({
         className="workspace-panel-summary flex h-9 shrink-0 items-center"
       >
         <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-text-400">
-          {sectionCount} 章 · {pageCount} 页
+          {chapterCount} 章 · {pageCount} 页
         </span>
       </div>
       <nav aria-label="项目文档" className="workspace-document-nav shrink-0 space-y-0.5 py-2">
@@ -276,7 +276,7 @@ export function DeckNavigator() {
   const [draggedSlideId, setDraggedSlideId] = useState<string>();
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
-  const [newSubsectionTarget, setNewSubsectionTarget] = useState<NewSubsectionTarget | null>(null);
+  const [newSectionTarget, setNewSectionTarget] = useState<NewSectionTarget | null>(null);
   const editInitialValue = useMemo(() => ({ title: editTarget?.value ?? '' }), [editTarget]);
   const slides = useMemo(() => orderedSlides(snapshot), [snapshot]);
   const flat = useMemo(() => flattenOutline(snapshot?.outline), [snapshot?.outline]);
@@ -331,7 +331,7 @@ export function DeckNavigator() {
     if (!deleteTarget) return;
     if (deleteTarget.hash !== outlineHash || deleteTarget.scene !== snapshot?.scene_revision) throw new Error('目录已更新，请关闭后重新操作。');
     const index = deleteTarget.kind === 'page' ? slides.findIndex((item) => item.id === deleteTarget.id) : -1;
-    await commitMutation({ type: 'remove', id: deleteTarget.id, promote: deleteTarget.kind === 'subsection' && deleteTarget.promote });
+    await commitMutation({ type: 'remove', id: deleteTarget.id, promote: deleteTarget.kind === 'section' && deleteTarget.promote });
     if (deleteTarget.kind === 'page' && currentSlideId === deleteTarget.id) {
       const next = slides[index + 1] ?? slides[index - 1];
       useDeckStore.setState({ currentSlideId: next?.id ?? null });
@@ -343,7 +343,7 @@ export function DeckNavigator() {
       <aside className="flex h-full min-h-0 flex-col bg-panel" aria-label="演示文稿">
         <DeckNavigatorChrome
           pageCount={0}
-          sectionCount={0}
+          chapterCount={0}
         />
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-xs text-text-400">
           目录加载中
@@ -357,14 +357,14 @@ export function DeckNavigator() {
       <aside className="flex h-full min-h-0 flex-col bg-panel" aria-label="演示文稿">
         <DeckNavigatorChrome
           pageCount={slides.length}
-          sectionCount={snapshot.outline.sections.length}
+          chapterCount={snapshot.outline.chapters.length}
         />
 
         <div
           data-testid="deck-navigator-scroll"
           className="deck-navigator-scroll scrollbar-none flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-8 pt-2"
         >
-          {snapshot.outline.sections.length === 0 ? (
+          {snapshot.outline.chapters.length === 0 ? (
             <div
               data-testid="deck-navigator-empty"
               className="flex min-h-32 flex-1 items-center justify-center text-center text-xs text-text-400"
@@ -373,47 +373,47 @@ export function DeckNavigator() {
             </div>
           ) : (
             <>
-              {snapshot.outline.sections.map((section, sectionIndex) => {
-                const sectionCollapsed = collapsed[section.id];
-                const isEmpty = section.slides.length === 0 && section.subsections.length === 0;
+              {snapshot.outline.chapters.map((chapter, chapterIndex) => {
+                const chapterCollapsed = collapsed[chapter.id];
+                const isEmpty = chapter.slides.length === 0 && chapter.sections.length === 0;
                 return (
               <section
-                key={section.id}
-                className={cn('pb-2', sectionIndex > 0 && 'pt-2')}
+                key={chapter.id}
+                className={cn('pb-2', chapterIndex > 0 && 'pt-2')}
               >
-                <div className="group/section mx-1 grid min-h-11 grid-cols-[20px_42px_minmax(0,1fr)_28px] items-center gap-0.5 rounded-md px-1 ui-interactive">
+                <div className="group/chapter mx-1 grid min-h-11 grid-cols-[20px_42px_minmax(0,1fr)_28px] items-center gap-0.5 rounded-md px-1 ui-interactive">
                   <button
                     type="button"
                     className="grid h-6 w-5 place-items-center text-text-500"
-                    aria-label={`${sectionCollapsed ? '展开' : '折叠'}${section.title}`}
-                    onClick={() => setCollapsed((state) => ({ ...state, [section.id]: !sectionCollapsed }))}
+                    aria-label={`${chapterCollapsed ? '展开' : '折叠'}${chapter.title}`}
+                    onClick={() => setCollapsed((state) => ({ ...state, [chapter.id]: !chapterCollapsed }))}
                   >
-                    {sectionCollapsed
+                    {chapterCollapsed
                       ? <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.8} />
                       : <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.8} />}
                   </button>
                   <span className="whitespace-nowrap text-center text-[11px] font-semibold tabular-nums text-text-400">
-                    第 <strong className="text-[13px] font-bold text-text-600">{sectionIndex + 1}</strong> 章
+                    第 <strong className="text-[13px] font-bold text-text-600">{chapterIndex + 1}</strong> 章
                   </span>
                   <button
                     type="button"
                     className="min-w-0 truncate pl-2 text-left text-[15px] font-[720] text-text-900"
-                    onClick={() => setCollapsed((state) => ({ ...state, [section.id]: !sectionCollapsed }))}
+                    onClick={() => setCollapsed((state) => ({ ...state, [chapter.id]: !chapterCollapsed }))}
                   >
-                    {section.title}
+                    {chapter.title}
                   </button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <OverflowTrigger label={`${section.title}操作`} disabled={locked} />
+                      <OverflowTrigger label={`${chapter.title}操作`} disabled={locked} />
                     </DropdownMenuTrigger>
                     <DropdownMenuContent side="right" align="start" sideOffset={6}>
-                      <DropdownMenuItem onSelect={() => setEditTarget({ kind: 'section', id: section.id, value: section.title, hash: outlineHash, scene: snapshot?.scene_revision })}>
+                      <DropdownMenuItem onSelect={() => setEditTarget({ kind: 'chapter', id: chapter.id, value: chapter.title, hash: outlineHash, scene: snapshot?.scene_revision })}>
                         <MenuIcon><Pencil className="h-3.5 w-3.5" /></MenuIcon>编辑属性
                       </DropdownMenuItem>
-                      <DropdownMenuItem disabled={sectionIndex === 0} onSelect={() => moveSibling(section.id, '', snapshot.outline.sections.map(item => item.id), -1)}><MenuIcon><ArrowUp className="h-3.5 w-3.5" /></MenuIcon>上移章节</DropdownMenuItem>
-                      <DropdownMenuItem disabled={sectionIndex === snapshot.outline.sections.length - 1} onSelect={() => moveSibling(section.id, '', snapshot.outline.sections.map(item => item.id), 1)}><MenuIcon><ArrowDown className="h-3.5 w-3.5" /></MenuIcon>下移章节</DropdownMenuItem>
-                      {section.subsections.length === 0 ? (
-                        <DropdownMenuItem onSelect={() => void insertPage(section.id)}>
+                      <DropdownMenuItem disabled={chapterIndex === 0} onSelect={() => moveSibling(chapter.id, '', snapshot.outline.chapters.map(item => item.id), -1)}><MenuIcon><ArrowUp className="h-3.5 w-3.5" /></MenuIcon>上移章节</DropdownMenuItem>
+                      <DropdownMenuItem disabled={chapterIndex === snapshot.outline.chapters.length - 1} onSelect={() => moveSibling(chapter.id, '', snapshot.outline.chapters.map(item => item.id), 1)}><MenuIcon><ArrowDown className="h-3.5 w-3.5" /></MenuIcon>下移章节</DropdownMenuItem>
+                      {chapter.sections.length === 0 ? (
+                        <DropdownMenuItem onSelect={() => void insertPage(chapter.id)}>
                           <MenuIcon><FilePlus2 className="h-3.5 w-3.5" /></MenuIcon>新增页面
                         </DropdownMenuItem>
                       ) : (
@@ -424,22 +424,22 @@ export function DeckNavigator() {
                             <ChevronRight className="ml-2 h-3.5 w-3.5 text-text-400" />
                           </DropdownMenuSubTrigger>
                           <DropdownMenuSubContent sideOffset={6}>
-                            {section.subsections.map((subsection) => (
-                              <DropdownMenuItem key={subsection.id} onSelect={() => void insertPage(subsection.id)}>
-                                {subsection.title}
+                            {chapter.sections.map((section) => (
+                              <DropdownMenuItem key={section.id} onSelect={() => void insertPage(section.id)}>
+                                {section.title}
                               </DropdownMenuItem>
                             ))}
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>
                       )}
-                      <DropdownMenuItem onSelect={() => setNewSubsectionTarget({ section, hash: outlineHash, scene: snapshot?.scene_revision })}>
+                      <DropdownMenuItem onSelect={() => setNewSectionTarget({ chapter, hash: outlineHash, scene: snapshot?.scene_revision })}>
                         <MenuIcon><FolderPlus className="h-3.5 w-3.5" /></MenuIcon>新增子节
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         destructive
                         disabled={!isEmpty}
-                        onSelect={() => setDeleteTarget({ hash: outlineHash, scene: snapshot?.scene_revision, kind: 'section', id: section.id, title: section.title })}
+                        onSelect={() => setDeleteTarget({ hash: outlineHash, scene: snapshot?.scene_revision, kind: 'chapter', id: chapter.id, title: chapter.title })}
                       >
                         <MenuIcon><Trash2 className="h-3.5 w-3.5" /></MenuIcon>删除章节
                       </DropdownMenuItem>
@@ -447,9 +447,9 @@ export function DeckNavigator() {
                   </DropdownMenu>
                 </div>
 
-                {!sectionCollapsed && (
+                {!chapterCollapsed && (
                   <div className="overflow-hidden">
-                    {section.slides.map((node, index) => {
+                    {chapter.slides.map((node, index) => {
                       const slide = slideById[node.id];
                       if (!slide) return null;
                       return (
@@ -460,7 +460,7 @@ export function DeckNavigator() {
                           snapshot={snapshot}
                           ordinal={ordinalById[node.id] ?? index + 1}
                           siblingIndex={index}
-                          siblingCount={section.slides.length}
+                          siblingCount={chapter.slides.length}
                           selected={!activeDocument && currentSlideId === node.id}
                           locked={locked}
                           pending={!snapshot.slides_by_id[node.id]?.spec}
@@ -468,51 +468,51 @@ export function DeckNavigator() {
                           onSelect={() => setCurrentSlideId(node.id)}
                           onRename={() => setEditTarget({ kind: 'page', id: node.id, value: node.title, hash: outlineHash, scene: snapshot?.scene_revision })}
                           onRemove={() => setDeleteTarget({ hash: outlineHash, scene: snapshot?.scene_revision, kind: 'page', id: node.id, title: node.title })}
-                          onMove={(delta) => moveSlide(node.id, section.id, section.slides, index + delta)}
+                          onMove={(delta) => moveSlide(node.id, chapter.id, chapter.slides, index + delta)}
                           onDrag={() => setDraggedSlideId(node.id)}
-                          onDrop={() => draggedSlideId && moveSlide(draggedSlideId, section.id, section.slides, index)}
+                          onDrop={() => draggedSlideId && moveSlide(draggedSlideId, chapter.id, chapter.slides, index)}
                         />
                       );
                     })}
 
-                    {section.subsections.map((subsection, subsectionIndex) => (
-                      <div key={subsection.id}>
-                        <div className="group/subsection mx-1 grid min-h-[34px] grid-cols-[20px_42px_minmax(0,1fr)_28px] items-center gap-0.5 px-1 text-text-400">
+                    {chapter.sections.map((section, sectionIndex) => (
+                      <div key={section.id}>
+                        <div className="group/section mx-1 grid min-h-[34px] grid-cols-[20px_42px_minmax(0,1fr)_28px] items-center gap-0.5 px-1 text-text-400">
                           <span aria-hidden="true" />
                           <span className="whitespace-nowrap text-center text-[9px] font-semibold tabular-nums">
-                            第 <strong className="text-[11px] font-[720] text-text-500">{sectionIndex + 1}.{subsectionIndex + 1}</strong> 节
+                            第 <strong className="text-[11px] font-[720] text-text-500">{chapterIndex + 1}.{sectionIndex + 1}</strong> 节
                           </span>
-                          <span className="truncate pl-2 text-[10px] font-semibold">{subsection.title}</span>
+                          <span className="truncate pl-2 text-[10px] font-semibold">{section.title}</span>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <OverflowTrigger label={`${subsection.title}操作`} disabled={locked} />
+                              <OverflowTrigger label={`${section.title}操作`} disabled={locked} />
                             </DropdownMenuTrigger>
                             <DropdownMenuContent side="right" align="start" sideOffset={6}>
-                              <DropdownMenuItem onSelect={() => setEditTarget({ kind: 'subsection', id: subsection.id, value: subsection.title, hash: outlineHash, scene: snapshot?.scene_revision })}>
+                              <DropdownMenuItem onSelect={() => setEditTarget({ kind: 'section', id: section.id, value: section.title, hash: outlineHash, scene: snapshot?.scene_revision })}>
                                 <MenuIcon><Pencil className="h-3.5 w-3.5" /></MenuIcon>编辑属性
                               </DropdownMenuItem>
-                              <DropdownMenuItem disabled={subsectionIndex === 0} onSelect={() => moveSibling(subsection.id, section.id, section.subsections.map(item => item.id), -1)}><MenuIcon><ArrowUp className="h-3.5 w-3.5" /></MenuIcon>上移子节</DropdownMenuItem>
-                              <DropdownMenuItem disabled={subsectionIndex === section.subsections.length - 1} onSelect={() => moveSibling(subsection.id, section.id, section.subsections.map(item => item.id), 1)}><MenuIcon><ArrowDown className="h-3.5 w-3.5" /></MenuIcon>下移子节</DropdownMenuItem>
+                              <DropdownMenuItem disabled={sectionIndex === 0} onSelect={() => moveSibling(section.id, chapter.id, chapter.sections.map(item => item.id), -1)}><MenuIcon><ArrowUp className="h-3.5 w-3.5" /></MenuIcon>上移子节</DropdownMenuItem>
+                              <DropdownMenuItem disabled={sectionIndex === chapter.sections.length - 1} onSelect={() => moveSibling(section.id, chapter.id, chapter.sections.map(item => item.id), 1)}><MenuIcon><ArrowDown className="h-3.5 w-3.5" /></MenuIcon>下移子节</DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 destructive
-                                disabled={subsection.slides.length > 0 && section.subsections.length > 1}
+                                disabled={section.slides.length > 0 && chapter.sections.length > 1}
                                 onSelect={() => setDeleteTarget({
                                   hash: outlineHash,
                                   scene: snapshot?.scene_revision,
-                                  kind: 'subsection',
-                                  id: subsection.id,
-                                  title: subsection.title,
-                                  promote: subsection.slides.length > 0,
+                                  kind: 'section',
+                                  id: section.id,
+                                  title: section.title,
+                                  promote: section.slides.length > 0,
                                 })}
                               >
                                 <MenuIcon><Trash2 className="h-3.5 w-3.5" /></MenuIcon>
-                                {subsection.slides.length > 0 ? '取消子节' : '删除子节'}
+                                {section.slides.length > 0 ? '取消子节' : '删除子节'}
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>
-                        {subsection.slides.map((node, index) => {
+                        {section.slides.map((node, index) => {
                           const slide = slideById[node.id];
                           if (!slide) return null;
                           return (
@@ -523,7 +523,7 @@ export function DeckNavigator() {
                               snapshot={snapshot}
                               ordinal={ordinalById[node.id] ?? index + 1}
                               siblingIndex={index}
-                              siblingCount={subsection.slides.length}
+                              siblingCount={section.slides.length}
                               selected={!activeDocument && currentSlideId === node.id}
                               locked={locked}
                               pending={!snapshot.slides_by_id[node.id]?.spec}
@@ -531,9 +531,9 @@ export function DeckNavigator() {
                               onSelect={() => setCurrentSlideId(node.id)}
                               onRename={() => setEditTarget({ kind: 'page', id: node.id, value: node.title, hash: outlineHash, scene: snapshot?.scene_revision })}
                               onRemove={() => setDeleteTarget({ hash: outlineHash, scene: snapshot?.scene_revision, kind: 'page', id: node.id, title: node.title })}
-                              onMove={(delta) => moveSlide(node.id, subsection.id, subsection.slides, index + delta)}
+                              onMove={(delta) => moveSlide(node.id, section.id, section.slides, index + delta)}
                               onDrag={() => setDraggedSlideId(node.id)}
-                              onDrop={() => draggedSlideId && moveSlide(draggedSlideId, subsection.id, subsection.slides, index)}
+                              onDrop={() => draggedSlideId && moveSlide(draggedSlideId, section.id, section.slides, index)}
                             />
                           );
                         })}
@@ -552,7 +552,7 @@ export function DeckNavigator() {
       <FormModal<{ title: string }>
         open={editTarget !== null}
         onOpenChange={(open) => !open && setEditTarget(null)}
-        title={`编辑${editTarget?.kind === 'section' ? '章节' : editTarget?.kind === 'subsection' ? '子节' : '页面'}`}
+        title={`编辑${editTarget?.kind === 'chapter' ? '章节' : editTarget?.kind === 'section' ? '子节' : '页面'}`}
         initialValue={editInitialValue}
         validate={value => {
           if (!value.title.trim()) return '名称不能为空';
@@ -571,24 +571,24 @@ export function DeckNavigator() {
         </div>}
       />
 
-      <FormModal<NewSubsectionForm>
-        open={newSubsectionTarget !== null}
-        onOpenChange={(open) => !open && setNewSubsectionTarget(null)}
+      <FormModal<NewSectionForm>
+        open={newSectionTarget !== null}
+        onOpenChange={(open) => !open && setNewSectionTarget(null)}
         title="新增子节"
-        initialValue={newSubsectionInitialValue}
+        initialValue={newSectionInitialValue}
         validate={(value) => {
           if (!value.title.trim()) return '名称不能为空';
           if ([...value.title.trim()].length > 160) return '名称不能超过 160 个字符';
           return null;
         }}
         onSubmit={async (value) => {
-          if (!newSubsectionTarget) return;
-          if (newSubsectionTarget.hash !== outlineHash || newSubsectionTarget.scene !== snapshot?.scene_revision) throw new Error('目录已更新，请关闭后重新操作。');
-          const section = newSubsectionTarget.section;
+          if (!newSectionTarget) return;
+          if (newSectionTarget.hash !== outlineHash || newSectionTarget.scene !== snapshot?.scene_revision) throw new Error('目录已更新，请关闭后重新操作。');
+          const chapter = newSectionTarget.chapter;
           await commitMutation({
-            type: 'insert', kind: 'subsection',
-            node: { ...newOutlineNode('subsection'), title: value.title.trim() },
-            position: { parent_id: section.id },
+            type: 'insert', kind: 'section',
+            node: { ...newOutlineNode('section'), title: value.title.trim() },
+            position: { parent_id: chapter.id },
           });
         }}
         renderField={(value, setValue, error) => (
@@ -603,9 +603,9 @@ export function DeckNavigator() {
                 className="w-full rounded-md border border-border bg-panel px-3 py-2 text-sm text-text-900 transition-colors focus:outline-none"
               />
             </label>
-            {newSubsectionTarget && newSubsectionTarget.section.slides.length > 0 && (
+            {newSectionTarget && newSectionTarget.chapter.slides.length > 0 && (
               <p className="mt-2 text-xs text-text-400">
-                现有 {newSubsectionTarget.section.slides.length} 页将移入这个子节。
+                现有 {newSectionTarget.chapter.slides.length} 页将移入这个子节。
               </p>
             )}
             {error && <p className="mt-2 text-xs text-danger">{error}</p>}
@@ -616,12 +616,12 @@ export function DeckNavigator() {
       <ConfirmModal
         open={deleteTarget !== null}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title={deleteTarget?.kind === 'subsection' && deleteTarget.promote ? `取消子节「${deleteTarget.title}」？` : `删除「${deleteTarget?.title ?? ''}」？`}
-        description={deleteTarget?.kind === 'subsection' && deleteTarget.promote
+        title={deleteTarget?.kind === 'section' && deleteTarget.promote ? `取消子节「${deleteTarget.title}」？` : `删除「${deleteTarget?.title ?? ''}」？`}
+        description={deleteTarget?.kind === 'section' && deleteTarget.promote
           ? '子节中的页面会提升为章节直属页面，不会删除页面。'
           : '此操作不可撤销。'}
-        confirmLabel={deleteTarget?.kind === 'subsection' && deleteTarget.promote ? '取消子节' : '删除'}
-        variant={deleteTarget?.kind === 'subsection' && deleteTarget.promote ? 'default' : 'danger'}
+        confirmLabel={deleteTarget?.kind === 'section' && deleteTarget.promote ? '取消子节' : '删除'}
+        variant={deleteTarget?.kind === 'section' && deleteTarget.promote ? 'default' : 'danger'}
         onConfirm={confirmDelete}
       />
     </>

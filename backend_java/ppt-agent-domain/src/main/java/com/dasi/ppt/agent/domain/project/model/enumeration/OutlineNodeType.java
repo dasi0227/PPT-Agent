@@ -9,8 +9,8 @@ import lombok.Getter;
 @Getter
 @AllArgsConstructor
 public enum OutlineNodeType {
+    CHAPTER("chapter"),
     SECTION("section"),
-    SUBSECTION("subsection"),
     SLIDE("slide");
 
     @JsonValue

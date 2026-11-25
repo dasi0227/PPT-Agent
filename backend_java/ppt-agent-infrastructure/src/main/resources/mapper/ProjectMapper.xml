@@ -9,7 +9,7 @@
         <result column="has_logo" property="logoPresent"/>
         <result column="slide_pagination_position" property="slidePaginationPosition"/>
         <result column="deck_title_position" property="deckTitlePosition"/>
-        <result column="section_title_position" property="sectionTitlePosition"/>
+        <result column="chapter_title_position" property="chapterTitlePosition"/>
         <result column="project_logo_position" property="projectLogoPosition"/>
         <result column="updated_at" property="updatedAt"/>
     </resultMap>
@@ -24,7 +24,7 @@
 
     <select id="findProjectAppearance" resultMap="projectPo">
         SELECT id, theme, logo IS NOT NULL AS has_logo, slide_pagination_position,
-               deck_title_position, section_title_position, project_logo_position
+               deck_title_position, chapter_title_position, project_logo_position
         FROM projects WHERE id = #{projectId}
     </select>
 
@@ -48,12 +48,12 @@
 
     <update id="updateProjectPositions">
         UPDATE projects SET slide_pagination_position = #{slidePaginationPosition},
-               deck_title_position = #{deckTitlePosition}, section_title_position = #{sectionTitlePosition},
+               deck_title_position = #{deckTitlePosition}, chapter_title_position = #{chapterTitlePosition},
                project_logo_position = #{projectLogoPosition}, updated_at = MAX(updated_at + 1, #{updatedAt})
         WHERE id = #{id} AND (
             slide_pagination_position IS NOT #{slidePaginationPosition}
             OR deck_title_position IS NOT #{deckTitlePosition}
-            OR section_title_position IS NOT #{sectionTitlePosition}
+            OR chapter_title_position IS NOT #{chapterTitlePosition}
             OR project_logo_position IS NOT #{projectLogoPosition}
         )
     </update>
@@ -66,4 +66,18 @@
     <delete id="deleteProject">
         DELETE FROM projects WHERE id = #{projectId}
     </delete>
+
+    <select id="hasActiveDocumentOperation" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1 FROM runs r JOIN sessions s ON s.id = r.session_id
+            WHERE s.project_id = #{projectId} AND r.status IN ('pending', 'running', 'waiting', 'cancelling')
+        ) OR EXISTS (
+            SELECT 1 FROM commands c JOIN sessions s ON s.id = c.session_id
+            WHERE s.project_id = #{projectId} AND c.type = 'commit' AND c.status IN ('pending', 'running', 'cancelling')
+        )
+    </select>
+
+    <update id="updateProjectTime">
+        UPDATE projects SET updated_at = MAX(updated_at + 1, #{updatedAt}) WHERE id = #{projectId}
+    </update>
 </mapper>

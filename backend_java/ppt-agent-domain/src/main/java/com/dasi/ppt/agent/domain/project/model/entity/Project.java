@@ -16,7 +16,7 @@ public final class Project {
     private String theme;
     private DecorationPosition slidePaginationPosition;
     private DecorationPosition deckTitlePosition;
-    private DecorationPosition sectionTitlePosition;
+    private DecorationPosition chapterTitlePosition;
     private DecorationPosition logoPosition;
     private boolean logoPresent;
     private long updatedAt;

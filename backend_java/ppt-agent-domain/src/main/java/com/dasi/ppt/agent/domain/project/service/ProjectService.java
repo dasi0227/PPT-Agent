@@ -26,6 +26,7 @@ import java.util.Locale;
 
 import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.SYSTEM_OPEN;
 import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.INHERIT_OPEN;
+import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.conflict;
 import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.invalid;
 import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.notFound;
 
@@ -55,7 +56,9 @@ public class ProjectService {
 
     public void updateProject(String projectId, String title) {
         synchronized (projectWriteLock.lockFor(projectId)) {
-            projectRepository.requireWritableProjectFiles(projectId);
+            if (projectRepository.hasPendingFileOperation(projectId)) {
+                throw conflict(ErrorCode.PROJECT_BUSY);
+            }
             if (projectRepository.updateProjectTitle(projectId, title, System.currentTimeMillis()) == 0) {
                 throw notFound(ErrorCode.PROJECT_NOT_FOUND);
             }
@@ -66,7 +69,9 @@ public class ProjectService {
     public void deleteProject(String projectId) {
         synchronized (projectWriteLock.lockFor(projectId)) {
             List<String> deletedSessionIds = transaction.execute(status -> {
-                projectRepository.requireWritableProjectFiles(projectId);
+                if (projectRepository.hasPendingFileOperation(projectId)) {
+                    throw conflict(ErrorCode.PROJECT_BUSY);
+                }
                 List<String> sessionIds = projectRepository.listProjectSessionIds(projectId);
                 if (projectRepository.deleteProject(projectId) == 0) {
                     throw notFound(ErrorCode.PROJECT_NOT_FOUND);
@@ -89,7 +94,9 @@ public class ProjectService {
     public void saveProjectTheme(String projectId, String themeId) {
         synchronized (projectWriteLock.lockFor(projectId)) {
             List<String> sessionIds = transaction.execute(status -> {
-                projectRepository.requireWritableProjectFiles(projectId);
+                if (projectRepository.hasPendingFileOperation(projectId)) {
+                    throw conflict(ErrorCode.PROJECT_BUSY);
+                }
                 if (!projectRepository.existsProject(projectId)) {
                     throw notFound(ErrorCode.PROJECT_NOT_FOUND);
                 }
@@ -113,13 +120,15 @@ public class ProjectService {
         String projectId = project.getId();
         synchronized (projectWriteLock.lockFor(projectId)) {
             List<String> sessionIds = transaction.execute(status -> {
-                projectRepository.requireWritableProjectFiles(projectId);
+                if (projectRepository.hasPendingFileOperation(projectId)) {
+                    throw conflict(ErrorCode.PROJECT_BUSY);
+                }
                 if (!projectRepository.existsProject(projectId)) {
                     throw notFound(ErrorCode.PROJECT_NOT_FOUND);
                 }
 
                 EnumSet<DecorationPosition> occupied = EnumSet.noneOf(DecorationPosition.class);
-                for (DecorationPosition position : List.of(project.getSlidePaginationPosition(), project.getDeckTitlePosition(), project.getSectionTitlePosition(), project.getLogoPosition())) {
+                for (DecorationPosition position : List.of(project.getSlidePaginationPosition(), project.getDeckTitlePosition(), project.getChapterTitlePosition(), project.getLogoPosition())) {
                     if (position != DecorationPosition.NONE && !occupied.add(position)) {
                         throw invalid("显示的装饰位置不能重叠");
                     }
@@ -140,7 +149,9 @@ public class ProjectService {
     public void saveProjectLogo(String projectId, byte[] logo) {
         synchronized (projectWriteLock.lockFor(projectId)) {
             List<String> sessionIds = transaction.execute(status -> {
-                projectRepository.requireWritableProjectFiles(projectId);
+                if (projectRepository.hasPendingFileOperation(projectId)) {
+                    throw conflict(ErrorCode.PROJECT_BUSY);
+                }
                 if (!projectRepository.existsProject(projectId)) {
                     throw notFound(ErrorCode.PROJECT_NOT_FOUND);
                 }
@@ -154,7 +165,9 @@ public class ProjectService {
     public void deleteProjectLogo(String projectId) {
         synchronized (projectWriteLock.lockFor(projectId)) {
             List<String> sessionIds = transaction.execute(status -> {
-                projectRepository.requireWritableProjectFiles(projectId);
+                if (projectRepository.hasPendingFileOperation(projectId)) {
+                    throw conflict(ErrorCode.PROJECT_BUSY);
+                }
                 if (!projectRepository.existsProject(projectId)) {
                     throw notFound(ErrorCode.PROJECT_NOT_FOUND);
                 }

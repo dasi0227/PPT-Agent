@@ -4,9 +4,9 @@
 .outline-tree { margin:0 -8px; }
 .management-content:has(> .outline-tree[data-empty='true']) { display:flex; flex-direction:column; }
 .outline-tree[data-empty='true'] { display:flex; flex:1; flex-direction:column; align-items:center; justify-content:center; gap:12px; min-height:240px; padding-bottom:clamp(24px,6vh,48px); }
-.outline-tree[data-empty='true'] .outline-add-section { margin:0; }
-.outline-section { padding:3px 0 16px; }
-.outline-section + .outline-section { padding-top:16px; border-top:1px solid rgb(var(--ui-border)); }
+.outline-tree[data-empty='true'] .outline-add-chapter { margin:0; }
+.outline-chapter { padding:3px 0 16px; }
+.outline-chapter + .outline-chapter { padding-top:16px; border-top:1px solid rgb(var(--ui-border)); }
 .outline-row { position:relative; isolation:isolate; display:flex; align-items:center; gap:10px; min-height:43px; padding:3px 8px; border-radius:6px; }
 /* Cover the drag handle and its 8px outer inset without shifting row content. */
 .outline-row::before { content:''; position:absolute; inset:0 0 0 -24px; z-index:-1; border-radius:inherit; pointer-events:none; }
@@ -23,8 +23,8 @@
 .outline-ordinal strong { font-size:13px; font-weight:700; }
 .outline-copy { display:flex; align-items:baseline; flex:1; min-width:0; }
 .outline-title { min-width:0; max-width:100%; padding:6px 0; text-align:left; white-space:nowrap; line-height:1.5; border-radius:4px; }
-.outline-section-row .outline-title { font-size:15px; font-weight:600; }
-.outline-subsection-row .outline-title { font-size:13px; font-weight:600; }
+.outline-chapter-row .outline-title { font-size:15px; font-weight:600; }
+.outline-section-row .outline-title { font-size:13px; font-weight:600; }
 .outline-slide-row .outline-title { font-size:14px; }
 .outline-copy > button { overflow:hidden; text-overflow:ellipsis; }
 .outline-title:focus-visible { text-decoration:underline; text-underline-offset:4px; }
@@ -36,18 +36,18 @@
 .outline-row-actions svg { width:15px; height:15px; }
 .outline-row:hover .outline-row-actions, .outline-row:focus-within .outline-row-actions, .outline-row:has([data-state='open']) .outline-row-actions, .outline-row-editing .outline-row-actions { opacity:1; pointer-events:auto; }
 .outline-row-actions .outline-confirm { color:rgb(var(--ui-selected-foreground)); }
-.outline-section-children { padding:4px 0 0 47px; }
+.outline-chapter-children { padding:4px 0 0 47px; }
 .outline-slide-row { padding-left:5px; }
 .outline-slide-row .outline-ordinal { width:21px; color:rgb(var(--ui-text-400)); font-size:11px; font-weight:400; }
 .outline-slide-row .outline-node-icon { width:16px; height:16px; }
-.outline-subsection { padding-bottom:5px; }
-.outline-subsection + .outline-subsection { margin-top:8px; }
-.outline-subsection-row { margin-left:-18px; }
-.outline-subsection-row .outline-ordinal { color:rgb(var(--ui-text-500)); font-size:11px; }
-.outline-subsection-children { margin-left:21px; }
+.outline-section { padding-bottom:5px; }
+.outline-section + .outline-section { margin-top:8px; }
+.outline-section-row { margin-left:-18px; }
+.outline-section-row .outline-ordinal { color:rgb(var(--ui-text-500)); font-size:11px; }
+.outline-section-children { margin-left:21px; }
 .outline-tree .outline-add-page { margin:3px 0; padding:6px 8px; font-size:12px; }
-.outline-tree .outline-add-section { margin:9px 0 0 6px; padding:6px 10px; color:rgb(var(--ui-foreground)); font-size:12px; }
-.outline-add-page svg, .outline-add-section svg { width:14px; height:14px; }
+.outline-tree .outline-add-chapter { margin:9px 0 0 6px; padding:6px 10px; color:rgb(var(--ui-foreground)); font-size:12px; }
+.outline-add-page svg, .outline-add-chapter svg { width:14px; height:14px; }
 .outline-footer { display:flex; align-items:center; justify-content:space-between; gap:14px; }
 .outline-footer .management-feedback:empty { display:none; }
 .outline-footer > div:last-child { margin-left:auto; }
@@ -58,6 +58,6 @@
   .outline-heading-actions { gap:6px; }
   .outline-row { gap:7px; }
   .outline-row-actions { opacity:1; pointer-events:auto; }
-  .outline-section-children { padding-left:25px; }
-  .outline-subsection-children { margin-left:15px; }
+  .outline-chapter-children { padding-left:25px; }
+  .outline-section-children { margin-left:15px; }
 }

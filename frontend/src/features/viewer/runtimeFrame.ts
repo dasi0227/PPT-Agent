@@ -11,8 +11,8 @@ export interface RuntimeFrameContext {
   ordinal: number;
   total: number;
   purpose?: SlidePurpose;
-  section: { id: string; title: string; index: number };
-  subsection?: { id: string; title: string; index: number };
+  chapter: { id: string; title: string; index: number };
+  section?: { id: string; title: string; index: number };
   decorations: Decorations;
   logo: RuntimeLogo | null;
 }
@@ -21,8 +21,8 @@ export function buildRuntimeFrame(snapshot: ProjectContentSnapshot, slideId: str
   const flat = flattenOutline(snapshot.outline);
   const item = flat.find((candidate) => candidate.node.id === slideId);
   if (!item) return undefined;
-  const sectionIndex = snapshot.outline.sections.findIndex((section) => section.id === item.section.id);
-  const subsectionIndex = item.subsection ? item.section.subsections.findIndex((subsection) => subsection.id === item.subsection?.id) : -1;
+  const chapterIndex = snapshot.outline.chapters.findIndex((chapter) => chapter.id === item.chapter.id);
+  const sectionIndex = item.section ? item.chapter.sections.findIndex((section) => section.id === item.section?.id) : -1;
   return {
 	project_id: snapshot.project_id,
 	slide_id: slideId,
@@ -33,8 +33,8 @@ export function buildRuntimeFrame(snapshot: ProjectContentSnapshot, slideId: str
     ordinal: item.ordinal,
     total: flat.length,
     purpose: snapshot.slides_by_id[slideId]?.spec?.purpose,
-    section: { id: item.section.id, title: item.section.title, index: sectionIndex + 1 },
-    ...(item.subsection ? { subsection: { id: item.subsection.id, title: item.subsection.title, index: subsectionIndex + 1 } } : {}),
+    chapter: { id: item.chapter.id, title: item.chapter.title, index: chapterIndex + 1 },
+    ...(item.section ? { section: { id: item.section.id, title: item.section.title, index: sectionIndex + 1 } } : {}),
     decorations: { ...snapshot.decorations },
     logo: snapshot.logo,
   };

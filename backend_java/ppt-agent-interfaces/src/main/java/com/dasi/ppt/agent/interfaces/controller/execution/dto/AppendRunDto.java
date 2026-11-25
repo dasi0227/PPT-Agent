@@ -57,8 +57,8 @@ public class AppendRunDto {
     public static final class RunScopeDto {
         private String currentSlideId;
         private List<String> slideIds;
+        private List<String> chapterIds;
         private List<String> sectionIds;
-        private List<String> subsectionIds;
     }
 
     @Builder

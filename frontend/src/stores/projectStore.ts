@@ -19,7 +19,7 @@ function advance(requests: Map<string, number>, id: string) {
 
 type Appearance = Pick<ProjectContentSnapshot, 'theme' | 'decorations' | 'logo' | 'appearance'>;
 export const defaultPositions: Decorations = {
-  slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none',
+  slide_pagination: 'bottom-right', deck_title: 'none', chapter_title: 'none', logo: 'none',
 };
 const defaultAppearance: Appearance = { theme: null, decorations: defaultPositions, logo: null, appearance: null };
 
@@ -47,7 +47,7 @@ function asSnapshot(project: Project, files: ProjectFiles, appearance: Appearanc
     ...appearance,
     meta: files.meta,
     constraint: files.constraint,
-    outline: files.outline ?? { sections: [] },
+    outline: files.outline ?? { chapters: [] },
     hashes,
     slides_by_id: Object.fromEntries(slides),
   };

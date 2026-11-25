@@ -18,7 +18,7 @@ public class ProjectPo {
     private boolean logoPresent;
     private String slidePaginationPosition;
     private String deckTitlePosition;
-    private String sectionTitlePosition;
+    private String chapterTitlePosition;
     private String projectLogoPosition;
     private long updatedAt;
 }

@@ -6,6 +6,7 @@ import com.dasi.ppt.agent.domain.shared.exception.InvalidEnumValueException;
 import com.dasi.ppt.agent.interfaces.controller.asset.AssetController;
 import com.dasi.ppt.agent.interfaces.controller.file.FileController;
 import com.dasi.ppt.agent.interfaces.controller.project.ProjectController;
+import com.dasi.ppt.agent.interfaces.controller.session.SessionController;
 import com.dasi.ppt.agent.interfaces.controller.setting.SettingController;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -18,7 +19,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MultipartException;
 
 @Slf4j
-@RestControllerAdvice(assignableTypes = {AssetController.class, FileController.class, SettingController.class, ProjectController.class})
+@RestControllerAdvice(assignableTypes = {AssetController.class, FileController.class, SettingController.class, ProjectController.class, SessionController.class})
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)

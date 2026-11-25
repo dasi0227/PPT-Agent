@@ -33,7 +33,7 @@ export interface RunSession {
 
 export const UNLOADED_SESSION: RunSession = Object.freeze({
   loadStatus: 'uninitialized', isEmpty: false, error: null, projectId: null,
-  activeRunId: null, activeRunModel: null, status: 'idle', scope: { selection: { kind: 'current_page' } },
+  activeRunId: null, activeRunModel: null, status: 'idle', scope: null,
   mode: 'create', timelineItems: [], groups: [], pendingQuestion: null, progress: null,
   plan: null, planRevision: '0', nextInputSuggestions: null, tokenUsageByRun: {},
 } as RunSession);

@@ -7,6 +7,10 @@ public final class SystemConstant {
     public static final boolean IS_WINDOWS = OS_NAME.startsWith("Windows");
     public static final String APPLICATION_SUFFIX = IS_WINDOWS ? ".exe" : ".app";
 
+    public static final String META_FILE_NAME = ".meta.json";
+    public static final String CONSTRAINT_FILE_NAME = ".constraint.json";
+    public static final String OUTLINE_FILE_NAME = ".outline.json";
+
     public static final String SYSTEM_OPEN = "system";
     public static final String INHERIT_OPEN = "inherit";
 }

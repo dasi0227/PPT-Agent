@@ -21,7 +21,7 @@ public final class SaveProjectPositionsDto {
     @NotNull
     private DecorationPosition deckTitle;
     @NotNull
-    private DecorationPosition sectionTitle;
+    private DecorationPosition chapterTitle;
     @NotNull
     private DecorationPosition logo;
 
@@ -30,7 +30,7 @@ public final class SaveProjectPositionsDto {
                 .id(projectId)
                 .slidePaginationPosition(slidePagination)
                 .deckTitlePosition(deckTitle)
-                .sectionTitlePosition(sectionTitle)
+                .chapterTitlePosition(chapterTitle)
                 .logoPosition(logo)
                 .build();
     }

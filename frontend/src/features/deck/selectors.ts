@@ -1,13 +1,13 @@
-import type { Outline, OutlineSection, OutlineSlideNode, OutlineSubsection, ProjectContentSnapshot, Slide } from '../../api/types';
+import type { Outline, OutlineChapter, OutlineSlideNode, OutlineSection, ProjectContentSnapshot, Slide } from '../../api/types';
 
-export interface FlatOutlineSlide { node: OutlineSlideNode; section: OutlineSection; subsection?: OutlineSubsection; ordinal: number }
+export interface FlatOutlineSlide { node: OutlineSlideNode; chapter: OutlineChapter; section?: OutlineSection; ordinal: number }
 
 export function flattenOutline(outline?: Outline): FlatOutlineSlide[] {
   if (!outline) return [];
   const result: FlatOutlineSlide[] = [];
-  outline.sections.forEach((section) => {
-    section.slides.forEach((node) => result.push({ node, section, ordinal: result.length + 1 }));
-    section.subsections.forEach((subsection) => subsection.slides.forEach((node) => result.push({ node, section, subsection, ordinal: result.length + 1 })));
+  outline.chapters.forEach((chapter) => {
+    chapter.slides.forEach((node) => result.push({ node, chapter, ordinal: result.length + 1 }));
+    chapter.sections.forEach((section) => section.slides.forEach((node) => result.push({ node, chapter, section, ordinal: result.length + 1 })));
   });
   return result;
 }
@@ -16,7 +16,7 @@ export function slideSpecPath(slideId: string): string { return `.${slideId}.jso
 
 export function orderedSlides(snapshot?: ProjectContentSnapshot): Slide[] {
   if (!snapshot) return [];
-  return flattenOutline(snapshot.outline).map(({ node, section, subsection }) => {
+  return flattenOutline(snapshot.outline).map(({ node, chapter, section }) => {
     const content = snapshot.slides_by_id[node.id];
     const spec = content?.spec ?? undefined;
     return {
@@ -24,7 +24,7 @@ export function orderedSlides(snapshot?: ProjectContentSnapshot): Slide[] {
       title: node.title, purpose: spec?.purpose,
       layout: spec?.layout ?? '', html_path: content?.html_hash ? `${node.id}.html` : '',
       spec_path: spec || content?.spec_state === 'invalid' ? slideSpecPath(node.id) : '', html_hash: content?.html_hash ?? '',
-      sectionId: section.id, subsectionId: subsection?.id, spec,
+      chapterId: chapter.id, sectionId: section?.id, spec,
       html_state: content?.html_state ?? 'missing',
     };
   });

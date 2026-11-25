@@ -1,10 +1,11 @@
-import type { CreateRunScopeInput, RunActivity, RunScope, ScopeSelectionKind } from '../../api/types';
+import { scopeSelectionKind, type CreateRunScopeInput, type RunActivity, type RunScope, type ScopeSelectionKind } from '../../api/types';
 
 export const scopeSelectionLabels: Record<ScopeSelectionKind, string> = {
   current_page: '当前页',
   all_pages: '全部页',
   custom_pages: '自选页',
-  custom_sections: '自选章',
+  custom_chapters: '自选章',
+  custom_sections: '自选节',
 };
 
 export const runActivityLabels: Record<RunActivity, string | null> = {
@@ -31,6 +32,6 @@ export const runActivityLabels: Record<RunActivity, string | null> = {
 };
 
 export function targetLabel(scope: RunScope | CreateRunScopeInput): string {
-  const selection = 'source' in scope ? scope.source.kind : scope.selection.kind;
+  const selection = scope && 'source' in scope ? scope.source.kind : scopeSelectionKind(scope);
   return scopeSelectionLabels[selection];
 }

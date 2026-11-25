@@ -25,7 +25,7 @@ public interface IRenderGateway {
         private String themeCss;
         private Map<DecorationType, DecorationPosition> positions;
         private String deckTitle;
-        private String sectionTitle;
+        private String chapterTitle;
         private int pageNumber;
         private byte[] logo;
     }

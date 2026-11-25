@@ -15,4 +15,16 @@
            OR (type = 'agent' AND owner_id IN (
                SELECT r.id FROM runs r JOIN sessions s ON s.id = r.session_id WHERE s.project_id = #{projectId}))
     </delete>
+
+    <insert id="insertManualReceipt">
+        INSERT INTO receipts (type, owner_id, request_id, request_hash) VALUES (#{type}, #{ownerId}, #{requestId}, #{requestHash})
+    </insert>
+
+    <select id="findManualRequestHash" resultType="string">
+        SELECT request_hash FROM receipts WHERE type = 'manual' AND owner_id = #{projectId} AND request_id = #{operationId}
+    </select>
+
+    <delete id="deleteManualReceipt">
+        DELETE FROM receipts WHERE type = 'manual' AND owner_id = #{projectId} AND request_id = #{operationId}
+    </delete>
 </mapper>

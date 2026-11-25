@@ -11,7 +11,7 @@ import lombok.Getter;
 public enum DecorationType {
     SLIDE_PAGINATION("slide_pagination"),
     DECK_TITLE("deck_title"),
-    SECTION_TITLE("section_title"),
+    CHAPTER_TITLE("chapter_title"),
     LOGO("logo");
 
     @JsonValue

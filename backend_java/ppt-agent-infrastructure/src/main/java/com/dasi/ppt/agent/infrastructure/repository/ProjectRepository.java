@@ -65,8 +65,8 @@ public class ProjectRepository implements IProjectRepository {
     }
 
     @Override
-    public void requireWritableProjectFiles(String projectId) {
-        fileStorer.requireWritable(pathResolver.projectDirectory(projectId));
+    public boolean hasPendingFileOperation(String projectId) {
+        return fileStorer.hasPendingFileOperation(pathResolver.projectDirectory(projectId));
     }
 
     @Override
@@ -108,7 +108,7 @@ public class ProjectRepository implements IProjectRepository {
                 .theme(po.getTheme())
                 .slidePaginationPosition(position(po.getSlidePaginationPosition()))
                 .deckTitlePosition(position(po.getDeckTitlePosition()))
-                .sectionTitlePosition(position(po.getSectionTitlePosition()))
+                .chapterTitlePosition(position(po.getChapterTitlePosition()))
                 .logoPosition(position(po.getProjectLogoPosition()))
                 .logoPresent(po.isLogoPresent())
                 .updatedAt(po.getUpdatedAt())
@@ -121,7 +121,7 @@ public class ProjectRepository implements IProjectRepository {
                 .title(project.getTitle())
                 .slidePaginationPosition(value(project.getSlidePaginationPosition()))
                 .deckTitlePosition(value(project.getDeckTitlePosition()))
-                .sectionTitlePosition(value(project.getSectionTitlePosition()))
+                .chapterTitlePosition(value(project.getChapterTitlePosition()))
                 .projectLogoPosition(value(project.getLogoPosition()))
                 .updatedAt(project.getUpdatedAt())
                 .build();

@@ -27,15 +27,15 @@ CREATE TABLE projects (
     logo BLOB DEFAULT NULL,
     slide_pagination_position TEXT NOT NULL DEFAULT 'bottom-right',
     deck_title_position TEXT NOT NULL DEFAULT 'none',
-    section_title_position TEXT NOT NULL DEFAULT 'top-left',
+    chapter_title_position TEXT NOT NULL DEFAULT 'top-left',
     project_logo_position TEXT NOT NULL DEFAULT 'none',
     updated_at INTEGER NOT NULL,
     CHECK (slide_pagination_position = 'none' OR deck_title_position = 'none' OR slide_pagination_position <> deck_title_position),
-    CHECK (slide_pagination_position = 'none' OR section_title_position = 'none' OR slide_pagination_position <> section_title_position),
+    CHECK (slide_pagination_position = 'none' OR chapter_title_position = 'none' OR slide_pagination_position <> chapter_title_position),
     CHECK (slide_pagination_position = 'none' OR project_logo_position = 'none' OR slide_pagination_position <> project_logo_position),
-    CHECK (deck_title_position = 'none' OR section_title_position = 'none' OR deck_title_position <> section_title_position),
+    CHECK (deck_title_position = 'none' OR chapter_title_position = 'none' OR deck_title_position <> chapter_title_position),
     CHECK (deck_title_position = 'none' OR project_logo_position = 'none' OR deck_title_position <> project_logo_position),
-    CHECK (section_title_position = 'none' OR project_logo_position = 'none' OR section_title_position <> project_logo_position)
+    CHECK (chapter_title_position = 'none' OR project_logo_position = 'none' OR chapter_title_position <> project_logo_position)
 );
 
 CREATE TABLE sessions (

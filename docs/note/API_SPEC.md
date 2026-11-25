@@ -17,12 +17,13 @@
 
 - 项目列表按 `updated_at` 降序、`id` 升序返回。
 - `POST /api/projects/create` 仅接收 `title`，新项目默认无主题。`POST /api/projects/update` 接收 `project_id` 和 `title`，修改已有项目的名称。创建成功返回 `{"id":"…"}`，改名成功返回空响应体。每次成功改名都严格递增 `updated_at`，包括提交原名。
-- `GET /api/projects/{project_id}` 一次返回资料、大纲及大纲内各页的规格、HTML 和对应哈希。
+- `GET /api/projects/{project_id}` 一次返回资料、约束、大纲及大纲内各页的规格、HTML 和对应哈希。
 - 普通项目读取允许不同文件来自相邻两次提交。每个文件的正文和哈希取自同一次读取。
-- 规格损坏时正文为 `null`，仍返回其哈希。文件缺失时正文与哈希均为 `null`。
+- 已保存的基本信息、约束、大纲或单页规格文件格式错误时，整次文稿读取返回 `ILLEGAL_STATE`。
+- 文件缺失时正文与哈希均为 `null`。
 - 项目内有非终态 Run、正在 Git 提交或历史切换时，人工保存文稿返回 `PROJECT_BUSY`。
 - 导出采集快照时，人工保存等候项目锁。快照固定后即可编辑。
-- 每次保存提交完整正文。保存成功返回新 `hash`，基准不符返回 `CONTENT_CONFLICT` 并保留当前内容。
+- 每次保存提交完整正文。保存成功返回文件原始字节的 `hash`（`sha256:` 加小写十六进制摘要），基准不符返回 `CONTENT_CONFLICT` 并保留当前内容。基准匹配后，比较待写入字节和文件原始字节。字节相同时直接返回原哈希，保留检查点与项目更新时间；字节不同时写回文件。
 - 规格和 HTML 分别使用 `hashes.slides[id].spec` 和 `.html` 作为 `base_hash`。`base_hash=null` 仅在文件尚不存在时匹配。
 - 大纲保存提交整棵树，大纲与相关文件的修改一起生效。
 - 新节点由客户端分配唯一 ID，已有节点改名、排序或移动时沿用原 ID。
@@ -30,7 +31,7 @@
 - 非空章不能直接删除。删除含幻灯片的节，仅允许移除章内唯一的节，并将其全部幻灯片保留为章直属节点。
 - `GET /api/projects/{project_id}/appearance` 返回 `theme_id`，值为 `null` 表示项目未选择主题。
 - `POST /api/projects/theme/save` 需提交 `project_id` 和 `theme_id`，只保存项目主题。每次保存都校验目标资产存在、类型为主题、已启用且正文非空白，同值保存也需通过校验。
-- `POST /api/projects/positions/save` 需在请求顶层提交 `project_id`、`slide_pagination`、`deck_title`、`section_title` 和 `logo`，只保存四项装饰位置。四项位置一并生效，允许在一次保存中交换。显示位置不可重叠，`none` 表示隐藏，可在多项中使用。
+- `POST /api/projects/positions/save` 需在请求顶层提交 `project_id`、`slide_pagination`、`deck_title`、`chapter_title` 和 `logo`，只保存四项装饰位置。四项位置一并生效，允许在一次保存中交换。显示位置不可重叠，`none` 表示隐藏，可在多项中使用。
 - 两个接口的字段缺失或为 `null` 时返回 `INVALID_ARGUMENT`，成功时返回 HTTP 200 和空响应体。
 - 主题、装饰位置或 Logo 实际变化时，更新项目的 `updated_at`。项目内各会话保留检查点、返回入口和当前版本。事务提交后向项目内所有已连接会话发送 `project_changed`，其中 `areas=["appearance"]`。同值保存、重复删除 Logo 或请求失败时，保留原更新时间，不发送通知。
 
@@ -228,8 +229,8 @@
 - 已使用的 `message_id` 用于其他会话或不同请求时返回 `IDEMPOTENCY_CONFLICT`。
 - `text` 去首尾空白后为空时，有 DOM 选区须至少一条选区注释非空，无 DOM 选区须附图片。
 - 追加仅接受图片和 DOM 引用。附件须属于当前项目，引用的幻灯片和 DOM 源码基准须有效。
-- `scope=null` 授权全项目。范围对象只含 `current_slide_id`、`slide_ids`、`section_ids`、`subsection_ids` 之一。
-- `section_ids` 选章，包含章直属页面和下属各节的页面。`subsection_ids` 选节，只包含所选节的页面。
+- `scope=null` 授权全项目。范围对象只含 `current_slide_id`、`slide_ids`、`chapter_ids`、`section_ids` 之一。
+- `chapter_ids` 选章，包含章直属页面和下属各节的页面。`section_ids` 选节，只包含所选节的页面。
 - 章、节在受理时按大纲顺序展开为页面 ID。
 - 引用本身不扩大授权。
 - 追加省略 `scope` 沿用当前范围，显式提交与原范围取并集。实际扩大授权后通知 `run`、`history`。
@@ -283,7 +284,7 @@
 - 发起或修订 `polish` 保留返回入口。
 - 可返回最新期间不自动发起旁路命令。
 - 历史位置手动改名和删除计划使用 `expected_revision`。成功且有实际修改时，同样放弃返回目标及已脱离当前历史的检查点。
-- 无会话归属的人工保存实际改变五类文稿文件中的任一文件时，项目全部会话的检查点和返回目标失效。
+- 人工保存文稿保留各会话已有的检查点、返回目标和当前版本。内容实际变化时，提交后仅发送 `project_changed`（`areas=["content"]`）。之后选择回退会恢复所选检查点当时的文稿。
 - 会话实际改变共享文稿文件时（含回退或返回），同项目其他会话的检查点和返回目标失效。
 - 检查点失效时，受影响会话的版本随之更新，活动 Run 继续。
 - 历史切换后通过 `reset` 通知受影响的会话。

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { projectHistoryApi, type HistoryPreview, type HistoryState } from '../api/projectHistory';
+import { scopeSelectionKind } from '../api/types';
 import { invalidateHistoryRequests } from '../api/client';
 import { composerScene, loadProjectComposer, restoreDraftMentions, saveProjectComposer, useComposerStore, type ComposerReference, type ComposerState } from './composerStore';
 import { projectWorkspaceRoute } from '../features/workspace/routes';
@@ -100,8 +101,9 @@ export function applyHistoryScene(projectId: string, state: HistoryState) {
       threadDrafts: { [threadId]: input.command.instruction }, threadReferences: { [threadId]: refs },
       nextMarkerByThread: { [threadId]: Math.max(0, ...selections.map((s) => s.marker_no)) + 1 },
       mode: input.command.mode, modelProfileName: input.model, modelSelectionExplicit: !!input.model, selectedSkillIds: input.skill_ids ?? [],
-      scopeSelection: scope.selection.kind,
-      customSlideIds: scope.selection.slide_ids ?? [], customSectionIds: scope.selection.section_ids ?? [],
+      scopeSelection: scopeSelectionKind(scope),
+      customSlideIds: scope && 'slide_ids' in scope ? scope.slide_ids : [], customChapterIds: scope && 'chapter_ids' in scope ? scope.chapter_ids : [],
+      customSectionIds: scope && 'section_ids' in scope ? scope.section_ids : [],
       restoredInputs: { [threadId]: { scope: input.scope_input, component_names: input.component_names ?? [], mentioned_slide_ids: input.mentioned_slide_ids ?? [] } },
     });
     localStorage.setItem(threadKey(projectId), threadId);
@@ -131,7 +133,8 @@ export function reloadHistory(projectId: string, state: HistoryState) {
   window.location.replace(historyWorkspaceRoute(projectId, state));
 }
 export function historyWorkspaceRoute(projectId: string, state: HistoryState) {
-  const slideId = state.scene?.input?.scope_input.selection.current_slide_id ?? state.scene?.slide_id;
+  const scope = state.scene?.input?.scope_input;
+  const slideId = scope && 'current_slide_id' in scope ? scope.current_slide_id : state.scene?.slide_id;
   const route = projectWorkspaceRoute(projectId, {
     slideId,
     view: state.scene?.view,

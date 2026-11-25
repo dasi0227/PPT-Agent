@@ -44,8 +44,8 @@ const snapshot: ProjectContentSnapshot = {
   appearance: null,
   hashes: {},
   meta: { title: 'Demo', goal: '', audience: '', language: 'zh-CN', count: '待明确' },
-  outline: { sections: [{
-    id: 'section-1', title: '', subsections: [],
+  outline: { chapters: [{
+    id: 'chapter-1', title: '', sections: [],
     slides: [
       { id: 'sli_one', title: '开场' },
       { id: 'sli_middle', title: '过渡' },
@@ -53,7 +53,7 @@ const snapshot: ProjectContentSnapshot = {
     ],
   }] },
   constraint: { content: { requirements: [], prohibitions: [] }, visual: { requirements: [], prohibitions: [] } },
-  decorations: { slide_pagination: 'bottom-right', section_title: 'top-left', deck_title: 'none', logo: 'none' }, logo: null,
+  decorations: { slide_pagination: 'bottom-right', chapter_title: 'top-left', deck_title: 'none', logo: 'none' }, logo: null,
   slides_by_id: {},
 };
 

@@ -37,8 +37,8 @@ public final class RollbackVo {
     public static final class InitialScopeVo {
         private String currentSlideId;
         private List<String> slideIds;
+        private List<String> chapterIds;
         private List<String> sectionIds;
-        private List<String> subsectionIds;
     }
 
     @Builder

@@ -27,12 +27,12 @@ export type SlidePurpose =
   | 'other';
 
 export interface Outline {
-  sections: OutlineSection[];
+  chapters: OutlineChapter[];
 }
 
 export interface OutlineSlideNode { id: string; title: string }
-export interface OutlineSubsection { id: string; title: string; slides: OutlineSlideNode[] }
-export interface OutlineSection { id: string; title: string; slides: OutlineSlideNode[]; subsections: OutlineSubsection[] }
+export interface OutlineSection { id: string; title: string; slides: OutlineSlideNode[] }
+export interface OutlineChapter { id: string; title: string; slides: OutlineSlideNode[]; sections: OutlineSection[] }
 
 export interface Meta {
   title: string; language: string; count: string; audience: string; goal: string;
@@ -42,7 +42,7 @@ export type DecorationPlacement = 'top-left' | 'top-center' | 'top-right' | 'bot
 export interface Decorations {
   slide_pagination: DecorationPlacement | 'none';
   deck_title: DecorationPlacement | 'none';
-  section_title: DecorationPlacement | 'none';
+  chapter_title: DecorationPlacement | 'none';
   logo: DecorationPlacement | 'none';
 }
 export type DecorationType = keyof Decorations;
@@ -71,8 +71,8 @@ export interface Slide {
   spec?: SlideSpec;
   html_state?: HTMLState;
   purpose?: SlidePurpose;
+  chapterId?: string;
   sectionId?: string;
-  subsectionId?: string;
 }
 
 export interface Thread {
@@ -108,18 +108,25 @@ export interface Run {
   active_duration_ms?: number;
 }
 
-export type ScopeSelectionKind = 'current_page' | 'all_pages' | 'custom_pages' | 'custom_sections';
+export type ScopeSelectionKind = 'current_page' | 'all_pages' | 'custom_pages' | 'custom_chapters' | 'custom_sections';
 export type RunMode = 'chat' | 'ask' | 'plan' | 'create';
 
-export interface ScopeSelectionInput {
-  kind: ScopeSelectionKind;
-  current_slide_id?: string;
-  slide_ids?: string[];
-  section_ids?: string[];
+export type CreateRunScopeInput =
+  | null
+  | { current_slide_id: string }
+  | { slide_ids: string[] }
+  | { chapter_ids: string[] }
+  | { section_ids: string[] };
+
+export function scopeSelectionKind(scope: CreateRunScopeInput): ScopeSelectionKind {
+  if (scope === null) return 'all_pages';
+  if ('current_slide_id' in scope) return 'current_page';
+  if ('slide_ids' in scope) return 'custom_pages';
+  if ('chapter_ids' in scope) return 'custom_chapters';
+  return 'custom_sections';
 }
 
-export interface CreateRunScopeInput { selection: ScopeSelectionInput }
-export interface ScopeSource { kind: ScopeSelectionKind; section_ids?: string[] }
+export interface ScopeSource { kind: ScopeSelectionKind; chapter_ids?: string[]; section_ids?: string[] }
 export interface RunScope {
   slide_ids: string[];
   source: ScopeSource;
@@ -142,7 +149,7 @@ export interface DOMTarget {
   ancestors?: DOMAncestor[]; parent_target_id?: string; rect: CanvasRect; box_model: DOMBoxModel;
   computed_style?: Record<string, string>; status?: DOMSelectionStatus;
 }
-export interface DecorationTarget { type: 'slide_pagination' | 'section_title' | 'logo' | 'deck_title'; placement: string; text: string; rect: CanvasRect }
+export interface DecorationTarget { type: 'slide_pagination' | 'chapter_title' | 'logo' | 'deck_title'; placement: string; text: string; rect: CanvasRect }
 export interface DOMSelection {
   selection_id: string; marker_no: number; kind: 'element' | 'region'; comment: string;
   slide_id: string; html_hash: string; canvas: { width: 1920; height: 1080 };
@@ -505,7 +512,7 @@ export interface DiffHunk {
 }
 export interface OutlineDiffRow {
   kind: 'context' | 'added' | 'removed';
-  node: 'chapter' | 'subchapter' | 'page';
+  node: 'chapter' | 'section' | 'slide';
   depth: number;
   title: string;
   order?: string;
