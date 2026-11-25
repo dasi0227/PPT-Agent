@@ -7,19 +7,19 @@ import java.util.List;
 
 public interface LlmConfigMapper {
 
-    List<LlmConfigPo> list();
+    List<LlmConfigPo> listModels();
 
-    LlmConfigPo find(String id);
+    LlmConfigPo findModelById(String id);
 
-    boolean nameExists(@Param("name") String name, @Param("excludeId") String excludeId);
+    boolean existsConflictingModelName(@Param("name") String name, @Param("modelId") String modelId);
 
-    boolean exists(@Param("id") String id);
+    boolean existsModelById(@Param("id") String id);
 
-    int count();
+    boolean isLastModel(String id);
 
-    void insert(LlmConfigPo model);
+    void insertModel(LlmConfigPo model);
 
-    int update(LlmConfigPo model);
+    int updateModel(LlmConfigPo model);
 
-    void delete(@Param("id") String id);
+    int deleteModel(@Param("id") String id);
 }

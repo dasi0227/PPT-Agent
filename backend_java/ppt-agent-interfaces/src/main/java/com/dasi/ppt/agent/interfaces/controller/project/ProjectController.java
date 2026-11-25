@@ -66,12 +66,12 @@ public class ProjectController {
 
     @PostMapping("/theme/save")
     public void saveTheme(@Valid @RequestBody SaveProjectThemeDto request) {
-        projectService.saveTheme(request.toProject());
+        projectService.saveTheme(request.toEntity());
     }
 
     @PostMapping("/positions/save")
     public void savePositions(@Valid @RequestBody SaveProjectPositionsDto request) {
-        projectService.savePositions(request.toProject());
+        projectService.savePositions(request.toEntity());
     }
 
     @PostMapping(value = "/logo/save", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

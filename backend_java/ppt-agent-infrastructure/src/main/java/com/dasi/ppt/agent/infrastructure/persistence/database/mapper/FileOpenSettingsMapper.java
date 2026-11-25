@@ -4,7 +4,7 @@ import com.dasi.ppt.agent.infrastructure.persistence.database.po.FileOpenSetting
 
 public interface FileOpenSettingsMapper {
 
-    FileOpenSettingsPo read();
+    FileOpenSettingsPo getFileOpenSettings();
 
-    void save(FileOpenSettingsPo settings);
+    void saveFileOpenSettings(FileOpenSettingsPo settings);
 }

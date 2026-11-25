@@ -21,11 +21,11 @@
         <result column="select_suggestion" property="selectSuggestion"/>
     </resultMap>
 
-    <select id="read" resultMap="shortcutSettingsPo">
+    <select id="getShortcutSettings" resultMap="shortcutSettingsPo">
         SELECT * FROM settings_shortcut WHERE id = 1
     </select>
 
-    <insert id="save">
+    <insert id="saveShortcutSettings">
         INSERT INTO settings_shortcut (
             id, command_trigger, reference_trigger, component_trigger, slide_trigger, snippet_trigger,
             previous_slide, next_slide, zoom_in, zoom_out, toggle_overview, export_deck, toggle_view,

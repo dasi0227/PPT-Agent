@@ -4,21 +4,15 @@ import com.dasi.ppt.agent.domain.asset.model.entity.Asset;
 import com.dasi.ppt.agent.domain.asset.model.entity.Tag;
 import com.dasi.ppt.agent.domain.asset.model.enumeration.AssetType;
 import com.dasi.ppt.agent.domain.asset.repository.IAssetRepository;
-import com.dasi.ppt.agent.domain.shared.exception.ErrorCode;
-import com.dasi.ppt.agent.domain.shared.exception.InvalidEnumValueException;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.AssetMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.AssetTagMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.TagMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.database.po.AssetPo;
 import com.dasi.ppt.agent.infrastructure.persistence.database.po.TagPo;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.stereotype.Repository;
 
-import java.util.HashSet;
 import java.util.List;
-
-import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.notFound;
 
 @Repository
 @RequiredArgsConstructor
@@ -30,29 +24,26 @@ public class AssetRepository implements IAssetRepository {
 
     @Override
     public List<Asset> listAssets(AssetType type, String query) {
-        return assetMapper.list(type.getValue(), query)
+        return assetMapper.listAssets(type.getValue(), query)
                 .stream()
-                .map(AssetRepository::toAsset)
+                .map(AssetRepository::toEntity)
                 .toList();
     }
 
     @Override
-    public Asset findAsset(String assetId) {
-        AssetPo row = assetMapper.find(assetId);
-        if (row == null) {
-            throw notFound(ErrorCode.ASSET_NOT_FOUND);
-        }
-        return toAsset(row);
+    public Asset findAssetById(String assetId) {
+        return toEntity(assetMapper.findAssetById(assetId));
     }
 
     @Override
-    public boolean exists(String assetId, AssetType type) {
-        return assetMapper.exists(assetId, type.getValue());
+    public AssetType findAssetTypeById(String assetId) {
+        String value = assetMapper.findAssetTypeById(assetId);
+        return value == null ? null : AssetType.fromValue(value);
     }
 
     @Override
     public List<Tag> listTags(AssetType type) {
-        return tagMapper.list(type.getValue())
+        return tagMapper.listTags(type.getValue())
                 .stream()
                 .map(row -> Tag.builder()
                         .id(row.getId())
@@ -63,18 +54,18 @@ public class AssetRepository implements IAssetRepository {
     }
 
     @Override
-    public int countTags(AssetType type, List<String> tagIds) {
-        return tagMapper.countByIds(type.getValue(), tagIds);
+    public int countTagsByTypeAndIds(AssetType type, List<String> tagIds) {
+        return tagMapper.countTagsByTypeAndIds(type.getValue(), tagIds);
     }
 
     @Override
-    public boolean existTagName(AssetType type, String name) {
-        return tagMapper.nameExists(type.getValue(), name);
+    public boolean existsTagByTypeAndName(AssetType type, String name) {
+        return tagMapper.existsTagByTypeAndName(type.getValue(), name);
     }
 
     @Override
     public void insertTag(Tag tag) {
-        tagMapper.insert(TagPo.builder()
+        tagMapper.insertTag(TagPo.builder()
                 .id(tag.getId())
                 .type(tag.getType().getValue())
                 .name(tag.getName())
@@ -82,70 +73,70 @@ public class AssetRepository implements IAssetRepository {
     }
 
     @Override
-    public void deleteTag(String tagId) {
-        assetMapper.updateTimestampsByTag(tagId, System.currentTimeMillis());
-        if (tagMapper.delete(tagId) == 0) {
-            throw notFound(ErrorCode.TAG_NOT_FOUND);
-        }
+    public boolean existsConflictingTagName(String tagId, String name) {
+        return tagMapper.existsConflictingTagName(tagId, name);
     }
 
     @Override
-    public boolean existName(AssetType type, String name, String excludeAssetId) {
-        return assetMapper.nameExists(type.getValue(), name, excludeAssetId);
+    public int updateTagName(String tagId, String name) {
+        return tagMapper.updateTagName(tagId, name);
     }
 
     @Override
-    public void insert(Asset asset) {
-        assetMapper.insert(toPo(asset));
+    public int deleteTag(String tagId) {
+        assetMapper.updateAssetTimestampsByTagId(tagId, System.currentTimeMillis());
+        return tagMapper.deleteTag(tagId);
+    }
+
+    @Override
+    public boolean existsAssetByTypeAndName(AssetType type, String name, String excludeAssetId) {
+        return assetMapper.existsAssetByTypeAndName(type.getValue(), name, excludeAssetId);
+    }
+
+    @Override
+    public void insertAsset(Asset asset) {
+        assetMapper.insertAsset(toPo(asset));
         List<String> tagIds = asset.getTagIds();
         if (tagIds != null && !tagIds.isEmpty()) {
-            assetTagMapper.insert(asset.getId(), tagIds);
+            assetTagMapper.insertAssetTagLinks(asset.getId(), tagIds);
         }
     }
 
     @Override
-    public void update(Asset asset) {
-        String id = asset.getId();
+    public void updateAsset(Asset asset) {
+        assetMapper.updateAsset(asset, System.currentTimeMillis());
         List<String> tagIds = asset.getTagIds();
-        boolean tagsChanged = tagIds != null && !new HashSet<>(assetTagMapper.listIds(id)).equals(new HashSet<>(tagIds));
-        if (assetMapper.update(asset, tagsChanged, System.currentTimeMillis()) == 0) {
-            throw notFound(ErrorCode.ASSET_NOT_FOUND);
-        }
-        if (tagsChanged) {
-            assetTagMapper.deleteExcept(id, tagIds);
+        if (tagIds != null) {
+            String id = asset.getId();
+            assetTagMapper.deleteAssetTagLinksByAssetId(id);
             if (!tagIds.isEmpty()) {
-                assetTagMapper.insert(id, tagIds);
+                assetTagMapper.insertAssetTagLinks(id, tagIds);
             }
         }
     }
 
     @Override
-    public boolean isUsed(String assetId) {
-        return assetMapper.isUsed(assetId);
+    public boolean isUsedAsProjectTheme(String assetId) {
+        return assetMapper.isUsedAsProjectTheme(assetId);
     }
 
     @Override
-    public void delete(String assetId) {
-        if (assetMapper.delete(assetId) == 0) {
-            throw notFound(ErrorCode.ASSET_NOT_FOUND);
-        }
+    public int deleteAsset(String assetId) {
+        return assetMapper.deleteAsset(assetId);
     }
 
-    private static Asset toAsset(AssetPo row) {
-        try {
-            return Asset.builder()
-                    .id(row.getId())
-                    .type(AssetType.fromValue(row.getType()))
-                    .name(row.getName())
-                    .description(row.getDescription())
-                    .content(row.getContent())
-                    .enabled(row.isEnabled())
-                    .tagIds(row.getTagIds())
-                    .updatedAt(row.getUpdatedAt())
-                    .build();
-        } catch (InvalidEnumValueException ex) {
-            throw new DataRetrievalFailureException("assets.type 包含无效值", ex);
-        }
+    private static Asset toEntity(AssetPo po) {
+        if (po == null) return null;
+        return Asset.builder()
+                .id(po.getId())
+                .type(AssetType.fromValue(po.getType()))
+                .name(po.getName())
+                .description(po.getDescription())
+                .content(po.getContent())
+                .enabled(po.isEnabled())
+                .tagIds(po.getTagIds())
+                .updatedAt(po.getUpdatedAt())
+                .build();
     }
 
     private static AssetPo toPo(Asset asset) {

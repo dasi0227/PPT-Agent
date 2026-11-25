@@ -12,49 +12,53 @@
 
     <sql id="publicColumns">id, name, protocol, provider, base_url, model</sql>
 
-    <select id="list" resultMap="llmConfigPo">
+    <select id="listModels" resultMap="llmConfigPo">
         SELECT <include refid="publicColumns"/> FROM settings_models ORDER BY name
     </select>
 
-    <select id="find" resultMap="llmConfigPo">
+    <select id="findModelById" resultMap="llmConfigPo">
         SELECT <include refid="publicColumns"/> FROM settings_models WHERE id = #{id}
     </select>
 
-    <select id="nameExists" resultType="boolean">
+    <select id="existsConflictingModelName" resultType="boolean">
         SELECT EXISTS (
             SELECT 1 FROM settings_models
             WHERE name = #{name}
-            <if test="excludeId != null">
-                AND id != #{excludeId}
+            <if test="modelId != null">
+                AND id != #{modelId}
+                AND EXISTS (SELECT 1 FROM settings_models WHERE id = #{modelId})
             </if>
         )
     </select>
 
-    <select id="exists" resultType="boolean">
+    <select id="existsModelById" resultType="boolean">
         SELECT EXISTS (SELECT 1 FROM settings_models WHERE id = #{id})
     </select>
 
-    <select id="count" resultType="int">
-        SELECT COUNT(*) FROM settings_models
+    <select id="isLastModel" resultType="boolean">
+        SELECT EXISTS (SELECT 1 FROM settings_models WHERE id = #{id})
+           AND NOT EXISTS (SELECT 1 FROM settings_models WHERE id != #{id})
     </select>
 
-    <insert id="insert">
+    <insert id="insertModel">
         INSERT INTO settings_models (id, name, protocol, provider, base_url, model, key)
         VALUES (#{id}, #{name}, #{protocol}, #{provider}, #{baseUrl}, #{model}, #{key})
     </insert>
 
-    <update id="update">
-        UPDATE settings_models SET
-            name = COALESCE(#{name}, name),
-            protocol = COALESCE(#{protocol}, protocol),
-            provider = COALESCE(#{provider}, provider),
-            base_url = COALESCE(#{baseUrl}, base_url),
-            model = COALESCE(#{model}, model),
-            key = COALESCE(#{key}, key)
+    <update id="updateModel">
+        UPDATE settings_models
+        <set>
+            <if test="name != null">name = #{name},</if>
+            <if test="protocol != null">protocol = #{protocol},</if>
+            <if test="provider != null">provider = #{provider},</if>
+            <if test="baseUrl != null">base_url = #{baseUrl},</if>
+            <if test="model != null">model = #{model},</if>
+            <if test="key != null">key = #{key},</if>
+        </set>
         WHERE id = #{id}
     </update>
 
-    <delete id="delete">
+    <delete id="deleteModel">
         DELETE FROM settings_models WHERE id = #{id}
     </delete>
 </mapper>

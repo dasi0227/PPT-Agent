@@ -1,6 +1,7 @@
 package com.dasi.ppt.agent.interfaces.controller.setting;
 
 import com.dasi.ppt.agent.domain.setting.service.SettingService;
+import com.dasi.ppt.agent.interfaces.controller.IdVo;
 import com.dasi.ppt.agent.interfaces.controller.setting.dto.CreateModelDto;
 import com.dasi.ppt.agent.interfaces.controller.setting.dto.DeleteModelDto;
 import com.dasi.ppt.agent.interfaces.controller.setting.dto.SaveBehaviorSettingsDto;
@@ -14,7 +15,6 @@ import com.dasi.ppt.agent.interfaces.controller.setting.vo.ModelConfigVo;
 import com.dasi.ppt.agent.interfaces.controller.setting.vo.ModelSettingsVo;
 import com.dasi.ppt.agent.interfaces.controller.setting.vo.PickApplicationVo;
 import com.dasi.ppt.agent.interfaces.controller.setting.vo.ShortcutSettingsVo;
-import com.dasi.ppt.agent.interfaces.controller.IdVo;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,8 +24,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.nio.file.Path;
-
 @RestController
 @RequestMapping("/settings")
 @RequiredArgsConstructor
@@ -33,30 +31,29 @@ public class SettingController {
 
     private final SettingService settingService;
 
-    @PostMapping("/fileopen/pick")
-    public PickApplicationVo pickApplication() {
-        Path path = settingService.pickApplication();
-        return PickApplicationVo.builder().path(path == null ? null : path.toString()).build();
-    }
-
     @GetMapping("/fileopen")
-    public FileOpenSettingsVo getFileOpen() {
+    public FileOpenSettingsVo getFileOpenSettings() {
         return FileOpenSettingsVo.toVo(settingService.getFileOpenSettings());
     }
 
     @PostMapping("/fileopen/save")
-    public FileOpenSettingsVo saveFileOpen(@Valid @RequestBody SaveFileOpenSettingsDto request) {
-        return FileOpenSettingsVo.toVo(settingService.saveFileOpenSettings(request.toFileOpenSettings()));
+    public FileOpenSettingsVo saveFileOpenSettings(@Valid @RequestBody SaveFileOpenSettingsDto request) {
+        return FileOpenSettingsVo.toVo(settingService.saveFileOpenSettings(request.toEntity()));
+    }
+
+    @PostMapping("/fileopen/pick")
+    public PickApplicationVo pickApplication() {
+        return PickApplicationVo.toVo(settingService.pickApplication());
     }
 
     @GetMapping("/shortcuts")
-    public ShortcutSettingsVo getShortcuts() {
-        return ShortcutSettingsVo.toVo(settingService.getShortcuts());
+    public ShortcutSettingsVo getShortcutSettings() {
+        return ShortcutSettingsVo.toVo(settingService.getShortcutSettings());
     }
 
     @PostMapping("/shortcuts/save")
-    public void saveShortcuts(@Valid @RequestBody SaveShortcutSettingsDto request) {
-        settingService.saveShortcuts(request.toShortcutSettings());
+    public void saveShortcutSettings(@Valid @RequestBody SaveShortcutSettingsDto request) {
+        settingService.saveShortcutSettings(request.toEntity());
     }
 
     @GetMapping("/models")
@@ -65,20 +62,20 @@ public class SettingController {
     }
 
     @GetMapping("/models/{id}")
-    public ModelConfigVo getModel(@PathVariable("id") String id) {
-        return ModelConfigVo.toVo(settingService.getModel(id));
+    public ModelConfigVo getModelDetail(@PathVariable("id") String id) {
+        return ModelConfigVo.toVo(settingService.getModelDetail(id));
     }
 
     @PostMapping("/models/create")
     public IdVo createModel(@Valid @RequestBody CreateModelDto request) {
         return IdVo.builder()
-                .id(settingService.createModel(request.toModelConfigSettings()))
+                .id(settingService.createModel(request.toEntity()))
                 .build();
     }
 
     @PostMapping("/models/update")
     public void updateModel(@Valid @RequestBody UpdateModelDto request) {
-        settingService.updateModel(request.toModelConfigSettings());
+        settingService.updateModel(request.toEntity());
     }
 
     @PostMapping("/models/delete")
@@ -87,17 +84,17 @@ public class SettingController {
     }
 
     @PostMapping("/routes/save")
-    public void saveRoute(@Valid @RequestBody SaveRouteDto request) {
-        settingService.saveRoute(request.getRoute(), request.getModelId());
+    public void saveModelRoute(@Valid @RequestBody SaveRouteDto request) {
+        settingService.saveModelRoute(request.getRoute(), request.getModelId());
     }
 
     @GetMapping("/behavior")
-    public BehaviorSettingsVo getBehavior() {
-        return BehaviorSettingsVo.toVo(settingService.getBehavior());
+    public BehaviorSettingsVo getBehaviorSettings() {
+        return BehaviorSettingsVo.toVo(settingService.getBehaviorSettings());
     }
 
     @PostMapping("/behavior/save")
-    public void saveBehavior(@RequestBody SaveBehaviorSettingsDto request) {
-        settingService.saveBehavior(request.toBehaviorSettings());
+    public void saveBehaviorSettings(@Valid @RequestBody SaveBehaviorSettingsDto request) {
+        settingService.saveBehaviorSettings(request.toEntity());
     }
 }

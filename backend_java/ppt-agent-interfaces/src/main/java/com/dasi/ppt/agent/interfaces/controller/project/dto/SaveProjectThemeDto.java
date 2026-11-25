@@ -17,7 +17,7 @@ public final class SaveProjectThemeDto {
     @NotBlank
     private String themeId;
 
-    public Project toProject() {
+    public Project toEntity() {
         return Project.builder()
                 .id(projectId)
                 .theme(themeId)

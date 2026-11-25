@@ -10,27 +10,31 @@ public interface IAssetRepository {
 
     List<Asset> listAssets(AssetType type, String query);
 
-    Asset findAsset(String assetId);
+    Asset findAssetById(String assetId);
 
-    boolean exists(String assetId, AssetType type);
+    AssetType findAssetTypeById(String assetId);
 
     List<Tag> listTags(AssetType type);
 
-    int countTags(AssetType type, List<String> tagIds);
+    int countTagsByTypeAndIds(AssetType type, List<String> tagIds);
 
-    boolean existTagName(AssetType type, String name);
+    boolean existsTagByTypeAndName(AssetType type, String name);
 
     void insertTag(Tag tag);
 
-    void deleteTag(String tagId);
+    boolean existsConflictingTagName(String tagId, String name);
 
-    boolean existName(AssetType type, String name, String excludeAssetId);
+    int updateTagName(String tagId, String name);
 
-    void insert(Asset asset);
+    int deleteTag(String tagId);
 
-    void update(Asset asset);
+    boolean existsAssetByTypeAndName(AssetType type, String name, String excludeAssetId);
 
-    boolean isUsed(String assetId);
+    void insertAsset(Asset asset);
 
-    void delete(String assetId);
+    void updateAsset(Asset asset);
+
+    boolean isUsedAsProjectTheme(String assetId);
+
+    int deleteAsset(String assetId);
 }

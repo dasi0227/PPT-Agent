@@ -6,7 +6,7 @@ import org.apache.ibatis.annotations.Param;
 
 public interface RouteSettingsMapper {
 
-    RouteSettingsPo read();
+    RouteSettingsPo getModelRoutes();
 
-    int updateRoute(@Param("route") ModelRoute route, @Param("modelId") String modelId);
+    int saveModelRoute(@Param("route") ModelRoute route, @Param("modelId") String modelId);
 }

@@ -7,24 +7,36 @@
         <result column="name" property="name"/>
     </resultMap>
 
-    <select id="list" resultMap="tagPo">
+    <select id="listTags" resultMap="tagPo">
         SELECT id, type, name FROM tags WHERE type = #{type} ORDER BY name, id
     </select>
 
-    <select id="countByIds" resultType="int">
+    <select id="countTagsByTypeAndIds" resultType="int">
         SELECT COUNT(*) FROM tags WHERE type = #{type} AND id IN
         <foreach collection="tagIds" item="id" open="(" separator="," close=")">#{id}</foreach>
     </select>
 
-    <select id="nameExists" resultType="boolean">
+    <select id="existsTagByTypeAndName" resultType="boolean">
         SELECT EXISTS (SELECT 1 FROM tags WHERE type = #{type} AND name = #{name})
     </select>
 
-    <insert id="insert">
+    <insert id="insertTag">
         INSERT INTO tags (id, type, name) VALUES (#{id}, #{type}, #{name})
     </insert>
 
-    <delete id="delete">
+    <select id="existsConflictingTagName" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1 FROM tags
+            WHERE type = (SELECT type FROM tags WHERE id = #{tagId})
+              AND name = #{name} AND id != #{tagId}
+        )
+    </select>
+
+    <update id="updateTagName">
+        UPDATE tags SET name = #{name} WHERE id = #{tagId}
+    </update>
+
+    <delete id="deleteTag">
         DELETE FROM tags WHERE id = #{tagId}
     </delete>
 </mapper>

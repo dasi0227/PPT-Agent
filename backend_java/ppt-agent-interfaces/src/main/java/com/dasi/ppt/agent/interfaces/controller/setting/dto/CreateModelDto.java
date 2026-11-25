@@ -30,7 +30,7 @@ public final class CreateModelDto {
     @NotBlank(message = "模型密钥不能为空白")
     private String key;
 
-    public ModelConfigSettings toModelConfigSettings() {
+    public ModelConfigSettings toEntity() {
         return ModelConfigSettings.builder()
                 .name(name)
                 .protocol(protocol)

@@ -8,6 +8,7 @@ import com.dasi.ppt.agent.domain.project.model.entity.Project;
 import com.dasi.ppt.agent.domain.project.repository.IProjectRepository;
 import com.dasi.ppt.agent.domain.setting.model.entity.FileOpenSettings;
 import com.dasi.ppt.agent.domain.setting.service.SettingService;
+import com.dasi.ppt.agent.domain.shared.exception.ErrorCode;
 import com.dasi.ppt.agent.domain.shared.sse.EventPublisher;
 import com.dasi.ppt.agent.domain.shared.sse.SseEvent;
 import com.dasi.ppt.agent.domain.shared.util.IdUtil;
@@ -21,9 +22,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-import static com.dasi.ppt.agent.domain.setting.model.entity.FileOpenSettings.INHERIT_OPEN;
-import static com.dasi.ppt.agent.domain.setting.model.entity.FileOpenSettings.SYSTEM_OPEN;
+import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.SYSTEM_OPEN;
+import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.INHERIT_OPEN;
 import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.invalid;
+import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.notFound;
 
 @Service
 @RequiredArgsConstructor
@@ -139,7 +141,10 @@ public class ProjectService {
     }
 
     private void validateTheme(String themeId) {
-        Asset theme = assetRepository.findAsset(themeId);
+        Asset theme = assetRepository.findAssetById(themeId);
+        if (theme == null) {
+            throw notFound(ErrorCode.ASSET_NOT_FOUND);
+        }
         if (theme.getType() != AssetType.THEME || !theme.getEnabled() || theme.getContent().isBlank()) {
             throw invalid("需选择已启用且正文有效的主题");
         }

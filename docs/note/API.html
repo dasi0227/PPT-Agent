@@ -480,6 +480,17 @@
               <td><code>id</code>：新标签 ID</td>
             </tr>
             <tr>
+              <th scope="row">更新标签名称</th>
+              <td><code>POST /api/assets/tags/update</code></td>
+              <td>
+                <ul class="fields">
+                  <li><code>tag_id</code>：必填，已有标签 ID</li>
+                  <li><code>name</code>：必填，不能为空白，同一类型内按原名称保持唯一</li>
+                </ul>
+              </td>
+              <td>无</td>
+            </tr>
+            <tr>
               <th scope="row">删除标签</th>
               <td><code>POST /api/assets/tags/delete</code></td>
               <td>
@@ -531,14 +542,13 @@
               <td>
                 <ul class="fields">
                   <li><code>asset_id</code>：已有资产的 ID</li>
-                  <li><code>type</code>：必填，与已有资产类型一致</li>
                   <li><code>name</code>：提交值不能为空白，最长 80，按原样保存，同一类型内按原名称保持唯一</li>
                   <li><code>description</code>：提交值不能为空白，最长 500，按原样保存</li>
                   <li><code>content</code>：替换后的完整正文</li>
                   <li><code>tag_ids</code>：同类标签 ID 数组，传 [] 清空</li>
                   <li><code>enabled</code>：布尔值，true 启用，false 停用</li>
                 </ul>
-                <p>至少提供一个非 null 的可修改字段。可修改字段省略或为 null 时保留原值。同值更新保留原 updated_at。</p>
+                <p>仅 asset_id 必填。可修改字段省略或为 null 时保留原值。每次成功更新均刷新 updated_at，包括仅提交 ID、可修改字段均为 null 或重复提交相同值。</p>
                 <p>停用项目正在使用的主题时返回 <code>ASSET_IN_USE</code>，提示“项目正在使用该主题，无法停用”。</p>
               </td>
               <td>无</td>

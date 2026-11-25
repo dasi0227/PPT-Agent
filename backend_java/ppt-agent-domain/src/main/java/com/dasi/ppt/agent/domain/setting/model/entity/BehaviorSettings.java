@@ -15,4 +15,9 @@ public final class BehaviorSettings {
     private Boolean showToolFailures;
     private Boolean requireResourceApproval;
     private Boolean requireHighRiskApproval;
+
+    public boolean hasNoChanges() {
+        return autoRenameEnabled == null && autoSuggestEnabled == null && showToolFailures == null
+                && requireResourceApproval == null && requireHighRiskApproval == null;
+    }
 }

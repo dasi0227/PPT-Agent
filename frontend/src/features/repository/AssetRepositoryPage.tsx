@@ -113,7 +113,7 @@ export function AssetRepositoryPage({ type, active = true }: { type: ResourceSco
     };
     if (id && !Object.keys(changes).length) return;
     let savedId = id;
-    if (savedId) await assetsApi.update(savedId, type, changes);
+    if (savedId) await assetsApi.update(savedId, changes);
     else savedId = (await assetsApi.create(type, draft)).id;
     await refreshSavedAsset(savedId);
     select(savedId);
@@ -123,7 +123,7 @@ export function AssetRepositoryPage({ type, active = true }: { type: ResourceSco
     if (busy) return;
     setBusy(true);
     try {
-      await assetsApi.update(item.id, item.type, { enabled: !item.enabled });
+      await assetsApi.update(item.id, { enabled: !item.enabled });
       await refreshSavedAsset(item.id);
     } catch (err) { showGlobalError(err instanceof Error ? err.message : '状态更新失败'); }
     finally { setBusy(false); }

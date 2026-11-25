@@ -1,10 +1,8 @@
 package com.dasi.ppt.agent.interfaces.controller.asset.dto;
 
 import com.dasi.ppt.agent.domain.asset.model.entity.Asset;
-import com.dasi.ppt.agent.domain.asset.model.enumeration.AssetType;
 import com.dasi.ppt.agent.interfaces.controller.NotBlankIfPresent;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -20,8 +18,6 @@ import java.util.List;
 public final class UpdateAssetDto {
     @NotBlank(message = "更新资产需指定 asset_id")
     private String assetId;
-    @NotNull(message = "更新资产需指定 type")
-    private AssetType type;
     @NotBlankIfPresent(message = "资产名称不能为空白")
     @Size(max = 80, message = "资产名称最多 80 个字符")
     private String name;
@@ -33,10 +29,9 @@ public final class UpdateAssetDto {
     private List<String> tagIds;
     private Boolean enabled;
 
-    public Asset toAsset() {
+    public Asset toEntity() {
         return Asset.builder()
                 .id(assetId)
-                .type(type)
                 .name(name)
                 .description(description)
                 .content(content)

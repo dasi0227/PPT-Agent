@@ -7,13 +7,17 @@ import java.util.List;
 
 public interface TagMapper {
 
-    List<TagPo> list(String type);
+    List<TagPo> listTags(String type);
 
-    int countByIds(@Param("type") String type, @Param("tagIds") List<String> tagIds);
+    int countTagsByTypeAndIds(@Param("type") String type, @Param("tagIds") List<String> tagIds);
 
-    boolean nameExists(@Param("type") String type, @Param("name") String name);
+    boolean existsTagByTypeAndName(@Param("type") String type, @Param("name") String name);
 
-    void insert(TagPo tag);
+    void insertTag(TagPo tag);
 
-    int delete(String tagId);
+    boolean existsConflictingTagName(@Param("tagId") String tagId, @Param("name") String name);
+
+    int updateTagName(@Param("tagId") String tagId, @Param("name") String name);
+
+    int deleteTag(String tagId);
 }

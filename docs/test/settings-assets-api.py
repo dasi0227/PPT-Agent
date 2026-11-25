@@ -29,7 +29,7 @@ for kind in ('theme', 'component', 'skill', 'snippet'):
         assert set(tag) == set(asset) == {'id'}
         assert 'content' not in rows[0]
         assert call('/assets/' + asset_id) == {**rows[0], 'content': 'original'}
-        assert call('/assets/update', {'asset_id': asset_id, 'type': kind, 'enabled': False,
+        assert call('/assets/update', {'asset_id': asset_id, 'enabled': False,
                                        'description': None, 'tag_ids': None}) is None
         updated = call('/assets/' + asset_id)
         assert updated['enabled'] is False and updated['tag_ids'] == [tag['id']]
@@ -38,7 +38,7 @@ for kind in ('theme', 'component', 'skill', 'snippet'):
         tag = None
         assert call('/assets?' + urlencode({'type': kind, 'query': name}))['items'][0]['tag_ids'] == []
         assert call('/assets/' + asset_id)['tag_ids'] == []
-        assert call('/assets/update', {'asset_id': asset_id, 'type': kind, 'content': 'edited'}) is None
+        assert call('/assets/update', {'asset_id': asset_id, 'content': 'edited'}) is None
         assert call('/assets/' + asset_id)['content'] == 'edited'
     finally:
         assert call('/assets/delete', {'asset_id': asset_id}) is None

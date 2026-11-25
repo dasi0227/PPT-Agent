@@ -18,7 +18,7 @@
         a.id, a.type, a.name, a.description, a.enabled, a.updated_at, link.tag_id
     </sql>
 
-    <select id="list" resultMap="assetPo" resultOrdered="true">
+    <select id="listAssets" resultMap="assetPo" resultOrdered="true">
         SELECT <include refid="summaryColumns"/>
         FROM assets a
         LEFT JOIN asset_tags link ON link.asset_id = a.id
@@ -36,7 +36,7 @@
         ORDER BY a.updated_at DESC, a.name, a.id, link.tag_id
     </select>
 
-    <select id="find" resultMap="assetPo">
+    <select id="findAssetById" resultMap="assetPo">
         SELECT <include refid="summaryColumns"/>, a.content
         FROM assets a
         LEFT JOIN asset_tags link ON link.asset_id = a.id
@@ -44,50 +44,44 @@
         ORDER BY link.tag_id
     </select>
 
-    <select id="exists" resultType="boolean">
-        SELECT EXISTS (SELECT 1 FROM assets WHERE id = #{id} AND type = #{type})
+    <select id="findAssetTypeById" resultType="string">
+        SELECT type FROM assets WHERE id = #{assetId}
     </select>
 
-    <select id="nameExists" resultType="boolean">
+    <select id="existsAssetByTypeAndName" resultType="boolean">
         SELECT EXISTS (
             SELECT 1 FROM assets WHERE type = #{type} AND name = #{name}
             <if test="excludeAssetId != null">
                 AND id != #{excludeAssetId}
-                AND EXISTS (SELECT 1 FROM assets WHERE id = #{excludeAssetId} AND type = #{type})
             </if>
         )
     </select>
 
-    <insert id="insert">
+    <insert id="insertAsset">
         INSERT INTO assets (id, type, name, description, content, enabled, updated_at)
         VALUES (#{id}, #{type}, #{name}, #{description}, #{content}, #{enabled}, #{updatedAt})
     </insert>
 
-    <update id="update">
+    <update id="updateAsset">
         UPDATE assets SET
             name = COALESCE(#{asset.name}, name),
             description = COALESCE(#{asset.description}, description),
             content = COALESCE(#{asset.content}, content),
             enabled = COALESCE(#{asset.enabled}, enabled),
-            updated_at = CASE WHEN #{tagsChanged}
-                OR name != #{asset.name}
-                OR description != #{asset.description}
-                OR content != #{asset.content}
-                OR enabled != #{asset.enabled}
-                THEN MAX(updated_at + 1, #{now}) ELSE updated_at END
-        WHERE id = #{asset.id} AND type = #{asset.type.value}
+            updated_at = MAX(updated_at + 1, #{now})
+        WHERE id = #{asset.id}
     </update>
 
-    <update id="updateTimestampsByTag">
+    <update id="updateAssetTimestampsByTagId">
         UPDATE assets SET updated_at = MAX(updated_at + 1, #{updatedAt})
         WHERE id IN (SELECT asset_id FROM asset_tags WHERE tag_id = #{tagId})
     </update>
 
-    <select id="isUsed" resultType="boolean">
+    <select id="isUsedAsProjectTheme" resultType="boolean">
         SELECT EXISTS (SELECT 1 FROM projects WHERE theme = #{id})
     </select>
 
-    <delete id="delete">
+    <delete id="deleteAsset">
         DELETE FROM assets WHERE id = #{id}
     </delete>
 </mapper>

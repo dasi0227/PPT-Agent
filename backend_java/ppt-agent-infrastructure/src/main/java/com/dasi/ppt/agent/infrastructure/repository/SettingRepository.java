@@ -2,14 +2,13 @@ package com.dasi.ppt.agent.infrastructure.repository;
 
 import com.dasi.ppt.agent.domain.setting.model.entity.BehaviorSettings;
 import com.dasi.ppt.agent.domain.setting.model.entity.FileOpenSettings;
+import com.dasi.ppt.agent.domain.setting.model.entity.ModelConfigSettings;
 import com.dasi.ppt.agent.domain.setting.model.entity.ModelRouteSettings;
 import com.dasi.ppt.agent.domain.setting.model.entity.ShortcutSettings;
-import com.dasi.ppt.agent.domain.setting.model.entity.ModelConfigSettings;
 import com.dasi.ppt.agent.domain.setting.model.enumeration.LlmProtocol;
 import com.dasi.ppt.agent.domain.setting.model.enumeration.ModelProvider;
 import com.dasi.ppt.agent.domain.setting.model.enumeration.ModelRoute;
 import com.dasi.ppt.agent.domain.setting.repository.ISettingRepository;
-import com.dasi.ppt.agent.domain.shared.exception.ErrorCode;
 import com.dasi.ppt.agent.domain.shared.exception.InvalidEnumValueException;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.BehaviorSettingsMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.FileOpenSettingsMapper;
@@ -28,9 +27,6 @@ import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
-import java.util.Objects;
-
-import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.notFound;
 
 @Repository
 @RequiredArgsConstructor
@@ -44,54 +40,138 @@ public class SettingRepository implements ISettingRepository {
     private final ObjectMapper objectMapper;
 
     @Override
-    public FileOpenSettings readFileOpenSettings() {
-        FileOpenSettingsPo row = Objects.requireNonNull(fileOpenSettingsMapper.read(), "缺少 settings_fileopen 初始化记录");
-        List<String> apps = objectMapper.readValue(row.getCustomApps(), new TypeReference<>() {});
-        return FileOpenSettings.builder()
-                .defaultOpen(row.getDefaultOpen())
-                .jsonOpen(row.getJsonOpen())
-                .htmlOpen(row.getHtmlOpen())
-                .customApps(apps)
-                .build();
+    public FileOpenSettings getFileOpenSettings() {
+        return toEntity(fileOpenSettingsMapper.getFileOpenSettings());
     }
 
     @Override
     public void saveFileOpenSettings(FileOpenSettings settings) {
-        fileOpenSettingsMapper.save(FileOpenSettingsPo.builder()
+        fileOpenSettingsMapper.saveFileOpenSettings(toPo(settings));
+    }
+
+    @Override
+    public ShortcutSettings getShortcutSettings() {
+        return toEntity(shortcutSettingsMapper.getShortcutSettings());
+    }
+
+    @Override
+    public void saveShortcutSettings(ShortcutSettings settings) {
+        shortcutSettingsMapper.saveShortcutSettings(toPo(settings));
+    }
+
+    @Override
+    public BehaviorSettings getBehaviorSettings() {
+        return toEntity(behaviorSettingsMapper.getBehaviorSettings());
+    }
+
+    @Override
+    public void saveBehaviorSettings(BehaviorSettings settings) {
+        int updated = behaviorSettingsMapper.saveBehaviorSettings(toPo(settings));
+        if (updated == 0) {
+            throw new DataRetrievalFailureException("缺少 settings_behavior 初始化记录");
+        }
+    }
+
+    @Override
+    public List<ModelConfigSettings> listModels() {
+        return llmConfigMapper.listModels()
+                .stream()
+                .map(SettingRepository::toEntity)
+                .toList();
+    }
+
+    @Override
+    public ModelConfigSettings findModelById(String id) {
+        return toEntity(llmConfigMapper.findModelById(id));
+    }
+
+    @Override
+    public ModelRouteSettings getModelRoutes() {
+        return toEntity(routeSettingsMapper.getModelRoutes());
+    }
+
+    @Override
+    public boolean existsConflictingModelName(String name, String modelId) {
+        return llmConfigMapper.existsConflictingModelName(name, modelId);
+    }
+
+    @Override
+    public boolean existsModelById(String id) {
+        return llmConfigMapper.existsModelById(id);
+    }
+
+    @Override
+    public boolean isLastModel(String id) {
+        return llmConfigMapper.isLastModel(id);
+    }
+
+    @Override
+    public void insertModel(ModelConfigSettings model) {
+        llmConfigMapper.insertModel(toPo(model));
+    }
+
+    @Override
+    public int updateModel(ModelConfigSettings model) {
+        return llmConfigMapper.updateModel(toPo(model));
+    }
+
+    @Override
+    public int deleteModel(String id) {
+        return llmConfigMapper.deleteModel(id);
+    }
+
+    @Override
+    public void saveModelRoute(ModelRoute route, String modelId) {
+        if (routeSettingsMapper.saveModelRoute(route, modelId) == 0) {
+            throw new DataRetrievalFailureException("缺少 settings_route 初始化记录");
+        }
+    }
+
+    private FileOpenSettings toEntity(FileOpenSettingsPo po) {
+        if (po == null) return null;
+        List<String> apps = objectMapper.readValue(po.getCustomApps(), new TypeReference<>() {});
+        return FileOpenSettings.builder()
+                .defaultOpen(po.getDefaultOpen())
+                .jsonOpen(po.getJsonOpen())
+                .htmlOpen(po.getHtmlOpen())
+                .customApps(apps)
+                .build();
+    }
+
+    private FileOpenSettingsPo toPo(FileOpenSettings settings) {
+        return FileOpenSettingsPo.builder()
                 .id(1)
                 .defaultOpen(settings.getDefaultOpen())
                 .jsonOpen(settings.getJsonOpen())
                 .htmlOpen(settings.getHtmlOpen())
                 .customApps(objectMapper.writeValueAsString(settings.getCustomApps()))
-                .build());
-    }
-
-    @Override
-    public ShortcutSettings readShortcuts() {
-        ShortcutSettingsPo row = Objects.requireNonNull(shortcutSettingsMapper.read(), "缺少 settings_shortcut 初始化记录");
-        return ShortcutSettings.builder()
-                .commandTrigger(row.getCommandTrigger())
-                .referenceTrigger(row.getReferenceTrigger())
-                .componentTrigger(row.getComponentTrigger())
-                .slideTrigger(row.getSlideTrigger())
-                .snippetTrigger(row.getSnippetTrigger())
-                .previousSlide(row.getPreviousSlide())
-                .nextSlide(row.getNextSlide())
-                .zoomIn(row.getZoomIn())
-                .zoomOut(row.getZoomOut())
-                .toggleOverview(row.getToggleOverview())
-                .exportDeck(row.getExportDeck())
-                .toggleView(row.getToggleView())
-                .toggleSource(row.getToggleSource())
-                .switchTheme(row.getSwitchTheme())
-                .submitRequest(row.getSubmitRequest())
-                .selectSuggestion(row.getSelectSuggestion())
                 .build();
     }
 
-    @Override
-    public void saveShortcuts(ShortcutSettings settings) {
-        shortcutSettingsMapper.save(ShortcutSettingsPo.builder()
+    private static ShortcutSettings toEntity(ShortcutSettingsPo po) {
+        if (po == null) return null;
+        return ShortcutSettings.builder()
+                .commandTrigger(po.getCommandTrigger())
+                .referenceTrigger(po.getReferenceTrigger())
+                .componentTrigger(po.getComponentTrigger())
+                .slideTrigger(po.getSlideTrigger())
+                .snippetTrigger(po.getSnippetTrigger())
+                .previousSlide(po.getPreviousSlide())
+                .nextSlide(po.getNextSlide())
+                .zoomIn(po.getZoomIn())
+                .zoomOut(po.getZoomOut())
+                .toggleOverview(po.getToggleOverview())
+                .exportDeck(po.getExportDeck())
+                .toggleView(po.getToggleView())
+                .toggleSource(po.getToggleSource())
+                .switchTheme(po.getSwitchTheme())
+                .submitRequest(po.getSubmitRequest())
+                .selectSuggestion(po.getSelectSuggestion())
+                .build();
+    }
+
+    private static ShortcutSettingsPo toPo(ShortcutSettings settings) {
+        return ShortcutSettingsPo.builder()
                 .id(1)
                 .commandTrigger(settings.getCommandTrigger())
                 .referenceTrigger(settings.getReferenceTrigger())
@@ -109,125 +189,64 @@ public class SettingRepository implements ISettingRepository {
                 .switchTheme(settings.getSwitchTheme())
                 .submitRequest(settings.getSubmitRequest())
                 .selectSuggestion(settings.getSelectSuggestion())
-                .build());
-    }
-
-    @Override
-    public BehaviorSettings readBehaviorSettings() {
-        BehaviorSettingsPo row = Objects.requireNonNull(behaviorSettingsMapper.read(), "缺少 settings_behavior 初始化记录");
-        return BehaviorSettings.builder()
-                .autoRenameEnabled(row.getAutoRenameEnabled())
-                .autoSuggestEnabled(row.getAutoSuggestEnabled())
-                .showToolFailures(row.getShowToolFailures())
-                .requireResourceApproval(row.getRequireResourceApproval())
-                .requireHighRiskApproval(row.getRequireHighRiskApproval())
                 .build();
     }
 
-    @Override
-    public void saveBehaviorSettings(BehaviorSettings settings) {
-        int updated = behaviorSettingsMapper.save(BehaviorSettingsPo.builder()
+    private static BehaviorSettings toEntity(BehaviorSettingsPo po) {
+        if (po == null) return null;
+        return BehaviorSettings.builder()
+                .autoRenameEnabled(po.getAutoRenameEnabled())
+                .autoSuggestEnabled(po.getAutoSuggestEnabled())
+                .showToolFailures(po.getShowToolFailures())
+                .requireResourceApproval(po.getRequireResourceApproval())
+                .requireHighRiskApproval(po.getRequireHighRiskApproval())
+                .build();
+    }
+
+    private static BehaviorSettingsPo toPo(BehaviorSettings settings) {
+        return BehaviorSettingsPo.builder()
                 .id(1)
                 .autoRenameEnabled(settings.getAutoRenameEnabled())
                 .autoSuggestEnabled(settings.getAutoSuggestEnabled())
                 .showToolFailures(settings.getShowToolFailures())
                 .requireResourceApproval(settings.getRequireResourceApproval())
                 .requireHighRiskApproval(settings.getRequireHighRiskApproval())
-                .build());
-        if (updated == 0) {
-            throw new DataRetrievalFailureException("缺少 settings_behavior 初始化记录");
-        }
-    }
-
-    @Override
-    public List<ModelConfigSettings> readModels() {
-        return llmConfigMapper.list()
-                .stream()
-                .map(this::toModelConfigSettings)
-                .toList();
-    }
-
-    @Override
-    public ModelConfigSettings readModel(String id) {
-        LlmConfigPo row = llmConfigMapper.find(id);
-        if (row == null) {
-            throw notFound(ErrorCode.MODEL_NOT_FOUND);
-        }
-        return toModelConfigSettings(row);
-    }
-
-    @Override
-    public ModelRouteSettings readRoutes() {
-        RouteSettingsPo row = Objects.requireNonNull(routeSettingsMapper.read(), "缺少 settings_route 初始化记录");
-        return ModelRouteSettings.builder()
-                .mainDefault(row.getMainDefault())
-                .mainFallback(row.getMainFallback())
-                .sideDefault(row.getSideDefault())
-                .sideFallback(row.getSideFallback())
-                .rename(row.getRename())
-                .compact(row.getCompact())
-                .commit(row.getCommit())
-                .polish(row.getPolish())
-                .handoff(row.getHandoff())
-                .suggest(row.getSuggest())
                 .build();
     }
 
-    @Override
-    public boolean modelNameExists(String name, String excludeId) {
-        return llmConfigMapper.nameExists(name, excludeId);
+    private static ModelRouteSettings toEntity(RouteSettingsPo po) {
+        if (po == null) return null;
+        return ModelRouteSettings.builder()
+                .mainDefault(po.getMainDefault())
+                .mainFallback(po.getMainFallback())
+                .sideDefault(po.getSideDefault())
+                .sideFallback(po.getSideFallback())
+                .rename(po.getRename())
+                .compact(po.getCompact())
+                .commit(po.getCommit())
+                .polish(po.getPolish())
+                .handoff(po.getHandoff())
+                .suggest(po.getSuggest())
+                .build();
     }
 
-    @Override
-    public boolean modelExists(String id) {
-        return llmConfigMapper.exists(id);
-    }
-
-    @Override
-    public int countModels() {
-        return llmConfigMapper.count();
-    }
-
-    @Override
-    public void insertModel(ModelConfigSettings model) {
-        llmConfigMapper.insert(toPo(model));
-    }
-
-    @Override
-    public void updateModel(ModelConfigSettings model) {
-        if (llmConfigMapper.update(toPo(model)) == 0) {
-            throw notFound(ErrorCode.MODEL_NOT_FOUND);
-        }
-    }
-
-    @Override
-    public void deleteModel(String id) {
-        llmConfigMapper.delete(id);
-    }
-
-    @Override
-    public void saveRoute(ModelRoute route, String modelId) {
-        if (routeSettingsMapper.updateRoute(route, modelId) == 0) {
-            throw new DataRetrievalFailureException("缺少 settings_route 初始化记录");
-        }
-    }
-
-    private ModelConfigSettings toModelConfigSettings(LlmConfigPo row) {
+    private static ModelConfigSettings toEntity(LlmConfigPo po) {
+        if (po == null) return null;
         try {
             return ModelConfigSettings.builder()
-                    .id(row.getId())
-                    .name(row.getName())
-                    .protocol(LlmProtocol.fromValue(row.getProtocol()))
-                    .provider(ModelProvider.fromValue(row.getProvider()))
-                    .baseUrl(row.getBaseUrl())
-                    .model(row.getModel())
+                    .id(po.getId())
+                    .name(po.getName())
+                    .protocol(LlmProtocol.fromValue(po.getProtocol()))
+                    .provider(ModelProvider.fromValue(po.getProvider()))
+                    .baseUrl(po.getBaseUrl())
+                    .model(po.getModel())
                     .build();
         } catch (InvalidEnumValueException ex) {
             throw new DataRetrievalFailureException("settings_models 包含无效的枚举值", ex);
         }
     }
 
-    private LlmConfigPo toPo(ModelConfigSettings model) {
+    private static LlmConfigPo toPo(ModelConfigSettings model) {
         return LlmConfigPo.builder()
                 .id(model.getId())
                 .name(model.getName())

@@ -1,7 +1,8 @@
 package com.dasi.ppt.agent.interfaces.controller.setting.dto;
 
 import com.dasi.ppt.agent.domain.setting.model.entity.ShortcutSettings;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -12,40 +13,62 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public final class SaveShortcutSettingsDto {
-    @NotBlank(message = "command_trigger 不能为空白")
+    private static final String TRIGGER = "[/~!@#$%^&*>\\\\+]";
+    private static final String MODIFIER = "(?:Primary|Option|Alt)";
+    private static final String MODIFIER_KEY = "(?:Primary|Option|Alt(?:Left|Right|Graph)?|Shift(?:Left|Right)?|"
+            + "Ctrl|Control(?:Left|Right)?|Command|Meta(?:Left|Right)?|OSLeft|OSRight|Fn)";
+    private static final String SHORTCUT = "(?U)" + MODIFIER + "\\+(?!" + MODIFIER_KEY + "$)[^+\\s]+";
+
+    @NotNull(message = "command_trigger 不能为空")
+    @Pattern(regexp = TRIGGER, message = "command_trigger 格式无效")
     private String commandTrigger;
-    @NotBlank(message = "reference_trigger 不能为空白")
+    @NotNull(message = "reference_trigger 不能为空")
+    @Pattern(regexp = TRIGGER, message = "reference_trigger 格式无效")
     private String referenceTrigger;
-    @NotBlank(message = "component_trigger 不能为空白")
+    @NotNull(message = "component_trigger 不能为空")
+    @Pattern(regexp = TRIGGER, message = "component_trigger 格式无效")
     private String componentTrigger;
-    @NotBlank(message = "slide_trigger 不能为空白")
+    @NotNull(message = "slide_trigger 不能为空")
+    @Pattern(regexp = TRIGGER, message = "slide_trigger 格式无效")
     private String slideTrigger;
-    @NotBlank(message = "snippet_trigger 不能为空白")
+    @NotNull(message = "snippet_trigger 不能为空")
+    @Pattern(regexp = TRIGGER, message = "snippet_trigger 格式无效")
     private String snippetTrigger;
-    @NotBlank(message = "previous_slide 不能为空白")
+    @NotNull(message = "previous_slide 不能为空")
+    @Pattern(regexp = SHORTCUT, message = "previous_slide 格式无效")
     private String previousSlide;
-    @NotBlank(message = "next_slide 不能为空白")
+    @NotNull(message = "next_slide 不能为空")
+    @Pattern(regexp = SHORTCUT, message = "next_slide 格式无效")
     private String nextSlide;
-    @NotBlank(message = "zoom_in 不能为空白")
+    @NotNull(message = "zoom_in 不能为空")
+    @Pattern(regexp = SHORTCUT, message = "zoom_in 格式无效")
     private String zoomIn;
-    @NotBlank(message = "zoom_out 不能为空白")
+    @NotNull(message = "zoom_out 不能为空")
+    @Pattern(regexp = SHORTCUT, message = "zoom_out 格式无效")
     private String zoomOut;
-    @NotBlank(message = "toggle_overview 不能为空白")
+    @NotNull(message = "toggle_overview 不能为空")
+    @Pattern(regexp = SHORTCUT, message = "toggle_overview 格式无效")
     private String toggleOverview;
-    @NotBlank(message = "export_deck 不能为空白")
+    @NotNull(message = "export_deck 不能为空")
+    @Pattern(regexp = SHORTCUT, message = "export_deck 格式无效")
     private String exportDeck;
-    @NotBlank(message = "toggle_view 不能为空白")
+    @NotNull(message = "toggle_view 不能为空")
+    @Pattern(regexp = SHORTCUT, message = "toggle_view 格式无效")
     private String toggleView;
-    @NotBlank(message = "toggle_source 不能为空白")
+    @NotNull(message = "toggle_source 不能为空")
+    @Pattern(regexp = SHORTCUT, message = "toggle_source 格式无效")
     private String toggleSource;
-    @NotBlank(message = "switch_theme 不能为空白")
+    @NotNull(message = "switch_theme 不能为空")
+    @Pattern(regexp = SHORTCUT, message = "switch_theme 格式无效")
     private String switchTheme;
-    @NotBlank(message = "submit_request 不能为空白")
+    @NotNull(message = "submit_request 不能为空")
+    @Pattern(regexp = SHORTCUT, message = "submit_request 格式无效")
     private String submitRequest;
-    @NotBlank(message = "select_suggestion 不能为空白")
+    @NotNull(message = "select_suggestion 不能为空")
+    @Pattern(regexp = MODIFIER, message = "select_suggestion 格式无效")
     private String selectSuggestion;
 
-    public ShortcutSettings toShortcutSettings() {
+    public ShortcutSettings toEntity() {
         return ShortcutSettings.builder()
                 .commandTrigger(commandTrigger)
                 .referenceTrigger(referenceTrigger)

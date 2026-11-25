@@ -30,7 +30,7 @@ public final class CreateAssetDto {
     private String content;
     private List<String> tagIds;
 
-    public Asset toAsset() {
+    public Asset toEntity() {
         return Asset.builder()
                 .type(type)
                 .name(name)

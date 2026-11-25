@@ -30,7 +30,7 @@ public final class UpdateModelDto {
     @NotBlankIfPresent(message = "模型密钥不能为空白")
     private String key;
 
-    public ModelConfigSettings toModelConfigSettings() {
+    public ModelConfigSettings toEntity() {
         return ModelConfigSettings.builder()
                 .id(id)
                 .name(name)

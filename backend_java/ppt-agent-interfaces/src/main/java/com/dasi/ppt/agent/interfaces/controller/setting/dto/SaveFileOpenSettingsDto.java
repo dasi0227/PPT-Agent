@@ -24,7 +24,7 @@ public final class SaveFileOpenSettingsDto {
     @NotNull(message = "需提供 custom_apps")
     private List<@NotBlank(message = "custom_apps 中的应用路径不能为空白") String> customApps;
 
-    public FileOpenSettings toFileOpenSettings() {
+    public FileOpenSettings toEntity() {
         return FileOpenSettings.builder()
                 .defaultOpen(defaultOpen)
                 .jsonOpen(jsonOpen)

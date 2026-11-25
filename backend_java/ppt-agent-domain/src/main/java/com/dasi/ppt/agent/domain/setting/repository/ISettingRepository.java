@@ -2,44 +2,44 @@ package com.dasi.ppt.agent.domain.setting.repository;
 
 import com.dasi.ppt.agent.domain.setting.model.entity.BehaviorSettings;
 import com.dasi.ppt.agent.domain.setting.model.entity.FileOpenSettings;
+import com.dasi.ppt.agent.domain.setting.model.entity.ModelConfigSettings;
 import com.dasi.ppt.agent.domain.setting.model.entity.ModelRouteSettings;
 import com.dasi.ppt.agent.domain.setting.model.entity.ShortcutSettings;
-import com.dasi.ppt.agent.domain.setting.model.entity.ModelConfigSettings;
 import com.dasi.ppt.agent.domain.setting.model.enumeration.ModelRoute;
 
 import java.util.List;
 
 public interface ISettingRepository {
 
-    FileOpenSettings readFileOpenSettings();
+    FileOpenSettings getFileOpenSettings();
 
     void saveFileOpenSettings(FileOpenSettings settings);
 
-    ShortcutSettings readShortcuts();
+    ShortcutSettings getShortcutSettings();
 
-    void saveShortcuts(ShortcutSettings settings);
+    void saveShortcutSettings(ShortcutSettings settings);
 
-    BehaviorSettings readBehaviorSettings();
+    BehaviorSettings getBehaviorSettings();
 
     void saveBehaviorSettings(BehaviorSettings settings);
 
-    List<ModelConfigSettings> readModels();
+    List<ModelConfigSettings> listModels();
 
-    ModelConfigSettings readModel(String id);
+    ModelConfigSettings findModelById(String id);
 
-    ModelRouteSettings readRoutes();
+    ModelRouteSettings getModelRoutes();
 
-    boolean modelNameExists(String name, String excludeId);
+    boolean existsConflictingModelName(String name, String modelId);
 
-    boolean modelExists(String id);
+    boolean existsModelById(String id);
 
-    int countModels();
+    boolean isLastModel(String id);
 
     void insertModel(ModelConfigSettings model);
 
-    void updateModel(ModelConfigSettings model);
+    int updateModel(ModelConfigSettings model);
 
-    void deleteModel(String id);
+    int deleteModel(String id);
 
-    void saveRoute(ModelRoute route, String modelId);
+    void saveModelRoute(ModelRoute route, String modelId);
 }

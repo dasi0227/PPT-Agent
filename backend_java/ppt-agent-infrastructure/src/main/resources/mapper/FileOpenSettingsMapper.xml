@@ -9,11 +9,11 @@
         <result column="custom_apps" property="customApps"/>
     </resultMap>
 
-    <select id="read" resultMap="fileOpenSettingsPo">
+    <select id="getFileOpenSettings" resultMap="fileOpenSettingsPo">
         SELECT * FROM settings_fileopen WHERE id = 1
     </select>
 
-    <insert id="save">
+    <insert id="saveFileOpenSettings">
         INSERT INTO settings_fileopen (
             id, default_open, json_open, html_open, custom_apps
         ) VALUES (

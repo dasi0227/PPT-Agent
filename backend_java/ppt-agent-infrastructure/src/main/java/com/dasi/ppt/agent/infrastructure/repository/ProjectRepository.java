@@ -55,11 +55,11 @@ public class ProjectRepository implements IProjectRepository {
     public List<Project> listProjects() {
         return projectMapper.list()
                 .stream()
-                .map(this::toProject)
+                .map(this::toEntity)
                 .toList();
     }
 
-    private Project toProject(ProjectPo row) {
+    private Project toEntity(ProjectPo row) {
         return Project.builder()
                 .id(row.getId())
                 .title(row.getTitle())
@@ -98,7 +98,7 @@ public class ProjectRepository implements IProjectRepository {
                 .updatedAt(System.currentTimeMillis())
                 .build());
         fileStorer.createProjectDirectory(pathResolver.projectDirectory(row.getId()));
-        return toProject(row);
+        return toEntity(row);
     }
 
     @Override
@@ -112,7 +112,7 @@ public class ProjectRepository implements IProjectRepository {
         if (row == null) {
             throw notFound(ErrorCode.PROJECT_NOT_FOUND);
         }
-        return toProject(row);
+        return toEntity(row);
     }
 
     @Override

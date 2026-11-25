@@ -17,7 +17,7 @@ public final class SaveBehaviorSettingsDto {
     private Boolean requireResourceApproval;
     private Boolean requireHighRiskApproval;
 
-    public BehaviorSettings toBehaviorSettings() {
+    public BehaviorSettings toEntity() {
         return BehaviorSettings.builder()
                 .autoRenameEnabled(autoRenameEnabled)
                 .autoSuggestEnabled(autoSuggestEnabled)

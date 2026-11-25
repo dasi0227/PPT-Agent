@@ -25,7 +25,7 @@ public final class SaveProjectPositionsDto {
     @NotNull
     private DecorationPosition logoPosition;
 
-    public Project toProject() {
+    public Project toEntity() {
         return Project.builder()
                 .id(projectId)
                 .slidePaginationPosition(slidePaginationPosition)

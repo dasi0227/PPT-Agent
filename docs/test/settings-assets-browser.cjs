@@ -167,7 +167,8 @@ async function assets(page) {
       assert.equal(updated.body, '');
       content = source + suffix;
       assert.equal(updated.sent.content, content);
-      assert.equal(updated.sent.type, type);
+      assert.equal(updated.sent.asset_id, id);
+      assert.ok(!('type' in updated.sent));
       if (suffix === '2') assert.deepEqual(updated.sent.tag_ids, []);
     }
     await page.reload({ waitUntil: 'domcontentloaded' });
@@ -178,7 +179,7 @@ async function assets(page) {
     await page.getByRole('heading', { name, exact: true }).waitFor();
     for (const enabled of [false, true]) {
       const toggle = await action(page, '/assets/update', () => page.getByRole('switch', { name: '切换' + title + '状态' }).click());
-      assert.deepEqual(toggle.sent, { asset_id: id, type, enabled });
+      assert.deepEqual(toggle.sent, { asset_id: id, enabled });
       await page.getByText(enabled ? '已启用' : '已关闭', { exact: true }).waitFor();
     }
     await button(page, '管理标签').click();

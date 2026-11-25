@@ -50,15 +50,16 @@
 - `query` 匹配名称、描述或标签名，短语还匹配正文。
 - 搜索沿用列表顺序，依次按 `updated_at` 降序、`name` 升序、`id` 升序。
 - `POST /api/assets/create` 需提供 `type`、`name`、`description` 和 `content`。新资产默认启用，`tag_ids` 省略或为 `null` 时使用空列表。
-- `POST /api/assets/update` 需提供已有资产的 `asset_id`、`type` 和至少一个非 `null` 的可修改字段。省略或为 `null` 的可修改字段保留原值，`tag_ids=[]` 清空标签，`enabled=true` 启用资产，`enabled=false` 停用资产。
+- `POST /api/assets/update` 只要求提供已有资产的 `asset_id`。省略或为 `null` 的可修改字段保留原值，`tag_ids=[]` 清空标签，`enabled=true` 启用资产，`enabled=false` 停用资产。
 - 创建成功返回 `{"id":"…"}`，更新成功返回空响应体。`GET /api/assets/{asset_id}` 返回资产列表项的全部字段及 `content`，资产不存在时返回 `ASSET_NOT_FOUND`。前端保存后按 ID 读取详情，刷新对应列表项和预览。
-- 资产类型创建后固定。更新时按 ID 和类型定位资产，未匹配返回 `ASSET_NOT_FOUND`。
+- 资产类型创建后固定。更新时按 ID 定位资产，不存在返回 `ASSET_NOT_FOUND`。同类重名、标签类型和主题停用校验均使用库中类型。
 - 正文为非空 UTF-8 原文。主题 CSS 上限为 64 KiB，短语上限为 16 KiB。
 - 创建标签需提交 `type` 和 `name`。名称需为非空白字符串，按原样保存和显示。同一类型内按原名称精确比较，重名返回 `INVALID_ARGUMENT`，不同类型允许同名。成功返回 `{"id":"…"}`，前端刷新同类标签列表。
+- `POST /api/assets/tags/update` 按 `tag_id` 更新标签名称。`tag_id` 和 `name` 必须为非空白字符串，名称按原样保存。标签不存在返回 `TAG_NOT_FOUND`，同类型下与其他标签重名返回 `INVALID_ARGUMENT`。成功返回 HTTP 200 和空响应体，提交原名同样成功。改名保留标签关联和资产的 `updated_at`。
 - 删除标签需提交非空白的 `tag_id`。成功返回 HTTP 200 和空响应体。标签与其在所有资产上的关联在同一事务内删除，并更新受影响资产的 `updated_at`。资产正文和其他标签保留。ID 缺失或为空白时返回 `INVALID_ARGUMENT`，标签不存在时返回 `TAG_NOT_FOUND`。
 - 标签必须存在、同类且不重复。
 - 四类资产的名称均须在同一类型内唯一，不同类型允许同名。按原名称精确比较，更新时排除当前资产。
-- `updated_at` 只随资产实际变化。
+- 每次成功更新资产均刷新 `updated_at`，包括仅提交 ID、可修改字段均为 `null` 或重复提交相同值。
 - 已被项目引用的主题禁止停用，也禁止删除。两种操作均返回 `ASSET_IN_USE`，分别提示“项目正在使用该主题，无法停用”和“项目正在使用该主题，无法删除”。
 - 修改主题正文会改变引用项目的外观和缩略图。
 - 编辑全局主题正文保留引用项目的检查点。
