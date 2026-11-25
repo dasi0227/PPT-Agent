@@ -243,13 +243,7 @@
                 </ul>
                 <p>新项目默认无主题。</p>
               </td>
-              <td>
-                <ul class="fields">
-                  <li><code>id</code>：新建项目的 ID</li>
-                  <li><code>title</code>：已保存的项目名称</li>
-                  <li><code>updated_at</code>：更新时间，毫秒时间戳</li>
-                </ul>
-              </td>
+              <td><code>id</code>：新项目 ID</td>
             </tr>
             <tr id="projects-update">
               <th scope="row">更新项目</th>
@@ -260,13 +254,7 @@
                   <li><code>title</code>：非空白项目名称，提交值最多 60 个 UTF-16 代码单元，按原样保存</li>
                 </ul>
               </td>
-              <td>
-                <ul class="fields">
-                  <li><code>id</code>：已更新项目的 ID</li>
-                  <li><code>title</code>：已保存的项目名称</li>
-                  <li><code>updated_at</code>：更新时间，毫秒时间戳</li>
-                </ul>
-              </td>
+              <td>无</td>
             </tr>
             <tr>
               <th scope="row">保存标志图</th>
@@ -446,6 +434,7 @@
                   <li><code>items[].type</code>：theme / component / skill / snippet</li>
                   <li><code>items[].name</code>：显示名</li>
                   <li><code>items[].description</code>：描述</li>
+                  <li><code>items[].content</code>：null，正文从资产详情读取</li>
                   <li><code>items[].enabled</code>：布尔值，是否启用</li>
                   <li><code>items[].tag_ids</code>：同类标签 ID 数组</li>
                   <li><code>items[].updated_at</code>：最后修改时间，毫秒时间戳</li>
@@ -1033,11 +1022,7 @@
                   <li><code>expected_revision</code>：十进制字符串。可返回最新且标题实际改变时需提供，取检查点列表的 revision</li>
                 </ul>
               </td>
-              <td>
-                <ul class="fields">
-                  <li><code>id</code>：已更新会话的 ID</li>
-                </ul>
-              </td>
+              <td>无</td>
             </tr>
             <tr>
               <th scope="row">删除会话</th>

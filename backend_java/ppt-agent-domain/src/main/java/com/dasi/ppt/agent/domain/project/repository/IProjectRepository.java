@@ -10,24 +10,27 @@ public interface IProjectRepository {
 
     List<Project> listProjects();
 
-    void requireWritable(String projectId);
+    void insertProject(Project project);
 
-    Project findAppearance(String projectId);
+    int updateProjectTitle(String projectId, String title, long updatedAt);
 
-    byte[] findLogo(String projectId);
+    List<String> listProjectSessionIds(String projectId);
 
-    Project create(Project project);
+    int deleteProject(String projectId);
 
-    Project update(Project project);
+    void requireWritableProjectFiles(String projectId);
 
-    List<String> delete(String projectId);
+    boolean existsProject(String projectId);
 
-    boolean updateTheme(String projectId, String themeId);
+    Project findProjectAppearance(String projectId);
 
-    boolean updatePositions(Project project);
+    int updateProjectTheme(String projectId, String themeId, long updatedAt);
 
-    boolean updateLogo(String projectId, byte[] logo);
+    int updateProjectPositions(Project project);
+
+    byte[] findProjectLogo(String projectId);
+
+    int updateProjectLogo(String projectId, byte[] logo, long updatedAt);
 
     Map<String, SseEvent.Changed> invalidateCheckpoints(String projectId);
-
 }

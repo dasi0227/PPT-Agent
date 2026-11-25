@@ -28,9 +28,9 @@ export function RepositoryEditDialog({ title, value, tags, onClose, onSave }: {
   };
 
   const valid = draft.name.trim().length > 0
-    && draft.name.trim().length <= 80
+    && draft.name.length <= 80
     && draft.description.trim().length > 0
-    && draft.description.trim().length <= 500
+    && draft.description.length <= 500
     && draft.content.length > 0;
 
   const toggleTag = (tag: string) => {

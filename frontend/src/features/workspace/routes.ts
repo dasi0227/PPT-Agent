@@ -1,5 +1,16 @@
 export const homeRoute = '/';
 export type RepositorySection = 'theme' | 'component' | 'skill' | 'snippet';
+export const settingsSections = ['models', 'routing', 'agent', 'files', 'shortcuts'] as const;
+export type SettingsSection = typeof settingsSections[number];
+
+export function settingsRoute(section: SettingsSection): string {
+  return `/settings/${section}`;
+}
+
+export function getSettingsSection(pathname: string): SettingsSection | undefined {
+  const path = pathname.replace(/\/+$/, '').toLowerCase();
+  return path === '/settings' ? 'models' : settingsSections.find(section => settingsRoute(section) === path);
+}
 
 export function repositoryRoute(section: RepositorySection): string {
   return `/assets/${section}`;

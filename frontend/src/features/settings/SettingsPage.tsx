@@ -2,7 +2,7 @@ import { FileSettingsPanel } from './FileSettingsPanel';
 import { AgentSettingsPanel } from './AgentSettingsPanel';
 import { ShortcutSettingsPanel } from './ShortcutSettingsPanel';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useBlocker } from 'react-router-dom';
+import { Link, useBlocker, useLocation } from 'react-router-dom';
 import { Bot, Cpu, Eye, EyeOff, Files, Keyboard, Loader2, Plus, Route, Trash2 } from 'lucide-react';
 import { settingsApi, providers, type Route as ModelRoute, SIDE_PURPOSES, type SidePurpose, type ModelProtocol } from '../../api/settings';
 import { ModelProviderIcon } from '../../components/ui/ModelProviderIcon';
@@ -14,6 +14,7 @@ import { Select } from '../../components/ui/select';
 import { useComposerStore } from '../../stores/composerStore';
 import { showGlobalError, showGlobalSuccess, showGlobalWarning } from '../../stores/toastStore';
 import { cn } from '../../lib/utils';
+import { getSettingsSection, settingsRoute, type SettingsSection } from '../workspace/routes';
 import { savedModel, modelChanged, validation, type Draft, type DraftModel, type Editable } from './modelSettingsDraft';
 import './settings.css';
 
@@ -64,7 +65,7 @@ function ModelCard({ row, edit, open, protocols, busy, saving, changed, error, o
             <label><span>厂商</span><Select aria-label="厂商" ownerId={row.id} value={edit.provider} placeholder="请选择厂商"
               options={providers.map(value => ({ value, label: value }))} onValueChange={value => update('provider', value)}
               disabled={busy} className="text-xs" /></label>
-            <label><span>地址</span><input aria-label="API 基础地址" type="url" value={edit.base_url}
+            <label><span>地址</span><input aria-label="API 基础地址" inputMode="url" value={edit.base_url}
               onChange={(event) => update('base_url', event.target.value)}
               spellCheck={false} autoCapitalize="off" placeholder="https://gateway.example.com/v1" /></label>
             <label><span>协议</span><Select
@@ -97,17 +98,16 @@ function ModelCard({ row, edit, open, protocols, busy, saving, changed, error, o
 }
 
 export function SettingsPage() {
-  const [section, setSection] = useState<'models' | 'routing' | 'agent' | 'shortcuts' | 'files'>('models');
+  const { pathname, state: navigationState } = useLocation();
+  const section = getSettingsSection(pathname) ?? 'models';
+  const [visited, setVisited] = useState(() => new Set<SettingsSection>([section]));
   const [agentSaving, setAgentSaving] = useState(false);
   const [agentRefresh, setAgentRefresh] = useState(0);
-  const [agentVisited, setAgentVisited] = useState(false);
   const [fileSaving, setFileSaving] = useState(false);
   const [fileRefresh, setFileRefresh] = useState(0);
-  const [filesVisited, setFilesVisited] = useState(false);
   const [shortcutDirty, setShortcutDirty] = useState(false);
   const [shortcutSaving, setShortcutSaving] = useState(false);
   const [shortcutRefresh, setShortcutRefresh] = useState(0);
-  const [shortcutsVisited, setShortcutsVisited] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [edits, setEdits] = useState<Record<string, Editable>>({});
   const [openCard, setOpenCard] = useState<string | null>(null);
@@ -123,10 +123,16 @@ export function SettingsPage() {
   const leaving = useRef(false);
   const dirty = shortcutDirty || !!draft?.models.some((row) => modelChanged(row, edits[row.id]));
   const settingsSaving = saving || shortcutSaving || fileSaving || agentSaving;
-  const blocker = useBlocker(({ currentLocation, nextLocation }) => (dirty || settingsSaving) && currentLocation.pathname !== nextLocation.pathname);
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => currentLocation.pathname !== nextLocation.pathname
+    && (settingsSaving || (dirty && !getSettingsSection(nextLocation.pathname))));
+  const confirmLeaving = blocker.state === 'blocked' && dirty && !getSettingsSection(blocker.location.pathname);
   useEffect(() => {
-    if (blocker.state === 'blocked' && !dirty && !settingsSaving) blocker.proceed();
-  }, [blocker, dirty, settingsSaving]);
+    if (blocker.state === 'blocked' && !settingsSaving && !confirmLeaving) blocker.proceed();
+  }, [blocker, confirmLeaving, settingsSaving]);
+  useEffect(() => {
+    setVisited(current => current.has(section) ? current : new Set(current).add(section));
+    setOpenCard(null);
+  }, [section]);
   const load = useCallback(async () => {
     setLoading(true); setError('');
     try {
@@ -196,22 +202,29 @@ export function SettingsPage() {
     const edit = edits[row.id] ?? row;
     const message = validation({ ...row, ...edit }, draft.models);
     if (message || !edit.provider) { setCardErrors(current => ({ ...current, [row.id]: message })); return; }
-    const input = { name: edit.name, protocol: edit.protocol, provider: edit.provider, base_url: edit.base_url, model: edit.model };
+    const input = {
+      name: edit.name,
+      protocol: edit.protocol,
+      provider: edit.provider,
+      base_url: row.saved && edit.base_url === row.base_url ? row.base_url : edit.base_url.replace(/([^/])\/+$/u, '$1'),
+      model: edit.model,
+    };
     await persist(async () => {
       let id = row.id;
       if (row.saved) {
         const changes = Object.fromEntries(Object.entries(input).filter(([field, value]) => row[field as keyof Editable] !== value));
-        await settingsApi.update({ id, ...changes, ...(edit.key.trim() ? { key: edit.key } : {}) });
+        await settingsApi.update({ id, ...changes, ...(edit.key.trim() && { key: edit.key }) });
       } else {
         id = (await settingsApi.create({ ...input, key: edit.key })).id;
       }
-      const replaceCard = (model: DraftModel) => ({ ...draft, models: draft.models.map(item => item.id === row.id ? model : item) });
       try {
-        return replaceCard(savedModel(await settingsApi.detail(id)));
-      } catch (cause) {
-        setDraft(replaceCard(savedModel({ ...input, id })));
+        const saved = savedModel(await settingsApi.detail(id));
+        return { ...draft, models: draft.models.map(item => item.id === row.id ? saved : item) };
+      } catch {
+        if (!row.saved) setDraft({ ...draft, models: draft.models.filter(item => item.id !== row.id) });
         setEdits(current => { const rest = { ...current }; delete rest[row.id]; return rest; });
-        throw new Error('模型已保存，读取详情失败。' + (cause instanceof Error ? cause.message : ''));
+        setOpenCard(null);
+        throw new Error('模型已保存，读取详情失败，请刷新设置。');
       }
     }, '模型已保存，新任务将使用新配置。', row.id);
   }
@@ -296,8 +309,12 @@ export function SettingsPage() {
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-border bg-panel p-3 md:w-52 md:flex-col md:border-b-0 md:border-r" aria-label="设置栏目">
           {([['models', '模型配置', Cpu], ['routing', '模型分配', Route], ['agent', '智能体', Bot], ['files', '文件打开', Files], ['shortcuts', '快捷键', Keyboard]] as const).map(([id, label, Icon]) => (
-            <button key={id} type="button" disabled={settingsSaving} aria-current={section === id ? 'page' : undefined} onClick={() => { setSection(id); if (id === 'shortcuts') setShortcutsVisited(true); if (id === 'files') setFilesVisited(true); if (id === 'agent') setAgentVisited(true); setOpenCard(null); }}
-              className={cn('flex h-10 shrink-0 flex-1 items-center gap-2.5 whitespace-nowrap rounded-lg px-3 text-sm disabled:cursor-not-allowed disabled:opacity-45 md:flex-none', section === id ? 'ui-selected font-semibold' : 'text-text-600 ui-interactive')}><Icon size={17} />{label}</button>
+            <Link key={id} to={settingsRoute(id)} state={navigationState} aria-current={section === id ? 'page' : undefined}
+              aria-disabled={settingsSaving || undefined} tabIndex={settingsSaving ? -1 : undefined}
+              onClick={settingsSaving ? event => event.preventDefault() : undefined}
+              className={cn('flex h-10 shrink-0 flex-1 items-center gap-2.5 whitespace-nowrap rounded-lg px-3 text-sm md:flex-none',
+                section === id ? 'ui-selected font-semibold' : 'text-text-600 ui-interactive',
+                settingsSaving && 'cursor-not-allowed opacity-45')}><Icon size={17} />{label}</Link>
           ))}
         </nav>
         <section className="min-h-0 min-w-0 flex-1 overflow-y-auto">
@@ -306,9 +323,9 @@ export function SettingsPage() {
               <h1>{section === 'models' ? '模型配置' : '模型分配'}</h1>
               {section === 'models' && <Button type="button" variant="secondary" icon={Plus} className="shrink-0" disabled={loading || !draft || saving} onClick={addModel}>添加模型</Button>}
             </div>}
-            <div hidden={section !== 'shortcuts'}>{shortcutsVisited && <ShortcutSettingsPanel refreshKey={shortcutRefresh} onDirtyChange={setShortcutDirty} onSavingChange={setShortcutSaving} />}</div>
-            <div hidden={section !== 'files'}>{filesVisited && <FileSettingsPanel refreshKey={fileRefresh} onSavingChange={setFileSaving} />}</div>
-            <div hidden={section !== 'agent'}>{agentVisited && <AgentSettingsPanel refreshKey={agentRefresh} onSavingChange={setAgentSaving} />}</div>
+            <div hidden={section !== 'shortcuts'}>{(section === 'shortcuts' || visited.has('shortcuts')) && <ShortcutSettingsPanel refreshKey={shortcutRefresh} onDirtyChange={setShortcutDirty} onSavingChange={setShortcutSaving} />}</div>
+            <div hidden={section !== 'files'}>{(section === 'files' || visited.has('files')) && <FileSettingsPanel refreshKey={fileRefresh} onSavingChange={setFileSaving} />}</div>
+            <div hidden={section !== 'agent'}>{(section === 'agent' || visited.has('agent')) && <AgentSettingsPanel refreshKey={agentRefresh} onSavingChange={setAgentSaving} />}</div>
             <div hidden={section !== 'models' && section !== 'routing'}>
             {error && <div className="mb-5 rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger" role="alert">{error}</div>}
             {loading ? <div className="flex items-center gap-2 py-16 text-sm text-text-600"><Loader2 size={17} className="animate-spin" />正在读取设置…</div> : draft && (
@@ -334,7 +351,7 @@ export function SettingsPage() {
           </div>
         </section>
       </div>
-      <ConfirmModal open={blocker.state === 'blocked' && !settingsSaving} onOpenChange={(open) => { if (!open && !leaving.current && blocker.state === 'blocked') blocker.reset(); }} title="离开设置？" description="还有未保存的修改，离开后将丢弃这些修改。" confirmLabel="丢弃并离开" cancelLabel="继续编辑" variant="danger" onConfirm={() => { if (blocker.state === 'blocked') { leaving.current = true; blocker.proceed(); } }} />
+      <ConfirmModal open={confirmLeaving && !settingsSaving} onOpenChange={(open) => { if (!open && !leaving.current && blocker.state === 'blocked') blocker.reset(); }} title="离开设置？" description="还有未保存的修改，离开后将丢弃这些修改。" confirmLabel="丢弃并离开" cancelLabel="继续编辑" variant="danger" onConfirm={() => { if (blocker.state === 'blocked') { leaving.current = true; blocker.proceed(); } }} />
       <ConfirmModal open={reloadPrompt} onOpenChange={setReloadPrompt} title="重新读取设置？" description="重新读取会丢弃当前页面的未保存修改。" confirmLabel="重新读取" cancelLabel="继续编辑" variant="danger" onConfirm={refreshSettings} />
       <ConfirmModal open={!!deleting} onOpenChange={(open) => { if (!open && !saveInFlight.current) setDeleting(null); }} title="删除模型？" description={`删除「${deleting?.name || '新模型'}」后立即生效。`} confirmLabel="删除" variant="danger" onConfirm={confirmDelete} />
     </main>

@@ -10,6 +10,7 @@ const origin = 'http://127.0.0.1:' + (process.env.FRONTEND_PORT || '15173');
 const prefix = '验证-' + randomUUID().slice(0, 8);
 const key = randomUUID(); // disposable, never logged
 const button = (page, name) => page.getByRole('button', { name, exact: true });
+const settingsLink = (page, name) => page.getByRole('navigation', { name: '设置栏目' }).getByRole('link', { name, exact: true });
 const dialog = page => page.getByRole('dialog');
 const endpoint = response => new URL(response.url()).pathname;
 const go = (page, route) => page.goto(origin + route, { waitUntil: 'domcontentloaded' });
@@ -52,10 +53,10 @@ async function settings(page) {
   assert.equal(model.provider, 'gpt');
   assert.equal(model.base_url, 'https://example.invalid/v1');
   assert.ok(!('key' in model));
-  await button(page, '模型分配').click();
+  await settingsLink(page, '模型分配').click();
   const routed = await action(page, '/settings/routes/save', () => choice(page, '主路备用模型', name));
   assert.deepEqual(routed.sent, { route: 'main_fallback', model_id: created.body.id });
-  await button(page, '模型配置').click();
+  await settingsLink(page, '模型配置').click();
   await button(page, '编辑 ' + name).click();
   form = page.getByRole('form', { name: '编辑 ' + name, exact: true });
   assert.equal(await form.getByPlaceholder('已配置，留空保留').inputValue(), '');
@@ -63,32 +64,32 @@ async function settings(page) {
   const updated = await action(page, '/settings/models/update', () => button(form, '保存').click());
   assert.equal(updated.body, '');
   assert.deepEqual(updated.sent, { id: created.body.id, name: name + '-改名' });
+  await settingsLink(page, '模型分配').click();
+  await page.waitForURL('**/settings/routing');
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await button(page, '模型分配').click();
   await page.getByRole('combobox', { name: '主路备用模型' }).getByText(name + '-改名', { exact: true }).waitFor();
   const stored = await page.evaluate(() => JSON.stringify([localStorage, sessionStorage]));
   assert.ok(!stored.includes(key));
   const restore = original.models.find(row => row.id === original.routes.main_fallback)?.name || '不启用备用模型';
   await action(page, '/settings/routes/save', () => choice(page, '主路备用模型', restore));
-  await button(page, '模型配置').click();
+  await settingsLink(page, '模型配置').click();
   await button(page, '编辑 ' + name + '-改名').click();
   await button(page, '删除 ' + name + '-改名').click();
   await action(page, '/settings/models/delete', () => button(dialog(page), '删除').click());
   console.log('PASS 模型显式厂商、创建、密钥只写、改名、按 ID 路由、刷新、删除');
 
-  await button(page, '智能体').click();
+  await settingsLink(page, '智能体').click();
   const toggle = page.getByRole('switch', { name: '自动命名' });
   const before = await get(page, '/settings/behavior');
   if (!before.auto_rename_enabled) await action(page, '/settings/behavior/save', () => toggle.click());
   const off = await action(page, '/settings/behavior/save', () => toggle.click());
   assert.deepEqual(off.sent, { auto_rename_enabled: false });
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await button(page, '智能体').click();
   await page.locator('[role=switch][aria-checked=false][aria-labelledby="agent-auto_rename_enabled"]').waitFor();
   assert.deepEqual(await get(page, '/settings/behavior'), { ...before, auto_rename_enabled: false });
   console.log('PASS 行为关闭、局部请求、刷新');
 
-  await button(page, '快捷键').click();
+  await settingsLink(page, '快捷键').click();
   const trigger = page.getByRole('textbox', { name: '命令菜单' });
   const shortcuts = await get(page, '/settings/shortcuts');
   await trigger.fill(shortcuts.reference_trigger);
@@ -102,7 +103,6 @@ async function settings(page) {
   const shortcutKey = shortcuts.previous_slide === 'Option+KeyK' ? 'J' : 'K';
   await action(page, '/settings/shortcuts/save', () => page.getByRole('textbox', { name: '上一页' }).press('Alt+' + shortcutKey));
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await button(page, '快捷键').click();
   await trigger.waitFor();
   assert.equal(await trigger.inputValue(), nextTrigger);
   assert.equal((await get(page, '/settings/shortcuts')).previous_slide, 'Option+Key' + shortcutKey);
@@ -117,10 +117,9 @@ async function settings(page) {
   }, app);
   assert.deepEqual(seed.custom_apps, [app]);
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await button(page, '文件打开').click();
+  await settingsLink(page, '文件打开').click();
   await action(page, '/settings/fileopen/save', () => choice(page, 'HTML 文件', 'Example'));
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await button(page, '文件打开').click();
   await page.getByRole('combobox', { name: 'HTML 文件' }).getByText('Example', { exact: true }).waitFor();
   const removed = await action(page, '/settings/fileopen/save', () => button(page, '删除 Example').click());
   assert.equal(removed.sent.html_open, app);

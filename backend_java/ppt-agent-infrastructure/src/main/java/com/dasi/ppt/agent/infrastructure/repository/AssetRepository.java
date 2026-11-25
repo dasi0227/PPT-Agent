@@ -107,10 +107,10 @@ public class AssetRepository implements IAssetRepository {
         assetMapper.updateAsset(toPo(asset));
         List<String> tagIds = asset.getTagIds();
         if (tagIds != null) {
-            String id = asset.getId();
-            assetTagMapper.deleteAssetTagLinksByAssetId(id);
+            String assetId = asset.getId();
+            assetTagMapper.deleteAssetTagLinksByAssetId(assetId);
             if (!tagIds.isEmpty()) {
-                assetTagMapper.insertAssetTagLinks(id, tagIds);
+                assetTagMapper.insertAssetTagLinks(assetId, tagIds);
             }
         }
     }

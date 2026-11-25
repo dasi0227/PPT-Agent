@@ -6,7 +6,7 @@ import { showGlobalError } from './toastStore';
 
 interface TagState {
   tags: Partial<Record<ResourceScope, AssetTag[]>>;
-  load: (scope: ResourceScope) => Promise<void>;
+  load: (scope: ResourceScope, fresh?: boolean) => Promise<void>;
 }
 
 const inflight = new Map<ResourceScope, Promise<void>>();
@@ -14,14 +14,16 @@ const emptyTags: AssetTag[] = [];
 
 export const useTagStore = create<TagState>((set) => ({
   tags: {},
-  load: (scope) => {
+  load: (scope, fresh = false) => {
     const pending = inflight.get(scope);
-    if (pending) return pending;
-    const request = assetsApi.tags(scope)
+    if (pending && !fresh) return pending;
+    const request: Promise<void> = assetsApi.tags(scope)
       .then(({ items: tags }) => {
-        set(state => ({ tags: { ...state.tags, [scope]: tags } }));
+        if (inflight.get(scope) === request) set(state => ({ tags: { ...state.tags, [scope]: tags } }));
       })
-      .finally(() => { inflight.delete(scope); });
+      .finally(() => {
+        if (inflight.get(scope) === request) inflight.delete(scope);
+      });
     inflight.set(scope, request);
     return request;
   },

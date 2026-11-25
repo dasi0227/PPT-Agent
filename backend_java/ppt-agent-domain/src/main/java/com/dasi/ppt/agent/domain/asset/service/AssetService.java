@@ -24,8 +24,8 @@ public class AssetService {
         return assetRepository.listAssets(type, query == null ? "" : query);
     }
 
-    public Asset getAssetDetail(String id) {
-        Asset asset = assetRepository.findAssetById(id);
+    public Asset getAssetDetail(String assetId) {
+        Asset asset = assetRepository.findAssetById(assetId);
         if (asset == null) {
             throw notFound(ErrorCode.ASSET_NOT_FOUND);
         }
@@ -69,11 +69,11 @@ public class AssetService {
     }
 
     @Transactional
-    public void deleteAsset(String id) {
-        if (assetRepository.isUsedAsProjectTheme(id)) {
+    public void deleteAsset(String assetId) {
+        if (assetRepository.isUsedAsProjectTheme(assetId)) {
             throw conflict(ErrorCode.ASSET_IN_USE);
         }
-        if (assetRepository.deleteAsset(id) == 0) {
+        if (assetRepository.deleteAsset(assetId) == 0) {
             throw notFound(ErrorCode.ASSET_NOT_FOUND);
         }
     }

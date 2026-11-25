@@ -102,12 +102,12 @@ public class FileStorer {
             for (Path pending : entries) {
                 String name = pending.getFileName().toString();
                 boolean creating = name.startsWith(CREATING);
-                String id = name.substring((creating ? CREATING : DELETING).length());
-                Path directory = paths.projectDirectory(id).normalize();
+                String projectId = name.substring((creating ? CREATING : DELETING).length());
+                Path directory = paths.projectDirectory(projectId).normalize();
                 if (!root.equals(directory.getParent())) {
                     throw new IOException("项目恢复标记无效：" + pending);
                 }
-                finish(directory, pending, creating, projectExists.test(id));
+                finish(directory, pending, creating, projectExists.test(projectId));
             }
         } catch (IOException ex) {
             throw new UncheckedIOException(ex);

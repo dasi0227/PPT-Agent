@@ -32,8 +32,8 @@ public class SseEventPublisher implements EventPublisher {
         emitter.onTimeout(() -> remove(sessionId, emitter));
         emitter.onError(error -> remove(sessionId, emitter));
         emitter.send(SseEmitter.event().comment("connected"));
-        connections.compute(sessionId, (id, current) -> {
-            if (!sessions.exists(id)) {
+        connections.compute(sessionId, (subscribedSessionId, current) -> {
+            if (!sessions.exists(subscribedSessionId)) {
                 throw new ResponseStatusException(HttpStatus.NOT_FOUND);
             }
             Set<SseEmitter> subscribers = current == null ? new CopyOnWriteArraySet<>() : current;
@@ -74,7 +74,7 @@ public class SseEventPublisher implements EventPublisher {
     }
 
     private void remove(String sessionId, SseEmitter emitter) {
-        connections.computeIfPresent(sessionId, (id, subscribers) -> {
+        connections.computeIfPresent(sessionId, (ignored, subscribers) -> {
             subscribers.remove(emitter);
             return subscribers.isEmpty() ? null : subscribers;
         });

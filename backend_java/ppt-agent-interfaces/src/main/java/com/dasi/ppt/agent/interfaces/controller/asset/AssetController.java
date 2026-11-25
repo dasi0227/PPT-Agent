@@ -30,8 +30,8 @@ public class AssetController {
     }
 
     @GetMapping("/{id}")
-    public AssetInfoVo getAssetDetail(@PathVariable("id") String id) {
-        return AssetInfoVo.toVo(assetService.getAssetDetail(id));
+    public AssetInfoVo getAssetDetail(@PathVariable("id") String assetId) {
+        return AssetInfoVo.toVo(assetService.getAssetDetail(assetId));
     }
 
     @PostMapping("/create")

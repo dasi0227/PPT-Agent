@@ -9,17 +9,17 @@ public interface LlmConfigMapper {
 
     List<LlmConfigPo> listModels();
 
-    LlmConfigPo findModelById(String id);
+    LlmConfigPo findModelById(String modelId);
 
     boolean existsConflictingModelName(@Param("name") String name, @Param("modelId") String modelId);
 
-    boolean existsModelById(@Param("id") String id);
+    boolean existsModelById(@Param("modelId") String modelId);
 
-    boolean isLastModel(String id);
+    boolean isLastModel(String modelId);
 
     void insertModel(LlmConfigPo model);
 
     int updateModel(LlmConfigPo model);
 
-    int deleteModel(@Param("id") String id);
+    int deleteModel(@Param("modelId") String modelId);
 }

@@ -25,21 +25,21 @@ public interface ISettingRepository {
 
     List<ModelConfigSettings> listModels();
 
-    ModelConfigSettings findModelById(String id);
+    ModelConfigSettings findModelById(String modelId);
 
     ModelRouteSettings getModelRoutes();
 
     boolean existsModelName(String name, String modelId);
 
-    boolean existsById(String id);
+    boolean existsById(String modelId);
 
-    boolean isLastModel(String id);
+    boolean isLastModel(String modelId);
 
     void insertModel(ModelConfigSettings model);
 
     int updateModel(ModelConfigSettings model);
 
-    int deleteModel(String id);
+    int deleteModel(String modelId);
 
     void saveModelRoute(ModelRoute route, String modelId);
 }

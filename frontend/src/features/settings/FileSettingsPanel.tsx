@@ -61,7 +61,7 @@ export function FileSettingsPanel({ refreshKey, onSavingChange }: {
             disabled={busy} onValueChange={choice => void change(key, choice)} />
         </div>)}
       </div>
-      <h2>打开应用</h2>
+      <h2>自定义应用</h2>
       <div className="settings-group">
         {value.custom_apps.map(app => <div key={app} className="settings-row"><div className="settings-app-label"><FileApplicationIcon application={applicationName(app)} /><h3>{applicationName(app)}</h3></div>
           <IconButton label={`删除 ${applicationName(app)}`} title="删除" className="text-danger ui-danger" disabled={busy} onClick={() => void remove(app)}><Trash2 size={16} aria-hidden="true" /></IconButton>

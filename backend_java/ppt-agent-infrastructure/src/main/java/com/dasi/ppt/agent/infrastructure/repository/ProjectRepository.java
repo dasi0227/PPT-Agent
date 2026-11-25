@@ -3,7 +3,6 @@ package com.dasi.ppt.agent.infrastructure.repository;
 import com.dasi.ppt.agent.domain.project.model.entity.Project;
 import com.dasi.ppt.agent.domain.project.model.enumeration.DecorationPosition;
 import com.dasi.ppt.agent.domain.project.repository.IProjectRepository;
-import com.dasi.ppt.agent.domain.shared.exception.ErrorCode;
 import com.dasi.ppt.agent.domain.shared.sse.ChangeArea;
 import com.dasi.ppt.agent.domain.shared.sse.SseEvent;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.CheckpointMapper;
@@ -17,15 +16,12 @@ import com.dasi.ppt.agent.infrastructure.persistence.filesystem.PathResolver;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
-import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.notFound;
 
 @Repository
 @RequiredArgsConstructor
@@ -40,122 +36,86 @@ public class ProjectRepository implements IProjectRepository {
 
     @PostConstruct
     void recoverDirectories() {
-        fileStorer.recoverProjectDirectories(pathResolver, projectMapper::exists);
-    }
-
-    @Override
-    public void requireWritable(String projectId) {
-        fileStorer.requireWritable(pathResolver.projectDirectory(projectId));
-        if (!projectMapper.exists(projectId)) {
-            throw notFound(ErrorCode.PROJECT_NOT_FOUND);
-        }
+        fileStorer.recoverProjectDirectories(pathResolver, projectMapper::existsProject);
     }
 
     @Override
     public List<Project> listProjects() {
-        return projectMapper.list()
+        return projectMapper.listProjects()
                 .stream()
-                .map(this::toEntity)
+                .map(ProjectRepository::toEntity)
                 .toList();
     }
 
-    private Project toEntity(ProjectPo row) {
-        return Project.builder()
-                .id(row.getId())
-                .title(row.getTitle())
-                .updatedAt(row.getUpdatedAt())
-                .build();
+    @Override
+    public void insertProject(Project project) {
+        projectMapper.insertProject(toPo(project));
+        fileStorer.createProjectDirectory(pathResolver.projectDirectory(project.getId()));
     }
 
     @Override
-    public Project findAppearance(String projectId) {
-        ProjectPo row = projectMapper.findAppearance(projectId);
-        if (row == null) {
-            throw notFound(ErrorCode.PROJECT_NOT_FOUND);
-        }
-        return Project.builder()
-                .id(row.getId())
-                .theme(row.getTheme())
-                .slidePaginationPosition(DecorationPosition.fromValue(row.getSlidePaginationPosition()))
-                .deckTitlePosition(DecorationPosition.fromValue(row.getDeckTitlePosition()))
-                .sectionTitlePosition(DecorationPosition.fromValue(row.getSectionTitlePosition()))
-                .logoPosition(DecorationPosition.fromValue(row.getProjectLogoPosition()))
-                .logoPresent(row.isLogoPresent())
-                .build();
+    public int updateProjectTitle(String projectId, String title, long updatedAt) {
+        return projectMapper.updateProjectTitle(projectId, title, updatedAt);
     }
 
     @Override
-    public byte[] findLogo(String projectId) {
-        ProjectPo row = projectMapper.findLogo(projectId);
-        return row == null ? null : row.getLogo();
+    public List<String> listProjectSessionIds(String projectId) {
+        return sessionMapper.listProjectSessionIds(projectId);
     }
 
     @Override
-    public Project create(Project project) {
-        ProjectPo row = projectMapper.insert(ProjectPo.builder()
-                .id(project.getId())
-                .title(project.getTitle())
-                .updatedAt(System.currentTimeMillis())
-                .build());
-        fileStorer.createProjectDirectory(pathResolver.projectDirectory(row.getId()));
-        return toEntity(row);
-    }
-
-    @Override
-    public Project update(Project project) {
-        fileStorer.requireWritable(pathResolver.projectDirectory(project.getId()));
-        ProjectPo row = projectMapper.updateTitle(project.getId(), project.getTitle(), System.currentTimeMillis());
-        if (row == null) {
-            throw notFound(ErrorCode.PROJECT_NOT_FOUND);
-        }
-        return toEntity(row);
-    }
-
-    @Override
-    @Transactional
-    public List<String> delete(String projectId) {
-        fileStorer.requireWritable(pathResolver.projectDirectory(projectId));
-        List<String> sessions = sessionMapper.listRevisions(projectId)
-                .stream()
-                .map(SessionPo::getId)
-                .toList();
+    public int deleteProject(String projectId) {
         receiptMapper.deleteByProject(projectId);
-        if (projectMapper.delete(projectId) == 0) {
-            throw notFound(ErrorCode.PROJECT_NOT_FOUND);
+        int deleted = projectMapper.deleteProject(projectId);
+        if (deleted > 0) {
+            fileStorer.stageProjectDeletion(pathResolver.projectDirectory(projectId));
         }
-        fileStorer.stageProjectDeletion(pathResolver.projectDirectory(projectId));
-        return sessions;
+        return deleted;
     }
 
     @Override
-    public boolean updateTheme(String projectId, String themeId) {
-        return projectMapper.updateTheme(projectId, themeId, System.currentTimeMillis()) > 0;
+    public void requireWritableProjectFiles(String projectId) {
+        fileStorer.requireWritable(pathResolver.projectDirectory(projectId));
     }
 
     @Override
-    public boolean updatePositions(Project project) {
-        return projectMapper.updatePositions(ProjectPo.builder()
-                .id(project.getId())
-                .slidePaginationPosition(project.getSlidePaginationPosition().getValue())
-                .deckTitlePosition(project.getDeckTitlePosition().getValue())
-                .sectionTitlePosition(project.getSectionTitlePosition().getValue())
-                .projectLogoPosition(project.getLogoPosition().getValue())
-                .updatedAt(System.currentTimeMillis())
-                .build()) > 0;
+    public boolean existsProject(String projectId) {
+        return projectMapper.existsProject(projectId);
     }
 
     @Override
-    public boolean updateLogo(String projectId, byte[] logo) {
-        return projectMapper.updateLogo(projectId, logo, System.currentTimeMillis()) > 0;
+    public Project findProjectAppearance(String projectId) {
+        return toEntity(projectMapper.findProjectAppearance(projectId));
+    }
+
+    @Override
+    public int updateProjectTheme(String projectId, String themeId, long updatedAt) {
+        return projectMapper.updateProjectTheme(projectId, themeId, updatedAt);
+    }
+
+    @Override
+    public int updateProjectPositions(Project project) {
+        return projectMapper.updateProjectPositions(toPo(project));
+    }
+
+    @Override
+    public byte[] findProjectLogo(String projectId) {
+        ProjectPo po = projectMapper.findProjectLogo(projectId);
+        return po == null ? null : po.getLogo();
+    }
+
+    @Override
+    public int updateProjectLogo(String projectId, byte[] logo, long updatedAt) {
+        return projectMapper.updateProjectLogo(projectId, logo, updatedAt);
     }
 
     @Override
     public Map<String, SseEvent.Changed> invalidateCheckpoints(String projectId) {
-        Set<String> affected = new HashSet<>(sessionMapper.advanceCheckpointRevisions(projectId));
+        Set<String> affectedSessionIds = new HashSet<>(sessionMapper.advanceCheckpointRevisions(projectId));
         checkpointMapper.deleteByProject(projectId);
         Map<String, SseEvent.Changed> changes = new HashMap<>();
         for (SessionPo session : sessionMapper.listRevisions(projectId)) {
-            List<ChangeArea> areas = affected.contains(session.getId())
+            List<ChangeArea> areas = affectedSessionIds.contains(session.getId())
                     ? List.of(ChangeArea.CONTENT, ChangeArea.CHECKPOINTS) : List.of(ChangeArea.CONTENT);
             changes.put(session.getId(), SseEvent.Changed.builder()
                     .revision(Long.toString(session.getRevision()))
@@ -163,5 +123,40 @@ public class ProjectRepository implements IProjectRepository {
                     .build());
         }
         return changes;
+    }
+
+    private static Project toEntity(ProjectPo po) {
+        if (po == null) return null;
+        return Project.builder()
+                .id(po.getId())
+                .title(po.getTitle())
+                .theme(po.getTheme())
+                .slidePaginationPosition(position(po.getSlidePaginationPosition()))
+                .deckTitlePosition(position(po.getDeckTitlePosition()))
+                .sectionTitlePosition(position(po.getSectionTitlePosition()))
+                .logoPosition(position(po.getProjectLogoPosition()))
+                .logoPresent(po.isLogoPresent())
+                .updatedAt(po.getUpdatedAt())
+                .build();
+    }
+
+    private static ProjectPo toPo(Project project) {
+        return ProjectPo.builder()
+                .id(project.getId())
+                .title(project.getTitle())
+                .slidePaginationPosition(value(project.getSlidePaginationPosition()))
+                .deckTitlePosition(value(project.getDeckTitlePosition()))
+                .sectionTitlePosition(value(project.getSectionTitlePosition()))
+                .projectLogoPosition(value(project.getLogoPosition()))
+                .updatedAt(project.getUpdatedAt())
+                .build();
+    }
+
+    private static DecorationPosition position(String value) {
+        return value == null ? null : DecorationPosition.fromValue(value);
+    }
+
+    private static String value(DecorationPosition position) {
+        return position == null ? null : position.getValue();
     }
 }

@@ -12,7 +12,7 @@ export function modelChanged(row: DraftModel, edit?: Editable): boolean {
 }
 export function validation(row: DraftModel, rows: DraftModel[]): string {
   if (!row.name.trim()) return '请填写配置名称。';
-  if (rows.some(other => other.id !== row.id && other.name === row.name.trim())) return '配置名称已被使用。';
+  if (rows.some(other => other.saved && other.id !== row.id && other.name === row.name)) return '配置名称已被使用。';
   if (!row.provider) return '请选择厂商。';
   if (!row.model.trim()) return '请填写模型标识。';
   if (!row.base_url.trim()) return '请填写 API 基础地址。';

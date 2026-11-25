@@ -10,13 +10,13 @@
 - ID、版本、哈希、`seq` 和字符串枚举按字符串传输。会话版本和 `seq` 使用十进制字符串。
 - 项目、会话、资产和模型配置分别使用 `create` 创建、`update` 更新。创建请求仅接受创建字段，资源自身的 ID 由服务端生成。更新请求需提供已有资源的非空白 ID。各接口的请求字段见接口表。
 - 作用域内只有一份的设置或内容使用 `save`，例如全局行为开关、项目大纲和单页 HTML。
-- 新增普通 CRUD 接口时，创建成功默认返回 `{"id":"…"}`，更新、保存和删除成功默认返回空响应体。调用方需要服务端生成或处理后的结果时，接口约定具体返回字段。
+- 普通 CRUD 接口创建成功返回 `{"id":"…"}`，更新成功返回空响应体。调用方按需重读列表或详情。保存和删除操作的响应见各接口。
 - 局部更新时，可选字段省略或显式传 `null` 默认保留原值。`false` 和 `[]` 都属于已提交的值，分别表示假和空集合。若 `null` 表示清空、恢复默认等操作，在对应接口中单独说明。
 
 ## 项目
 
 - 项目列表按 `updated_at` 降序、`id` 升序返回。
-- `POST /api/projects/create` 仅接收 `title`，新项目默认无主题。`POST /api/projects/update` 接收 `project_id` 和 `title`，修改已有项目的名称。两者均返回与项目列表项相同的 `id`、按提交值保存的 `title` 及数据库中的 `updated_at`。提交的标题与原值相同时，保留原更新时间。
+- `POST /api/projects/create` 仅接收 `title`，新项目默认无主题。`POST /api/projects/update` 接收 `project_id` 和 `title`，修改已有项目的名称。创建成功返回 `{"id":"…"}`，改名成功返回空响应体。每次成功改名都严格递增 `updated_at`，包括提交原名。
 - `GET /api/projects/{project_id}` 一次返回资料、大纲及大纲内各页的规格、HTML 和对应哈希。
 - 普通项目读取允许不同文件来自相邻两次提交。每个文件的正文和哈希取自同一次读取。
 - 规格损坏时正文为 `null`，仍返回其哈希。文件缺失时正文与哈希均为 `null`。
@@ -51,9 +51,9 @@
 - 搜索沿用列表顺序，依次按 `updated_at` 降序、`name` 升序、`id` 升序。
 - `POST /api/assets/create` 需提供 `type`、`name`、`description` 和 `content`。新资产默认启用，`tag_ids` 省略或为 `null` 时使用空列表。
 - `POST /api/assets/update` 只要求提供已有资产的 `asset_id`。省略或为 `null` 的可修改字段保留原值，`tag_ids=[]` 清空标签，`enabled=true` 启用资产，`enabled=false` 停用资产。
-- 创建成功返回 `{"id":"…"}`，更新成功返回空响应体。`GET /api/assets/{asset_id}` 返回资产列表项的全部字段及 `content`，资产不存在时返回 `ASSET_NOT_FOUND`。前端保存后按 ID 读取详情，刷新对应列表项和预览。
+- 创建成功返回 `{"id":"…"}`，更新成功返回空响应体。`GET /api/assets/{asset_id}` 返回资产列表项的全部字段，`content` 从列表中的 `null` 变为正文，资产不存在时返回 `ASSET_NOT_FOUND`。前端保存后按 ID 读取详情，刷新对应列表项和预览。
 - 资产类型创建后固定。更新时按 ID 定位资产，不存在返回 `ASSET_NOT_FOUND`。同类重名、标签类型和主题停用校验均使用库中类型。
-- 正文为非空 UTF-8 原文。主题 CSS 上限为 64 KiB，短语上限为 16 KiB。
+- 正文按非空字符串原样保存。
 - 创建标签需提交 `type` 和 `name`。名称需为非空白字符串，按原样保存和显示。同一类型内按原名称精确比较，重名返回 `INVALID_ARGUMENT`，不同类型允许同名。成功返回 `{"id":"…"}`，前端刷新同类标签列表。
 - `POST /api/assets/tags/update` 按 `tag_id` 更新标签名称。`tag_id` 和 `name` 必须为非空白字符串，名称按原样保存。标签不存在返回 `TAG_NOT_FOUND`，同类型下与其他标签重名返回 `INVALID_ARGUMENT`。成功返回 HTTP 200 和空响应体，提交原名同样成功。改名保留标签关联和资产的 `updated_at`。
 - 删除标签需提交非空白的 `tag_id`。成功返回 HTTP 200 和空响应体。标签与其在所有资产上的关联在同一事务内删除，并更新受影响资产的 `updated_at`。资产正文和其他标签保留。ID 缺失或为空白时返回 `INVALID_ARGUMENT`，标签不存在时返回 `TAG_NOT_FOUND`。
@@ -77,7 +77,7 @@
 - `GET /api/settings/models` 一次返回可公开的模型列表和路由，密钥只写。路由引用稳定的模型配置 ID。
 - `POST /api/settings/models/create` 创建一个模型配置，需提供 `name`、`protocol`、`provider`、`base_url`、`model` 和非空白的 `key`。配置名按提交值全局唯一。
 - `provider` 接受 deepseek、kimi、mimo、gpt、claude、gemini、qwen、minimax、glm、grok，创建时需显式指定，更新时省略或传 `null` 保留原值。单独修改 `model` 时保留已选品牌。
-- `base_url` 创建时必填，更新时省略或为 `null` 则保留原值。提供时只校验字符串非空白。保存时去除地址末尾的 `/`，仅含斜杠的值保留。
+- `base_url` 创建时必填，更新时省略或为 `null` 则保留原值。提供时须为非空白字符串，按提交值保存。
 - 创建成功返回 `{"id":"…"}`，更新成功返回空响应体。前端保存后按 ID 读取详情，只更新对应的模型卡片。
 - `GET /api/settings/models/{id}` 返回单条公开配置，字段与模型列表项一致，包含生效的 `base_url` 和 `provider`。密钥始终只写，未知 ID 返回 `MODEL_NOT_FOUND`。
 - `POST /api/settings/models/update` 需提供已有模型配置的 `id`。可修改字段省略或传 `null` 时保留原值，包括原密钥。只传 ID 时保留现有配置并返回成功。改名保留路由引用，未知 ID 返回 `MODEL_NOT_FOUND`。
@@ -141,7 +141,7 @@
 
 - `POST /api/sessions/create` 需提供所属项目的 `project_id`，可省略 `title` 以使用「新会话」。
 - `POST /api/sessions/update` 改名时需提供 `session_id` 和去首尾空白后非空的 `title`。
-- 创建和改名均返回会话 `id`，标题从会话列表读取。
+- 创建成功返回 `{"id":"…"}`，改名成功返回空响应体。每次成功改名都严格递增 `updated_at`，包括提交原名。标题与更新时间从会话列表读取。
 - `can_return=true` 且标题实际改变时，改名须提交检查点列表的 `revision` 作为 `expected_revision`。缺少必填版本返回 `INVALID_ARGUMENT`。
 - 改名请求只要携带 `expected_revision` 就校验版本，过期返回 `STALE_REVISION`。
 - 实际改名成功后放弃「返回最新」，同名或失败时保留。

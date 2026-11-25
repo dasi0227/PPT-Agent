@@ -40,7 +40,7 @@
         SELECT <include refid="summaryColumns"/>, a.content
         FROM assets a
         LEFT JOIN asset_tags link ON link.asset_id = a.id
-        WHERE a.id = #{id}
+        WHERE a.id = #{assetId}
         ORDER BY link.tag_id
     </select>
 
@@ -80,10 +80,10 @@
     </update>
 
     <select id="isUsedAsProjectTheme" resultType="boolean">
-        SELECT EXISTS (SELECT 1 FROM projects WHERE theme = #{id})
+        SELECT EXISTS (SELECT 1 FROM projects WHERE theme = #{assetId})
     </select>
 
     <delete id="deleteAsset">
-        DELETE FROM assets WHERE id = #{id}
+        DELETE FROM assets WHERE id = #{assetId}
     </delete>
 </mapper>

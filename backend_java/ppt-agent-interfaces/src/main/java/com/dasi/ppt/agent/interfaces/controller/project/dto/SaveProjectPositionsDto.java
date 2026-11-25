@@ -17,21 +17,21 @@ public final class SaveProjectPositionsDto {
     @NotBlank
     private String projectId;
     @NotNull
-    private DecorationPosition slidePaginationPosition;
+    private DecorationPosition slidePagination;
     @NotNull
-    private DecorationPosition deckTitlePosition;
+    private DecorationPosition deckTitle;
     @NotNull
-    private DecorationPosition sectionTitlePosition;
+    private DecorationPosition sectionTitle;
     @NotNull
-    private DecorationPosition logoPosition;
+    private DecorationPosition logo;
 
     public Project toEntity() {
         return Project.builder()
                 .id(projectId)
-                .slidePaginationPosition(slidePaginationPosition)
-                .deckTitlePosition(deckTitlePosition)
-                .sectionTitlePosition(sectionTitlePosition)
-                .logoPosition(logoPosition)
+                .slidePaginationPosition(slidePagination)
+                .deckTitlePosition(deckTitle)
+                .sectionTitlePosition(sectionTitle)
+                .logoPosition(logo)
                 .build();
     }
 }

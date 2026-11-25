@@ -81,8 +81,8 @@ public class SettingRepository implements ISettingRepository {
     }
 
     @Override
-    public ModelConfigSettings findModelById(String id) {
-        return toEntity(llmConfigMapper.findModelById(id));
+    public ModelConfigSettings findModelById(String modelId) {
+        return toEntity(llmConfigMapper.findModelById(modelId));
     }
 
     @Override
@@ -96,13 +96,13 @@ public class SettingRepository implements ISettingRepository {
     }
 
     @Override
-    public boolean existsById(String id) {
-        return llmConfigMapper.existsModelById(id);
+    public boolean existsById(String modelId) {
+        return llmConfigMapper.existsModelById(modelId);
     }
 
     @Override
-    public boolean isLastModel(String id) {
-        return llmConfigMapper.isLastModel(id);
+    public boolean isLastModel(String modelId) {
+        return llmConfigMapper.isLastModel(modelId);
     }
 
     @Override
@@ -116,8 +116,8 @@ public class SettingRepository implements ISettingRepository {
     }
 
     @Override
-    public int deleteModel(String id) {
-        return llmConfigMapper.deleteModel(id);
+    public int deleteModel(String modelId) {
+        return llmConfigMapper.deleteModel(modelId);
     }
 
     @Override

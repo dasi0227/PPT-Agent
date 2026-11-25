@@ -23,8 +23,8 @@ public final class ModelRouteSettings {
     private String handoff;
     private String suggest;
 
-    public boolean usesModel(String id) {
+    public boolean usesModel(String modelId) {
         return Arrays.asList(mainDefault, mainFallback, sideDefault, sideFallback, rename, compact, commit,
-                polish, handoff, suggest).contains(id);
+                polish, handoff, suggest).contains(modelId);
     }
 }

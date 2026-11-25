@@ -13,7 +13,7 @@ export interface AssetInfo {
 export interface AssetDetail extends AssetInfo { content: string }
 export interface AssetTag { id: string; name: string }
 export type AssetDraft = Pick<AssetInfo, 'name' | 'description' | 'tag_ids'> & { content: string };
-type Changes = Partial<AssetDraft & { enabled: boolean }>;
+type Changes = { [Field in keyof AssetDraft]?: AssetDraft[Field] | null } & { enabled?: boolean | null };
 const read = { reportError: false, cache: 'no-store' } as const;
 export const assetsApi = {
   list: (type: ResourceScope, query: string) => fetchClient<{ items: AssetInfo[] }>('/assets?' + new URLSearchParams({ type, query }), read),

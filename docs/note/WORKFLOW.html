@@ -2368,7 +2368,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>发送指令、发起命令及取消的 HTTP 请求</td>
 <td>受理 ID 或空成功响应</td>
-<td>负责 DTO 校验与领域输入转换，调用 RunService / CommandService；不承载 Loop 或业务编排。</td>
+<td>通过 <code>@Valid</code> 触发 DTO 校验，调用 DTO 的 <code>toEntity()</code> 转换领域输入，再调用 RunService / CommandService。</td>
 </tr>
 <tr id="class-InteractionController">
 <th scope="row">

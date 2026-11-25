@@ -3,12 +3,13 @@ package com.dasi.ppt.agent.domain.project.service;
 import com.dasi.ppt.agent.domain.asset.model.entity.Asset;
 import com.dasi.ppt.agent.domain.asset.model.enumeration.AssetType;
 import com.dasi.ppt.agent.domain.asset.repository.IAssetRepository;
-import com.dasi.ppt.agent.domain.shared.gateway.IPlatformGateway;
 import com.dasi.ppt.agent.domain.project.model.entity.Project;
+import com.dasi.ppt.agent.domain.project.model.enumeration.DecorationPosition;
 import com.dasi.ppt.agent.domain.project.repository.IProjectRepository;
 import com.dasi.ppt.agent.domain.setting.model.entity.FileOpenSettings;
 import com.dasi.ppt.agent.domain.setting.service.SettingService;
 import com.dasi.ppt.agent.domain.shared.exception.ErrorCode;
+import com.dasi.ppt.agent.domain.shared.gateway.IPlatformGateway;
 import com.dasi.ppt.agent.domain.shared.sse.EventPublisher;
 import com.dasi.ppt.agent.domain.shared.sse.SseEvent;
 import com.dasi.ppt.agent.domain.shared.util.IdUtil;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.nio.file.Path;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -43,82 +45,119 @@ public class ProjectService {
         return projectRepository.listProjects();
     }
 
-    public Project findAppearance(String projectId) {
-        return projectRepository.findAppearance(projectId);
-    }
-
-    public byte[] findLogo(String projectId) {
-        return projectRepository.findLogo(projectId);
-    }
-
     @Transactional
-    public Project createProject(String title) {
-        Project project = Project.builder()
-                .id(IdUtil.genProjectId())
-                .title(title)
-                .build();
-        return projectRepository.create(project);
+    public String createProject(Project project) {
+        project.setId(IdUtil.genProjectId());
+        project.setUpdatedAt(System.currentTimeMillis());
+        projectRepository.insertProject(project);
+        return project.getId();
     }
 
-    public Project updateProject(String projectId, String title) {
-        Project project = Project.builder()
-                .id(projectId)
-                .title(title)
-                .build();
+    public void updateProject(String projectId, String title) {
         synchronized (projectWriteLock.lockFor(projectId)) {
-            return projectRepository.update(project);
+            projectRepository.requireWritableProjectFiles(projectId);
+            if (projectRepository.updateProjectTitle(projectId, title, System.currentTimeMillis()) == 0) {
+                throw notFound(ErrorCode.PROJECT_NOT_FOUND);
+            }
         }
     }
 
     public void deleteProject(String projectId) {
         synchronized (projectWriteLock.lockFor(projectId)) {
-            projectRepository.delete(projectId).forEach(eventPublisher::close);
+            List<String> deletedSessionIds = transaction.execute(status -> {
+                projectRepository.requireWritableProjectFiles(projectId);
+                List<String> sessionIds = projectRepository.listProjectSessionIds(projectId);
+                if (projectRepository.deleteProject(projectId) == 0) {
+                    throw notFound(ErrorCode.PROJECT_NOT_FOUND);
+                }
+                return sessionIds;
+            });
+            deletedSessionIds.forEach(eventPublisher::close);
         }
     }
 
-    public void saveTheme(Project project) {
+    public Project getProjectAppearance(String projectId) {
+        Project project = projectRepository.findProjectAppearance(projectId);
+        if (project == null) {
+            throw notFound(ErrorCode.PROJECT_NOT_FOUND);
+        }
+        return project;
+    }
+
+    public void saveProjectTheme(String projectId, String themeId) {
+        synchronized (projectWriteLock.lockFor(projectId)) {
+            Map<String, SseEvent.Changed> changes = transaction.execute(status -> {
+                projectRepository.requireWritableProjectFiles(projectId);
+                if (!projectRepository.existsProject(projectId)) {
+                    throw notFound(ErrorCode.PROJECT_NOT_FOUND);
+                }
+
+                Asset theme = assetRepository.findAssetById(themeId);
+                if (theme == null) {
+                    throw notFound(ErrorCode.ASSET_NOT_FOUND);
+                }
+                if (theme.getType() != AssetType.THEME || !theme.getEnabled() || theme.getContent().isBlank()) {
+                    throw invalid("需选择已启用且正文有效的主题");
+                }
+
+                int updatedRows = projectRepository.updateProjectTheme(projectId, themeId, System.currentTimeMillis());
+                return updatedRows == 0 ? Map.of() : projectRepository.invalidateCheckpoints(projectId);
+            });
+            changes.forEach(eventPublisher::publish);
+        }
+    }
+
+    public void saveProjectPositions(Project project) {
         String projectId = project.getId();
-        String themeId = project.getTheme();
         synchronized (projectWriteLock.lockFor(projectId)) {
             Map<String, SseEvent.Changed> changes = transaction.execute(status -> {
-                projectRepository.requireWritable(projectId);
-                validateTheme(themeId);
-                return projectRepository.updateTheme(projectId, themeId)
-                        ? projectRepository.invalidateCheckpoints(projectId) : Map.of();
+                projectRepository.requireWritableProjectFiles(projectId);
+                if (!projectRepository.existsProject(projectId)) {
+                    throw notFound(ErrorCode.PROJECT_NOT_FOUND);
+                }
+
+                EnumSet<DecorationPosition> occupied = EnumSet.noneOf(DecorationPosition.class);
+                for (DecorationPosition position : List.of(project.getSlidePaginationPosition(), project.getDeckTitlePosition(), project.getSectionTitlePosition(), project.getLogoPosition())) {
+                    if (position != DecorationPosition.NONE && !occupied.add(position)) {
+                        throw invalid("显示的装饰位置不能重叠");
+                    }
+                }
+                project.setUpdatedAt(System.currentTimeMillis());
+
+                int updatedRows = projectRepository.updateProjectPositions(project);
+                return updatedRows == 0 ? Map.of() : projectRepository.invalidateCheckpoints(projectId);
             });
             changes.forEach(eventPublisher::publish);
         }
     }
 
-    public void savePositions(Project project) {
-        String projectId = project.getId();
+    public byte[] findProjectLogo(String projectId) {
+        return projectRepository.findProjectLogo(projectId);
+    }
+
+    public void saveProjectLogo(String projectId, byte[] logo) {
         synchronized (projectWriteLock.lockFor(projectId)) {
             Map<String, SseEvent.Changed> changes = transaction.execute(status -> {
-                projectRepository.requireWritable(projectId);
-                return projectRepository.updatePositions(project)
-                        ? projectRepository.invalidateCheckpoints(projectId) : Map.of();
+                projectRepository.requireWritableProjectFiles(projectId);
+                if (!projectRepository.existsProject(projectId)) {
+                    throw notFound(ErrorCode.PROJECT_NOT_FOUND);
+                }
+                int updatedRows = projectRepository.updateProjectLogo(projectId, logo, System.currentTimeMillis());
+                return updatedRows == 0 ? Map.of() : projectRepository.invalidateCheckpoints(projectId);
             });
             changes.forEach(eventPublisher::publish);
         }
     }
 
-    public void saveLogo(String projectId, byte[] bytes) {
+    public void deleteProjectLogo(String projectId) {
         synchronized (projectWriteLock.lockFor(projectId)) {
             Map<String, SseEvent.Changed> changes = transaction.execute(status -> {
-                projectRepository.requireWritable(projectId);
-                return projectRepository.updateLogo(projectId, bytes)
-                        ? projectRepository.invalidateCheckpoints(projectId) : Map.of();
-            });
-            changes.forEach(eventPublisher::publish);
-        }
-    }
-
-    public void deleteLogo(String projectId) {
-        synchronized (projectWriteLock.lockFor(projectId)) {
-            Map<String, SseEvent.Changed> changes = transaction.execute(status -> {
-                projectRepository.requireWritable(projectId);
-                return projectRepository.updateLogo(projectId, null)
-                        ? projectRepository.invalidateCheckpoints(projectId) : Map.of();
+                projectRepository.requireWritableProjectFiles(projectId);
+                if (!projectRepository.existsProject(projectId)) {
+                    throw notFound(ErrorCode.PROJECT_NOT_FOUND);
+                }
+                int updatedRows = projectRepository.updateProjectLogo(projectId, null, System.currentTimeMillis());
+                return updatedRows == 0 ? Map.of() : projectRepository.invalidateCheckpoints(projectId);
             });
             changes.forEach(eventPublisher::publish);
         }
@@ -130,7 +169,7 @@ public class ProjectService {
         String choice = settings.getDefaultOpen();
         if (filename.endsWith(".json")) {
             choice = settings.getJsonOpen();
-        } else if (filename.endsWith(".html") || filename.endsWith(".htm")) {
+        } else if (filename.endsWith(".html")) {
             choice = settings.getHtmlOpen();
         }
         if (INHERIT_OPEN.equals(choice)) {
@@ -138,15 +177,5 @@ public class ProjectService {
         }
         Path application = SYSTEM_OPEN.equals(choice) ? null : Path.of(choice);
         platformGateway.openFile(projectId, relativePath, application);
-    }
-
-    private void validateTheme(String themeId) {
-        Asset theme = assetRepository.findAssetById(themeId);
-        if (theme == null) {
-            throw notFound(ErrorCode.ASSET_NOT_FOUND);
-        }
-        if (theme.getType() != AssetType.THEME || !theme.getEnabled() || theme.getContent().isBlank()) {
-            throw invalid("需选择已启用且正文有效的主题");
-        }
     }
 }

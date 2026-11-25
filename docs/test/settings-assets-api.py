@@ -27,8 +27,15 @@ for kind in ('theme', 'component', 'skill', 'snippet'):
         rows = call('/assets?' + urlencode({'type': kind, 'query': name}))['items']
         assert [row['id'] for row in rows] == [asset_id]
         assert set(tag) == set(asset) == {'id'}
-        assert 'content' not in rows[0]
+        assert rows[0].get('content') is None
         assert call('/assets/' + asset_id) == {**rows[0], 'content': 'original'}
+        renamed = name + ' Tag'
+        assert call('/assets/tags/update', {'tag_id': tag['id'], 'name': renamed}) is None
+        assert {'id': tag['id'], 'name': renamed} in call('/assets/tags?type=' + kind)['items']
+        tagged = call('/assets?' + urlencode({'type': kind, 'query': renamed}))['items']
+        assert tagged == rows
+        assert call('/assets/update', {'asset_id': asset_id}) is None
+        assert call('/assets/' + asset_id)['updated_at'] > rows[0]['updated_at']
         assert call('/assets/update', {'asset_id': asset_id, 'enabled': False,
                                        'description': None, 'tag_ids': None}) is None
         updated = call('/assets/' + asset_id)
@@ -45,12 +52,12 @@ for kind in ('theme', 'component', 'skill', 'snippet'):
         if tag:
             call('/assets/tags/delete', {'tag_id': tag['id']})
     assert call('/assets/' + asset_id)['error']['code'] == 'ASSET_NOT_FOUND'
-    print('PASS', kind, 'null/false, tag cascade, content update, empty success')
+    print('PASS', kind, 'ID-only update, null/false, tag rename/search/cascade, content update')
 
 
 name = 'api-' + uuid4().hex
 model = call('/settings/models/create', {'name': name, 'protocol': 'responses', 'provider': 'gpt',
-                                        'base_url': 'https://example.invalid/v1///', 'model': 'test', 'key': 'test-only'})
+                                        'base_url': 'https://example.invalid/v1', 'model': 'test', 'key': 'test-only'})
 model_id = model['id']
 try:
     assert set(model) == {'id'}

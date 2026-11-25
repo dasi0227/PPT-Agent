@@ -1,6 +1,7 @@
 package com.dasi.ppt.agent.interfaces.controller.project;
 
 import com.dasi.ppt.agent.domain.project.service.ProjectService;
+import com.dasi.ppt.agent.interfaces.controller.IdVo;
 import com.dasi.ppt.agent.interfaces.controller.project.dto.CreateProjectDto;
 import com.dasi.ppt.agent.interfaces.controller.project.dto.DeleteProjectDto;
 import com.dasi.ppt.agent.interfaces.controller.project.dto.DeleteProjectLogoDto;
@@ -26,7 +27,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
-import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
@@ -36,57 +36,50 @@ public class ProjectController {
     private final ProjectService projectService;
 
     @GetMapping
-    public ProjectListVo list() {
-        List<ProjectInfoVo> items = projectService.listProjects()
-                .stream()
-                .map(ProjectInfoVo::toVo)
-                .toList();
-        return ProjectListVo.builder().items(items).build();
+    public ProjectListVo listProjects() {
+        return ProjectListVo.builder()
+                .items(projectService.listProjects()
+                        .stream()
+                        .map(ProjectInfoVo::toVo)
+                        .toList())
+                .build();
     }
 
     @PostMapping("/create")
-    public ProjectInfoVo create(@Valid @RequestBody CreateProjectDto request) {
-        return ProjectInfoVo.toVo(projectService.createProject(request.getTitle()));
+    public IdVo createProject(@Valid @RequestBody CreateProjectDto request) {
+        return IdVo.builder()
+                .id(projectService.createProject(request.toEntity()))
+                .build();
     }
 
     @PostMapping("/update")
-    public ProjectInfoVo update(@Valid @RequestBody UpdateProjectDto request) {
-        return ProjectInfoVo.toVo(projectService.updateProject(request.getProjectId(), request.getTitle()));
+    public void updateProject(@Valid @RequestBody UpdateProjectDto request) {
+        projectService.updateProject(request.getProjectId(), request.getTitle());
     }
 
     @PostMapping("/delete")
-    public void delete(@Valid @RequestBody DeleteProjectDto request) {
+    public void deleteProject(@Valid @RequestBody DeleteProjectDto request) {
         projectService.deleteProject(request.getProjectId());
     }
 
     @GetMapping("/{projectId}/appearance")
-    public ProjectAppearanceVo appearance(@PathVariable String projectId) {
-        return ProjectAppearanceVo.toVo(projectService.findAppearance(projectId));
+    public ProjectAppearanceVo getProjectAppearance(@PathVariable String projectId) {
+        return ProjectAppearanceVo.toVo(projectService.getProjectAppearance(projectId));
     }
 
     @PostMapping("/theme/save")
-    public void saveTheme(@Valid @RequestBody SaveProjectThemeDto request) {
-        projectService.saveTheme(request.toEntity());
+    public void saveProjectTheme(@Valid @RequestBody SaveProjectThemeDto request) {
+        projectService.saveProjectTheme(request.getProjectId(), request.getThemeId());
     }
 
     @PostMapping("/positions/save")
-    public void savePositions(@Valid @RequestBody SaveProjectPositionsDto request) {
-        projectService.savePositions(request.toEntity());
-    }
-
-    @PostMapping(value = "/logo/save", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public void saveLogo(@Valid @ModelAttribute SaveProjectLogoDto request) throws IOException {
-        projectService.saveLogo(request.getProjectId(), request.getFile().getBytes());
-    }
-
-    @PostMapping("/logo/delete")
-    public void deleteLogo(@Valid @RequestBody DeleteProjectLogoDto request) {
-        projectService.deleteLogo(request.getProjectId());
+    public void saveProjectPositions(@Valid @RequestBody SaveProjectPositionsDto request) {
+        projectService.saveProjectPositions(request.toEntity());
     }
 
     @GetMapping("/{projectId}/logo")
-    public ResponseEntity<byte[]> logo(@PathVariable String projectId) {
-        byte[] bytes = projectService.findLogo(projectId);
+    public ResponseEntity<byte[]> getProjectLogo(@PathVariable String projectId) {
+        byte[] bytes = projectService.findProjectLogo(projectId);
         if (bytes == null) {
             return ResponseEntity.notFound().build();
         }
@@ -95,5 +88,15 @@ public class ProjectController {
                 .cacheControl(CacheControl.noCache().cachePrivate())
                 .eTag(DigestUtils.md5DigestAsHex(bytes))
                 .body(bytes);
+    }
+
+    @PostMapping(value = "/logo/save", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public void saveProjectLogo(@Valid @ModelAttribute SaveProjectLogoDto request) throws IOException {
+        projectService.saveProjectLogo(request.getProjectId(), request.readPng());
+    }
+
+    @PostMapping("/logo/delete")
+    public void deleteProjectLogo(@Valid @RequestBody DeleteProjectLogoDto request) {
+        projectService.deleteProjectLogo(request.getProjectId());
     }
 }

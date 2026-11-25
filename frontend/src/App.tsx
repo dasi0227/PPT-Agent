@@ -12,6 +12,7 @@ import { DeletionFeedback } from './features/workspace/DeletionFeedback';
 import { GlobalModals } from './features/workspace/GlobalModals';
 import { NotFoundPage } from './features/workspace/NotFoundPage';
 import { WorkspaceRoute } from './features/workspace/WorkspaceRoute';
+import { getSettingsSection, settingsSections } from './features/workspace/routes';
 
 export function App() {
   useEffect(() => {
@@ -66,7 +67,7 @@ function AppLayout() {
       </div>
     )}
     <Outlet /><ProjectHistoryDialogs /><GlobalModals /><GlobalToasts />
-    {path !== '/settings' && !themeActive && !path.startsWith('/assets/') && <DeletionFeedback />}
+    {!getSettingsSection(path) && !themeActive && !path.startsWith('/assets/') && <DeletionFeedback />}
   </>;
 }
 
@@ -80,7 +81,7 @@ const router = createBrowserRouter([{
     { path: '/assets/component', element: <AssetRepositoryPage key="Component" type="component" /> },
     { path: '/assets/skill', element: <AssetRepositoryPage key="Skill" type="skill" /> },
     { path: '/assets/snippet', element: <AssetRepositoryPage key="Snippet" type="snippet" /> },
-    { path: '/settings', element: <SettingsPage /> },
+    { path: '/settings', element: <SettingsPage />, children: settingsSections.map(path => ({ path, element: null })) },
     { path: '*', element: <NotFoundPage /> },
   ],
 }]);

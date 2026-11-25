@@ -10,14 +10,33 @@ import lombok.NoArgsConstructor;
 import org.springframework.web.bind.annotation.BindParam;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.HexFormat;
+
+import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.invalid;
+
 @Builder
 @Getter
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 @AllArgsConstructor
 public final class SaveProjectLogoDto {
+    private static final byte[] PNG_SIGNATURE = HexFormat.of().parseHex("89504e470d0a1a0a");
+
     @NotBlank
     @BindParam("project_id")
     private String projectId;
     @NotNull
     private MultipartFile file;
+
+    public byte[] readPng() throws IOException {
+        if (file.getSize() > 2_000_000) {
+            throw invalid("Logo 不能超过 2 MB");
+        }
+        byte[] bytes = file.getBytes();
+        if (bytes.length <= PNG_SIGNATURE.length || !Arrays.equals(PNG_SIGNATURE, Arrays.copyOf(bytes, PNG_SIGNATURE.length))) {
+            throw invalid("Logo 需为 PNG 图片");
+        }
+        return bytes;
+    }
 }

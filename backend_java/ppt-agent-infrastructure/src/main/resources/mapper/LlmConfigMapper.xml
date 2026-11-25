@@ -17,7 +17,7 @@
     </select>
 
     <select id="findModelById" resultMap="llmConfigPo">
-        SELECT <include refid="publicColumns"/> FROM settings_models WHERE id = #{id}
+        SELECT <include refid="publicColumns"/> FROM settings_models WHERE id = #{modelId}
     </select>
 
     <select id="existsConflictingModelName" resultType="boolean">
@@ -32,12 +32,12 @@
     </select>
 
     <select id="existsModelById" resultType="boolean">
-        SELECT EXISTS (SELECT 1 FROM settings_models WHERE id = #{id})
+        SELECT EXISTS (SELECT 1 FROM settings_models WHERE id = #{modelId})
     </select>
 
     <select id="isLastModel" resultType="boolean">
-        SELECT EXISTS (SELECT 1 FROM settings_models WHERE id = #{id})
-           AND NOT EXISTS (SELECT 1 FROM settings_models WHERE id != #{id})
+        SELECT EXISTS (SELECT 1 FROM settings_models WHERE id = #{modelId})
+           AND NOT EXISTS (SELECT 1 FROM settings_models WHERE id != #{modelId})
     </select>
 
     <insert id="insertModel">
@@ -61,6 +61,6 @@
     </update>
 
     <delete id="deleteModel">
-        DELETE FROM settings_models WHERE id = #{id}
+        DELETE FROM settings_models WHERE id = #{modelId}
     </delete>
 </mapper>

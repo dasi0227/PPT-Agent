@@ -62,8 +62,8 @@ public class SettingController {
     }
 
     @GetMapping("/models/{id}")
-    public ModelConfigVo getModelDetail(@PathVariable("id") String id) {
-        return ModelConfigVo.toVo(settingService.getModelDetail(id));
+    public ModelConfigVo getModelDetail(@PathVariable("id") String modelId) {
+        return ModelConfigVo.toVo(settingService.getModelDetail(modelId));
     }
 
     @PostMapping("/models/create")

@@ -10,7 +10,11 @@
         <result column="updated_at" property="updatedAt"/>
     </resultMap>
     <select id="exists" resultType="boolean">
-        SELECT EXISTS (SELECT 1 FROM sessions WHERE id = #{id})
+        SELECT EXISTS (SELECT 1 FROM sessions WHERE id = #{sessionId})
+    </select>
+
+    <select id="listProjectSessionIds" resultType="string">
+        SELECT id FROM sessions WHERE project_id = #{projectId}
     </select>
 
     <select id="listRevisions" resultMap="sessionPo">

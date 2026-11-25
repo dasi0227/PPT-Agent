@@ -19,11 +19,12 @@ export interface ModelSettings {
   routes: Record<Route, string | null>;
 }
 type ModelInput = Omit<ModelConfig, 'id'> & { key: string };
+type ModelUpdate = { id: string } & { [Field in keyof ModelInput]?: ModelInput[Field] | null };
 export const settingsApi = {
   get: () => fetchClient<ModelSettings>('/settings/models', { reportError: false, cache: 'no-store' }),
   detail: (id: string) => fetchClient<ModelConfig>('/settings/models/' + encodeURIComponent(id), { reportError: false, cache: 'no-store' }),
   create: (input: ModelInput) => postJson<{ id: string }>('/settings/models/create', input),
-  update: (input: Partial<ModelInput> & { id: string }) => postJson<void>('/settings/models/update', input),
+  update: (input: ModelUpdate) => postJson<void>('/settings/models/update', input),
   delete: (id: string) => postJson<void>('/settings/models/delete', { id }),
   saveRoute: (route: Route, model_id: string | null) => postJson<void>('/settings/routes/save', { route, model_id }),
 };
@@ -37,5 +38,5 @@ export interface AgentSettings {
 }
 export const agentSettingsApi = {
   get: () => fetchClient<AgentSettings>('/settings/behavior', { reportError: false, cache: 'no-store' }),
-  save: (edit: Partial<AgentSettings>) => postJson<void>('/settings/behavior/save', edit),
+  save: (edit: { [Field in keyof AgentSettings]?: boolean | null }) => postJson<void>('/settings/behavior/save', edit),
 };

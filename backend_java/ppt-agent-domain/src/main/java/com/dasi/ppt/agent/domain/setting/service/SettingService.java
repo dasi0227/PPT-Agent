@@ -120,8 +120,8 @@ public class SettingService {
                 .build();
     }
 
-    public ModelConfigSettings getModelDetail(String id) {
-        ModelConfigSettings model = settingRepository.findModelById(id);
+    public ModelConfigSettings getModelDetail(String modelId) {
+        ModelConfigSettings model = settingRepository.findModelById(modelId);
         if (model == null) {
             throw notFound(ErrorCode.MODEL_NOT_FOUND);
         }
@@ -149,14 +149,14 @@ public class SettingService {
     }
 
     @Transactional
-    public void deleteModel(String id) {
-        if (settingRepository.isLastModel(id)) {
+    public void deleteModel(String modelId) {
+        if (settingRepository.isLastModel(modelId)) {
             throw invalid("至少保留一个模型配置");
         }
-        if (settingRepository.getModelRoutes().usesModel(id)) {
+        if (settingRepository.getModelRoutes().usesModel(modelId)) {
             throw conflict(ErrorCode.MODEL_IN_USE);
         }
-        if (settingRepository.deleteModel(id) == 0) {
+        if (settingRepository.deleteModel(modelId) == 0) {
             throw notFound(ErrorCode.MODEL_NOT_FOUND);
         }
     }

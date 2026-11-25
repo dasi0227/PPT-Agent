@@ -9,7 +9,7 @@ public interface AssetMapper {
 
     List<AssetPo> listAssets(@Param("type") String type, @Param("query") String query);
 
-    AssetPo findAssetById(String id);
+    AssetPo findAssetById(String assetId);
 
     String findAssetTypeById(String assetId);
 
@@ -21,7 +21,7 @@ public interface AssetMapper {
 
     void updateAssetTimestampsByTagId(@Param("tagId") String tagId, @Param("updatedAt") long updatedAt);
 
-    boolean isUsedAsProjectTheme(String id);
+    boolean isUsedAsProjectTheme(String assetId);
 
-    int deleteAsset(String id);
+    int deleteAsset(String assetId);
 }

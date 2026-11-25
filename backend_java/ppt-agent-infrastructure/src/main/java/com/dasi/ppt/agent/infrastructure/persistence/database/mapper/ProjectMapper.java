@@ -7,23 +7,23 @@ import java.util.List;
 
 public interface ProjectMapper {
 
-    List<ProjectPo> list();
+    List<ProjectPo> listProjects();
 
-    boolean exists(String id);
+    boolean existsProject(String projectId);
 
-    ProjectPo findAppearance(String id);
+    ProjectPo findProjectAppearance(String projectId);
 
-    ProjectPo findLogo(String id);
+    ProjectPo findProjectLogo(String projectId);
 
-    ProjectPo insert(ProjectPo project);
+    void insertProject(ProjectPo project);
 
-    ProjectPo updateTitle(@Param("id") String id, @Param("title") String title, @Param("updatedAt") long updatedAt);
+    int updateProjectTitle(@Param("projectId") String projectId, @Param("title") String title, @Param("updatedAt") long updatedAt);
 
-    int updateTheme(@Param("id") String id, @Param("theme") String theme, @Param("updatedAt") long updatedAt);
+    int updateProjectTheme(@Param("projectId") String projectId, @Param("themeId") String themeId, @Param("updatedAt") long updatedAt);
 
-    int updatePositions(ProjectPo project);
+    int updateProjectPositions(ProjectPo project);
 
-    int updateLogo(@Param("id") String id, @Param("logo") byte[] logo, @Param("updatedAt") long updatedAt);
+    int updateProjectLogo(@Param("projectId") String projectId, @Param("logo") byte[] logo, @Param("updatedAt") long updatedAt);
 
-    int delete(String id);
+    int deleteProject(String projectId);
 }

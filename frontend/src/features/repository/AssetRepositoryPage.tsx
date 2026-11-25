@@ -54,14 +54,15 @@ export function AssetRepositoryPage({ type, active = true }: { type: ResourceSco
   useEffect(() => {
     if (active) void loadList();
     return () => { ++listVersion.current; };
-  }, [active, loadList]);
+  }, [active, loadList, refreshVersion]);
   useEffect(() => {
     if (active) void loadTags(type).catch(err => showGlobalError(err.message));
     else { setEditor(undefined); setManageTags(false); }
     return () => { ++editVersion.current; };
   }, [active, loadTags, type]);
   useEffect(() => { if (requested) { select(requested); search(''); setFilter(''); } }, [requested]);
-  const visible = filter && tags.some(tag => tag.id === filter) ? items.filter(item => item.tag_ids.includes(filter)) : items;
+  const activeFilter = tags.some(tag => tag.id === filter) ? filter : '';
+  const visible = activeFilter ? items.filter(item => item.tag_ids.includes(activeFilter)) : items;
   const selected = visible.find(item => item.id === selectedId) ?? visible[0];
   const id = selected?.id;
   const updatedAt = selected?.updated_at;
@@ -74,15 +75,20 @@ export function AssetRepositoryPage({ type, active = true }: { type: ResourceSco
       if (current) {
         setPreview(detail);
         if (detail.updated_at !== updatedAt) {
-          setItems(rows => rows.map(row => row.id === id ? detail : row));
+          setItems(rows => rows.map(row => row.id === id && row.updated_at < detail.updated_at ? detail : row));
         }
       }
     }).catch(err => { if (current) setPreviewError(err.message); });
     return () => { current = false; };
   }, [active, id, updatedAt, currentPreview, refreshVersion]);
+  const refreshList = () => {
+    ++listVersion.current;
+    setRefreshVersion(version => version + 1);
+  };
   const refresh = async () => {
-    setPreview(undefined); setPreviewError(''); setRefreshVersion(version => version + 1);
-    await Promise.all([loadTags(type), loadList()]);
+    setPreview(undefined);
+    refreshList();
+    await loadTags(type, true);
   };
   async function edit(item: AssetInfo) {
     const version = ++editVersion.current;
@@ -91,15 +97,17 @@ export function AssetRepositoryPage({ type, active = true }: { type: ResourceSco
       if (editVersion.current === version) setEditor({ id, value: { name, description, tag_ids, content } });
     } catch (err) { showGlobalError(err instanceof Error ? err.message : '正文加载失败'); }
   }
-  async function refreshSavedAsset(id: string) {
+  async function refreshSavedAsset(id: string, selectSaved = false) {
     try {
       const detail = await assetsApi.detail(id);
-      ++listVersion.current;
-      setItems(rows => [detail, ...rows.filter(row => row.id !== id)]);
-      setPreview(detail);
+      setItems(rows => selectSaved
+        ? [detail, ...rows.filter(row => row.id !== id)]
+        : rows.map(row => row.id === id ? detail : row));
+      setPreview(current => selectSaved || current?.id === id ? detail : current);
     } catch (cause) {
       showGlobalError('资产已保存，读取详情失败。' + (cause instanceof Error ? cause.message : ''));
-      await loadList();
+    } finally {
+      refreshList();
     }
   }
   async function save(draft: AssetDraft) {
@@ -111,11 +119,10 @@ export function AssetRepositoryPage({ type, active = true }: { type: ResourceSco
       ...(draft.tag_ids !== value.tag_ids && { tag_ids: draft.tag_ids }),
       ...(draft.content !== value.content && { content: draft.content }),
     };
-    if (id && !Object.keys(changes).length) return;
     let savedId = id;
     if (savedId) await assetsApi.update(savedId, changes);
     else savedId = (await assetsApi.create(type, draft)).id;
-    await refreshSavedAsset(savedId);
+    await refreshSavedAsset(savedId, true);
     select(savedId);
     search(''); setFilter('');
   }
@@ -132,6 +139,7 @@ export function AssetRepositoryPage({ type, active = true }: { type: ResourceSco
     try {
       await assetsApi.delete(item.id);
       setItems(current => current.filter(row => row.id !== item.id));
+      refreshList();
     } catch (err) { showGlobalError(err instanceof Error ? err.message : '删除失败'); throw err; }
   }
   return <RepositoryShell section={type} onRefresh={() => void refresh().catch(err => showGlobalError(err.message))}>
@@ -142,12 +150,12 @@ export function AssetRepositoryPage({ type, active = true }: { type: ResourceSco
       </>} />
       {loading ? <RepositoryLoading aside /> : error ? <RepositoryState text={error} error /> : <RepositoryWorkspace>
         <RepositoryCatalog label={title + '列表'} controls={<>
-          <RepositoryFilterButton active={!filter} onClick={() => setFilter('')}>全部</RepositoryFilterButton>
-          {tags.map(tag => <RepositoryFilterButton key={tag.id} active={filter === tag.id} onClick={() => setFilter(tag.id)}>{tag.name}</RepositoryFilterButton>)}
+          <RepositoryFilterButton active={!activeFilter} onClick={() => setFilter('')}>全部</RepositoryFilterButton>
+          {tags.map(tag => <RepositoryFilterButton key={tag.id} active={activeFilter === tag.id} onClick={() => setFilter(tag.id)}>{tag.name}</RepositoryFilterButton>)}
         </>}>
           {visible.length ? visible.map(item => <RepositoryDirectoryItem key={item.id} active={selected?.id === item.id} disabled={!item.enabled}
             name={item.name} description={item.description} descriptionLines={type === 'skill' ? 3 : 2} icon={icon} onClick={() => select(item.id)} />)
-            : <RepositoryState text={type === 'snippet' && !query && !filter ? '暂无短语' : '没有匹配的' + title} className="min-h-40" />}
+            : <RepositoryState text={type === 'snippet' && !query && !activeFilter ? '暂无短语' : '没有匹配的' + title} className="min-h-40" />}
         </RepositoryCatalog>
         {selected ? <RepositoryDetail key={selected.id} active={active} label={type === 'skill' ? '技能说明' : title + '详情'} title={selected.name} description={selected.description}
           properties={<RepositoryTagList tags={selected.tag_ids.flatMap(id => tags.find(tag => tag.id === id)?.name ?? [])} />}
@@ -160,6 +168,9 @@ export function AssetRepositoryPage({ type, active = true }: { type: ResourceSco
       </RepositoryWorkspace>}
     </div>
     {active && editor && <RepositoryEditDialog title={(editor.id ? '编辑' : '创建') + title} value={editor.value} tags={tags} onClose={() => setEditor(undefined)} onSave={save} />}
-    {active && manageTags && <RepositoryTagsDialog type={type} tags={tags} onClose={() => setManageTags(false)} onChange={async () => { setFilter(''); await refresh(); }} />}
+    {active && manageTags && <RepositoryTagsDialog type={type} tags={tags} onClose={() => setManageTags(false)} onChange={async () => {
+      refreshList();
+      await loadTags(type, true);
+    }} />}
   </RepositoryShell>;
 }

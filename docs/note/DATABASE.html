@@ -254,7 +254,7 @@
               <td class="nullable">否</td>
               <td>无</td>
               <td>项目最后修改时间，毫秒时间戳；供列表排序及显示。</td>
-              <td class="decision">实际变化时更新，同值保存不更新。</td>
+              <td class="decision">每次成功改名都严格递增，包括提交原名。外观实际变化时也递增。</td>
             </tr>
           </tbody>
         </table>
@@ -336,7 +336,7 @@
               <td class="nullable">否</td>
               <td>无</td>
               <td>会话的更新时间，毫秒时间戳；供列表排序。</td>
-              <td class="decision">—</td>
+              <td class="decision">每次成功改名都严格递增，包括提交原名。</td>
             </tr>
           </tbody>
         </table>
@@ -1398,7 +1398,7 @@
               <td class="nullable">否</td>
               <td>无</td>
               <td>模型 API 的基础地址。</td>
-              <td class="decision">非空白字符串，保存规范化后的模型基础地址。</td>
+              <td class="decision">非空白字符串，按提交值保存。</td>
             </tr>
             <tr id="settings-models-model">
               <th scope="row"><code>model</code></th>

@@ -19,7 +19,7 @@
 - `infrastructure/persistence/database/po/` 为每张业务表定义一个 `XxxPo`。
 - `infrastructure/persistence/database/mapper/` 为每张业务表定义一个同名前缀的 `XxxMapper` 接口。
 - Mapper 读写整组字段时使用 PO，返回多条记录时使用 PO 列表。按 ID 修改单项、查询单值或批量绑定 ID 时直接使用对应的标量或集合。领域实体、枚举与持久化表示的转换由 Repository 完成。
-- 项目 Logo 通过 `ProjectPo.logo` 的字段级 `ByteArrayTypeHandler` 读取 SQLite BLOB，Repository 返回 `byte[]`。该处理器使用当前 SQLite JDBC 驱动支持的 `getBytes()`。
+- 单独读取项目 Logo 时，Mapper 通过 SQLite JDBC 的 `getBytes()` 读取 BLOB 并返回 `byte[]`。
 - Mapper XML 位于 `ppt-agent-infrastructure/src/main/resources/mapper/`。
 - SQLite `TEXT` 列在 PO、Mapper 参数及结果映射中统一使用 `String`，包括状态、类型、模式和协议。
 - `infrastructure/persistence/database/ReceiptType` 定义数据库凭据类型 `create_run / create_command / agent / manual`，由仓储与 `ReceiptPo.type` 的字符串值相互转换。[凭据类型](DATABASE_SPEC.md#receipts)
@@ -33,8 +33,8 @@
 
 - `interfaces/controller/` 按功能分为 `project`、`asset`、`setting`、`export`、`file`、`session`、`history`、`execution`、`interaction`、`checkpoint` 和 `system`。
 - 每个功能包就近存放 `XxxController.java`。有请求体或结构化响应时，分别将顶层请求类型和响应类型放在 `dto/` 和 `vo/`。
-- DTO 声明请求的必填、长度和格式约束，Controller 通过 `@Valid` 触发校验，失败返回 `INVALID_ARGUMENT`。Service 负责业务规则，包括默认路由需绑定模型、名称唯一性和正文版本冲突。
-- 项目、会话、资产与模型配置的创建和更新 DTO，以及保存单个模型路由的 `SaveRouteDto`，均通过 `controller/dto/StrictRequestDto` 拒绝未声明的字段。
+- DTO 用 Jakarta Validation 声明单字段约束，Controller 通过 `@Valid` 触发校验，失败返回 `INVALID_ARGUMENT`。Service 在对应写方法中依次检查业务条件，包括默认路由需绑定模型、名称唯一性和正文版本冲突。
+- JSON 请求的未知字段由统一的 Jackson 反序列化配置处理。
 - GET 的路径和查询参数由 Controller 直接接收。
 - 图片、下载和静态资源使用各自的 HTTP 响应类型。无响应体的接口直接返回空响应体。
 - `controller/system/SystemController.java` 提供健康检查和内置预览资源读取接口。
@@ -52,25 +52,24 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 | `project` | `ProjectAppearanceVo` | `DecorationPositionsVo` |
 | `session` | `SessionListVo` | `SessionSummaryVo` |
 | `session` | `SessionStateVo` | `PlanVo`、`PlanStepVo`、`ContextWindowVo`、`ContextDetailsVo`、`TokenBreakdownItemVo` |
-| `history` | `HistoryPageVo` | `HistoryItemVo`、`RunHistoryVo`、`CommandHistoryVo`、`HistoryInstructionVo`、`HistoryReplyVo`、`PublicReferenceVo`、`CommandSummaryResultVo`、`ChangeSummaryVo` |
+| `history` | `HistoryListVo` | `HistoryItemVo`、`RunHistoryVo`、`CommandHistoryVo`、`HistoryInstructionVo`、`HistoryReplyVo`、`PublicReferenceVo`、`CommandSummaryResultVo`、`ChangeSummaryVo` |
 | `history` | `RunChangesVo` | `ChangeTargetVo`、`RunChangeDetailVo`、`ChangeDiffVo`、`FieldDiffVo`、`FieldDiffRowVo`、`OutlineDiffGroupVo`、`OutlineDiffRowVo`、`TextDiffHunkVo`、`TextDiffRowVo` |
-| `history` | `RunDetailVo` | `RunMessageVo`、`RunUsageVo`、`PendingInteractionVo`、`ExecutionFailureVo` |
-| `history` | `CommandDetailVo` | `CommandInputVo`、`CommandResultVo` |
-| `history` | `ToolDetailVo` | `ToolResultVo`、`ToolChangedTargetVo`、`ToolImageVo`、`LoadedResourceVo`、`ToolCommandVo`、`ToolInteractionVo`、`PreviewAssessmentVo`、`PreviewScoresVo`、`PreviewJudgesVo` |
+| `history` | `RunInfoVo` | `RunMessageVo`、`RunUsageVo`、`PendingInteractionVo`、`ExecutionFailureVo` |
+| `history` | `CommandInfoVo` | `CommandInputVo`、`CommandResultVo` |
+| `history` | `ToolInfoVo` | `ToolResultVo`、`ToolChangedTargetVo`、`ToolImageVo`、`LoadedResourceVo`、`ToolCommandVo`、`ToolInteractionVo`、`PreviewAssessmentVo`、`PreviewScoresVo`、`PreviewJudgesVo` |
 | `execution` | `AppendRunDto` | `RunScopeDto`、`InstructionReferenceDto`、`DomRegionDto`、`DomTargetDto`、`DomDecorationDto`、`DomFingerprintDto`、`DomAncestorDto`、`CanvasRectDto` |
 | `interaction` | `AnswerQuestionsDto` | `QuestionAnswerDto` |
 | `interaction` | `InteractionFormVo` | `QuestionVo`、`QuestionOptionVo`、`PlanFormVo`、`PermissionFormVo`、`ScopeFormVo`、`InteractionRequestVo`、`InteractionAnswerVo`、`QuestionAnswerVo` |
 | `checkpoint` | `RollbackVo` | `RollbackInputVo`、`InitialScopeVo`、`FullReferenceVo` |
 
-- 单个 POST 接口专用的成功响应 VO 按动作命名。有对应请求 DTO 时，两者使用相同的动作名。
-- `CreateProjectDto` 创建项目，`UpdateProjectDto` 修改项目名称。两者均返回顶层 `ProjectInfoVo`，包含已保存的项目 ID、名称和更新时间。`ProjectListVo.items` 复用该类型。
+- 普通 CRUD 的创建接口共用 `IdVo`，更新接口返回 `void`。列表和详情响应分别使用 `XxxListVo` 和 `XxxInfoVo`。
+- `CreateProjectDto` 创建项目，`UpdateProjectDto` 修改项目名称。`ProjectListVo.items` 使用 `ProjectInfoVo` 返回项目 ID、名称和更新时间。
 - `SaveProjectThemeDto` 提交项目主题，`SaveProjectPositionsDto` 提交四项装饰位置，两者分别使用独立的顶层请求结构。
-- 资产、标签和模型配置的创建接口共用 `IdVo`。标签列表项使用 `TagInfoVo`。
-- 资产列表项和详情共用 `AssetInfoVo`，仅详情含 `content`。更新成功返回空响应体。
+- 标签列表项使用 `TagListVo.TagInfoVo`。
+- 资产列表项和详情共用 `AssetInfoVo`，列表中 `content` 为 `null`，详情中为正文。更新成功返回空响应体。
 - 选择本地应用使用 `PickApplicationVo` 返回 `path`，取消选择时该字段为 `null`。
-- `CreateExportDto` 对应 `CreateExportVo`，返回导出任务 `id`。
-- `UploadAttachmentDto` 对应 `UploadAttachmentVo`，返回附件 `id`。
-- `CreateSessionDto` 创建会话，`UpdateSessionDto` 修改会话标题，两者共用 `SessionIdVo` 返回会话 `id`。
+- 创建导出任务和上传新附件均使用 `IdVo` 返回资源 ID。
+- `CreateSessionDto` 创建会话，`UpdateSessionDto` 修改会话标题。
 - `DeleteSessionPlanDto` 对应 `DeleteSessionPlanVo`，返回提交后的会话 `revision`。
 - `AppendRunDto` 对应 `AppendRunVo`，返回指令受理后所属的 `run_id`。
 - `AppendCommandDto` 对应 `AppendCommandVo`，返回受理的单次命令执行 `id`。
@@ -78,7 +77,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `ContentHashVo` 供基本信息、约束、大纲、单页规格和单页 HTML 的保存接口共用。
 - 文稿正文沿用 `Meta`、`Constraint`、`Outline`、`Spec` 对应的 JSON 结构。
 - 文件打开设置的读取和保存共用 `FileOpenSettingsVo`，返回实际生效的打开方式和自定义应用列表。
-- `CreateModelDto` 创建模型配置，`UpdateModelDto` 局部更新已有配置，密钥均只写，更新成功返回空响应体。模型详情返回 `ModelConfigVo`。读取模型设置时，`ModelSettingsVo` 组合 `List<ModelConfigVo>` 和 `ModelRoutesVo`，后二者均为顶层类。`DeleteModelDto` 按 ID 删除模型，`SaveRouteDto` 指定路由项及目标模型 ID。[模型设置字段](API.html#settings)
+- `CreateModelDto` 创建模型配置，`UpdateModelDto` 局部更新已有配置，密钥均只写，更新成功返回空响应体。模型详情返回 `ModelConfigInfoVo`。读取模型设置时，`ModelSettingsVo` 组合 `List<ModelConfigInfoVo>` 和 `ModelRoutesVo`，后二者均为顶层类。`DeleteModelDto` 按 ID 删除模型，`SaveRouteDto` 指定路由项及目标模型 ID。[模型设置字段](API.html#settings)
 - `RunChangesVo` 在差异条目上直接返回 `type` 及对应明细字段。工具结果与权限审批候选将同一结构放入各条目的 `diff`。[变更与工具详情](API.html#history)
 - `InteractionRequestVo` 表示表单内容。待答表单附带 `type` 与 `version`，工具详情通过 `interaction.request` 返回当时的表单内容。[人工与工具详情](API.html#interactions)
 - `PublicReferenceVo` 仅用于历史展示。回退回填使用 `FullReferenceVo` 保留 DOM 原文与注释。[历史与回退](API_SPEC.md#消息)

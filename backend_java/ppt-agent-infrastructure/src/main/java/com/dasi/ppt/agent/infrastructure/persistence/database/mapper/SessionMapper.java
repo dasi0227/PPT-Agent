@@ -6,7 +6,9 @@ import java.util.List;
 
 public interface SessionMapper {
 
-    boolean exists(String id);
+    boolean exists(String sessionId);
+
+    List<String> listProjectSessionIds(String projectId);
 
     List<SessionPo> listRevisions(String projectId);
 
