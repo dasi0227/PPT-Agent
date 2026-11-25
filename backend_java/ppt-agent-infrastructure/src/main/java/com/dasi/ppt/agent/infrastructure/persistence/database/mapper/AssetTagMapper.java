@@ -6,7 +6,9 @@ import java.util.List;
 
 public interface AssetTagMapper {
 
-    void insert(@Param("assetId") String assetId, @Param("tagIds") List<String> tagIds);
+    List<String> listIds(String assetId);
 
-    void deleteByAsset(String assetId);
+    int insert(@Param("assetId") String assetId, @Param("tagIds") List<String> tagIds);
+
+    int deleteExcept(@Param("assetId") String assetId, @Param("tagIds") List<String> tagIds);
 }

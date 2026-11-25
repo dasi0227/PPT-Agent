@@ -11,8 +11,13 @@
         SELECT id, type, name FROM tags WHERE type = #{type} ORDER BY name, id
     </select>
 
-    <select id="listNames" resultType="string">
-        SELECT name FROM tags WHERE type = #{type}
+    <select id="countByIds" resultType="int">
+        SELECT COUNT(*) FROM tags WHERE type = #{type} AND id IN
+        <foreach collection="tagIds" item="id" open="(" separator="," close=")">#{id}</foreach>
+    </select>
+
+    <select id="nameExists" resultType="boolean">
+        SELECT EXISTS (SELECT 1 FROM tags WHERE type = #{type} AND name = #{name})
     </select>
 
     <insert id="insert">

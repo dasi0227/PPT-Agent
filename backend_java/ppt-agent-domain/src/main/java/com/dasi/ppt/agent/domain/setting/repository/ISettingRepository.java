@@ -25,17 +25,19 @@ public interface ISettingRepository {
 
     List<ModelConfigSettings> readModels();
 
+    ModelConfigSettings readModel(String id);
+
     ModelRouteSettings readRoutes();
 
     boolean modelNameExists(String name, String excludeId);
 
-    void requireModel(String id);
+    boolean modelExists(String id);
 
     int countModels();
 
     void insertModel(ModelConfigSettings model);
 
-    ModelConfigSettings updateModel(ModelConfigSettings model);
+    void updateModel(ModelConfigSettings model);
 
     void deleteModel(String id);
 

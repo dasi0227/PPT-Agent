@@ -12,7 +12,11 @@ public interface IAssetRepository {
 
     Asset findAsset(String assetId);
 
+    boolean exists(String assetId, AssetType type);
+
     List<Tag> listTags(AssetType type);
+
+    int countTags(AssetType type, List<String> tagIds);
 
     boolean existTagName(AssetType type, String name);
 
@@ -24,7 +28,7 @@ public interface IAssetRepository {
 
     void insert(Asset asset);
 
-    void update(Asset asset, boolean tagsChanged);
+    void update(Asset asset);
 
     boolean isUsed(String assetId);
 

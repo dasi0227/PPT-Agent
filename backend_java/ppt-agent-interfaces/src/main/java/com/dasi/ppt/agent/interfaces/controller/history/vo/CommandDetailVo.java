@@ -2,7 +2,6 @@ package com.dasi.ppt.agent.interfaces.controller.history.vo;
 
 import com.dasi.ppt.agent.domain.agent.model.enumeration.CommandStatus;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.CommandType;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -28,7 +27,6 @@ public final class CommandDetailVo {
     private RunDetailVo.ExecutionFailureVo failure;
 
     @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     @Getter
     @AllArgsConstructor
     @NoArgsConstructor
@@ -39,7 +37,6 @@ public final class CommandDetailVo {
     }
 
     @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     @Getter
     @AllArgsConstructor
     @NoArgsConstructor

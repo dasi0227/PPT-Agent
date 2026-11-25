@@ -9,6 +9,8 @@ public interface LlmConfigMapper {
 
     List<LlmConfigPo> list();
 
+    LlmConfigPo find(String id);
+
     boolean nameExists(@Param("name") String name, @Param("excludeId") String excludeId);
 
     boolean exists(@Param("id") String id);
@@ -17,7 +19,7 @@ public interface LlmConfigMapper {
 
     void insert(LlmConfigPo model);
 
-    LlmConfigPo update(LlmConfigPo model);
+    int update(LlmConfigPo model);
 
     void delete(@Param("id") String id);
 }

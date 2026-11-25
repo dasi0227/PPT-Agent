@@ -1,6 +1,5 @@
 package com.dasi.ppt.agent.interfaces.controller.project.dto;
 
-import com.dasi.ppt.agent.interfaces.controller.StrictRequestDto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
@@ -12,7 +11,7 @@ import lombok.NoArgsConstructor;
 @Getter
 @AllArgsConstructor
 @NoArgsConstructor
-public final class UpdateProjectDto implements StrictRequestDto {
+public final class UpdateProjectDto {
     @NotBlank
     private String projectId;
     @NotBlank

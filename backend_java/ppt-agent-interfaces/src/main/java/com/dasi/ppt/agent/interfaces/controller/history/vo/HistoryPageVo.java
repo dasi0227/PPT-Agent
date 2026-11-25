@@ -7,7 +7,6 @@ import com.dasi.ppt.agent.domain.agent.model.enumeration.InstructionReferenceTyp
 import com.dasi.ppt.agent.domain.agent.model.enumeration.InstructionStatus;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.RunStatus;
 import com.dasi.ppt.agent.domain.project.model.enumeration.ChangeStatus;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -25,7 +24,6 @@ public final class HistoryPageVo {
     private List<HistoryItemVo> items;
 
     @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     @Getter
     @AllArgsConstructor
     @NoArgsConstructor
@@ -91,7 +89,6 @@ public final class HistoryPageVo {
     }
 
     @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     @Getter
     @AllArgsConstructor
     @NoArgsConstructor
@@ -106,7 +103,6 @@ public final class HistoryPageVo {
     }
 
     @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     @Getter
     @AllArgsConstructor
     @NoArgsConstructor

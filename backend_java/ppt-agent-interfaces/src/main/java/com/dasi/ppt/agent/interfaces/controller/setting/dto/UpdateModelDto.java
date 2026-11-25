@@ -3,7 +3,6 @@ package com.dasi.ppt.agent.interfaces.controller.setting.dto;
 import com.dasi.ppt.agent.domain.setting.model.entity.ModelConfigSettings;
 import com.dasi.ppt.agent.domain.setting.model.enumeration.LlmProtocol;
 import com.dasi.ppt.agent.domain.setting.model.enumeration.ModelProvider;
-import com.dasi.ppt.agent.interfaces.controller.StrictRequestDto;
 import com.dasi.ppt.agent.interfaces.controller.NotBlankIfPresent;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -16,7 +15,7 @@ import lombok.NoArgsConstructor;
 @Getter
 @AllArgsConstructor
 @NoArgsConstructor
-public final class UpdateModelDto implements StrictRequestDto {
+public final class UpdateModelDto {
     @NotBlank(message = "更新模型需指定 id")
     private String id;
     @NotBlankIfPresent(message = "模型配置名不能为空白")

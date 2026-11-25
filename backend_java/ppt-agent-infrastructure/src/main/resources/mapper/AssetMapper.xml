@@ -44,9 +44,18 @@
         ORDER BY link.tag_id
     </select>
 
-    <select id="listNames" resultType="string">
-        SELECT name FROM assets WHERE type = #{type}
-        <if test="excludeAssetId != null">AND id != #{excludeAssetId}</if>
+    <select id="exists" resultType="boolean">
+        SELECT EXISTS (SELECT 1 FROM assets WHERE id = #{id} AND type = #{type})
+    </select>
+
+    <select id="nameExists" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1 FROM assets WHERE type = #{type} AND name = #{name}
+            <if test="excludeAssetId != null">
+                AND id != #{excludeAssetId}
+                AND EXISTS (SELECT 1 FROM assets WHERE id = #{excludeAssetId} AND type = #{type})
+            </if>
+        )
     </select>
 
     <insert id="insert">
@@ -55,9 +64,18 @@
     </insert>
 
     <update id="update">
-        UPDATE assets SET name = #{name}, description = #{description}, content = #{content},
-                          enabled = #{enabled}, updated_at = #{updatedAt}
-        WHERE id = #{id}
+        UPDATE assets SET
+            name = COALESCE(#{asset.name}, name),
+            description = COALESCE(#{asset.description}, description),
+            content = COALESCE(#{asset.content}, content),
+            enabled = COALESCE(#{asset.enabled}, enabled),
+            updated_at = CASE WHEN #{tagsChanged}
+                OR name != #{asset.name}
+                OR description != #{asset.description}
+                OR content != #{asset.content}
+                OR enabled != #{asset.enabled}
+                THEN MAX(updated_at + 1, #{now}) ELSE updated_at END
+        WHERE id = #{asset.id} AND type = #{asset.type.value}
     </update>
 
     <update id="updateTimestampsByTag">

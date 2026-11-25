@@ -1,4 +1,4 @@
-package com.dasi.ppt.agent.interfaces.controller.asset.vo;
+package com.dasi.ppt.agent.interfaces.controller;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -9,7 +9,6 @@ import lombok.NoArgsConstructor;
 @Getter
 @AllArgsConstructor
 @NoArgsConstructor
-public final class AssetContentVo {
-    private String content;
-    private String hash;
+public final class IdVo {
+    private String id;
 }

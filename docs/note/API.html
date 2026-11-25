@@ -239,7 +239,7 @@
               <td><code>POST /api/projects/create</code></td>
               <td>
                 <ul class="fields">
-                  <li><code>title</code>：非空白项目名称，提交值最多 60 个 UTF-16 代码单元，保存时去除首尾空白</li>
+                  <li><code>title</code>：非空白项目名称，提交值最多 60 个 UTF-16 代码单元，按原样保存</li>
                 </ul>
                 <p>新项目默认无主题。</p>
               </td>
@@ -257,7 +257,7 @@
               <td>
                 <ul class="fields">
                   <li><code>project_id</code>：需修改的项目 ID</li>
-                  <li><code>title</code>：非空白项目名称，提交值最多 60 个 UTF-16 代码单元，保存时去除首尾空白</li>
+                  <li><code>title</code>：非空白项目名称，提交值最多 60 个 UTF-16 代码单元，按原样保存</li>
                 </ul>
               </td>
               <td>
@@ -449,7 +449,6 @@
                   <li><code>items[].enabled</code>：布尔值，是否启用</li>
                   <li><code>items[].tag_ids</code>：同类标签 ID 数组</li>
                   <li><code>items[].updated_at</code>：最后修改时间，毫秒时间戳</li>
-                  <li><code>items[].hash</code>：null</li>
                 </ul>
               </td>
             </tr>
@@ -475,15 +474,10 @@
               <td>
                 <ul class="fields">
                   <li><code>type</code>：必填，theme / component / skill / snippet</li>
-                  <li><code>name</code>：必填，去除首尾空白后非空，同一类型内不区分大小写地保持唯一</li>
+                  <li><code>name</code>：必填，不能为空白，同一类型内按原名称保持唯一</li>
                 </ul>
               </td>
-              <td>
-                <ul class="fields">
-                  <li><code>id</code>：新标签 ID</li>
-                  <li><code>name</code>：去除首尾空白、保留大小写的显示名称</li>
-                </ul>
-              </td>
+              <td><code>id</code>：新标签 ID</td>
             </tr>
             <tr>
               <th scope="row">删除标签</th>
@@ -496,32 +490,12 @@
               <td>无</td>
             </tr>
             <tr>
-              <th scope="row">读取资产正文</th>
+              <th scope="row">读取资产详情</th>
               <td><code>GET /api/assets/{asset_id}</code></td>
               <td>
                 <ul class="fields">
                   <li><code>asset_id</code>：资产 ID</li>
                 </ul>
-              </td>
-              <td>
-                <ul class="fields">
-                  <li><code>content</code>：主题 CSS、组件 HTML、技能 Markdown 或短语纯文本，原样返回字符串</li>
-                  <li><code>hash</code>：原文哈希，用于预览缓存和编辑校验</li>
-                </ul>
-              </td>
-            </tr>
-            <tr id="assets-create">
-              <th scope="row">创建资产</th>
-              <td><code>POST /api/assets/create</code></td>
-              <td>
-                <ul class="fields">
-                  <li><code>type</code>：theme / component / skill / snippet</li>
-                  <li><code>name</code>：提交值不能为空白，最长 80，保存时去除首尾空白，同一类型内不区分大小写唯一</li>
-                  <li><code>description</code>：提交值不能为空白，最长 500，保存时去除首尾空白</li>
-                  <li><code>content</code>：该类型的完整正文</li>
-                  <li><code>tag_ids</code>：可选，同类标签 ID 数组，默认空数组</li>
-                </ul>
-                <p>新资产默认启用。type、name、description 和 content 均需提供。</p>
               </td>
               <td>
                 <ul class="fields">
@@ -531,10 +505,25 @@
                   <li><code>description</code>：保存后的描述</li>
                   <li><code>enabled</code>：布尔值，是否启用</li>
                   <li><code>tag_ids</code>：保存后的同类标签 ID 数组</li>
-                  <li><code>hash</code>：资产正文的哈希</li>
                   <li><code>updated_at</code>：最后修改时间，毫秒时间戳</li>
+                  <li><code>content</code>：主题 CSS、组件 HTML、技能 Markdown 或短语纯文本</li>
                 </ul>
               </td>
+            </tr>
+            <tr id="assets-create">
+              <th scope="row">创建资产</th>
+              <td><code>POST /api/assets/create</code></td>
+              <td>
+                <ul class="fields">
+                  <li><code>type</code>：theme / component / skill / snippet</li>
+                  <li><code>name</code>：提交值不能为空白，最长 80，按原样保存，同一类型内按原名称保持唯一</li>
+                  <li><code>description</code>：提交值不能为空白，最长 500，按原样保存</li>
+                  <li><code>content</code>：该类型的完整正文</li>
+                  <li><code>tag_ids</code>：可选，同类标签 ID 数组，默认空数组</li>
+                </ul>
+                <p>新资产默认启用。type、name、description 和 content 均需提供。</p>
+              </td>
+              <td><code>id</code>：新资产 ID</td>
             </tr>
             <tr id="assets-update">
               <th scope="row">更新资产</th>
@@ -542,19 +531,17 @@
               <td>
                 <ul class="fields">
                   <li><code>asset_id</code>：已有资产的 ID</li>
-                  <li><code>name</code>：提交值不能为空白，最长 80，保存时去除首尾空白，同一类型内不区分大小写唯一</li>
-                  <li><code>description</code>：提交值不能为空白，最长 500，保存时去除首尾空白</li>
-                  <li><code>content</code>：替换后的完整正文，与 base_hash 同时提供</li>
-                  <li><code>base_hash</code>：读取正文时的哈希</li>
+                  <li><code>type</code>：必填，与已有资产类型一致</li>
+                  <li><code>name</code>：提交值不能为空白，最长 80，按原样保存，同一类型内按原名称保持唯一</li>
+                  <li><code>description</code>：提交值不能为空白，最长 500，按原样保存</li>
+                  <li><code>content</code>：替换后的完整正文</li>
                   <li><code>tag_ids</code>：同类标签 ID 数组，传 [] 清空</li>
                   <li><code>enabled</code>：布尔值，true 启用，false 停用</li>
                 </ul>
-                <p>至少提供一个非 null 的可修改字段。可修改字段省略或为 null 时保留原值。</p>
+                <p>至少提供一个非 null 的可修改字段。可修改字段省略或为 null 时保留原值。同值更新保留原 updated_at。</p>
                 <p>停用项目正在使用的主题时返回 <code>ASSET_IN_USE</code>，提示“项目正在使用该主题，无法停用”。</p>
               </td>
-              <td>
-                <p>返回保存后的资产信息，字段与<a href="#assets-create">创建资产</a>相同。同值更新保留原 <code>updated_at</code>。</p>
-              </td>
+              <td>无</td>
             </tr>
             <tr>
               <th scope="row">删除资产</th>
@@ -706,20 +693,10 @@
                 </ul>
               </td>
             </tr>
-            <tr id="settings-models-create">
-              <th scope="row">创建模型配置</th>
-              <td><code>POST /api/settings/models/create</code></td>
-              <td>
-                <ul class="fields">
-                  <li><code>name</code>：唯一配置名，提交值不能为空白，最长 80，保存时去除首尾空白</li>
-                  <li><code>protocol</code>：responses 或 anthropic</li>
-                  <li><code>base_url</code>：模型基础地址，提供时需为非空白字符串</li>
-                  <li><code>provider</code>：模型品牌，可选值为deepseek、kimi、mimo、gpt、claude、gemini、qwen、minimax、glm、grok</li>
-                  <li><code>model</code>：非空白的上游模型名</li>
-                  <li><code>key</code>：只写的非空白密钥</li>
-                </ul>
-                <p>六个字段均需提供。</p>
-              </td>
+            <tr>
+              <th scope="row">读取单个模型配置</th>
+              <td><code>GET /api/settings/models/{id}</code></td>
+              <td><code>id</code>：模型配置 ID</td>
               <td>
                 <ul class="fields">
                   <li><code>id</code>：稳定的模型配置 ID</li>
@@ -731,31 +708,38 @@
                 </ul>
               </td>
             </tr>
-            <tr id="settings-models-update">
-              <th scope="row">更新模型配置</th>
-              <td><code>POST /api/settings/models/update</code></td>
+            <tr id="settings-models-create">
+              <th scope="row">创建模型配置</th>
+              <td><code>POST /api/settings/models/create</code></td>
               <td>
                 <ul class="fields">
-                  <li><code>id</code>：已有模型配置的 ID</li>
-                  <li><code>name</code>：唯一配置名，提交值不能为空白，最长 80，保存时去除首尾空白</li>
+                  <li><code>name</code>：唯一配置名，提交值不能为空白，最长 80，按原样保存</li>
                   <li><code>protocol</code>：responses 或 anthropic</li>
                   <li><code>base_url</code>：模型基础地址，提供时需为非空白字符串</li>
                   <li><code>provider</code>：模型品牌，可选值为deepseek、kimi、mimo、gpt、claude、gemini、qwen、minimax、glm、grok</li>
                   <li><code>model</code>：非空白的上游模型名</li>
                   <li><code>key</code>：只写的非空白密钥</li>
                 </ul>
-                <p>可修改字段省略或为 null 时保留原值，包括密钥。只传 ID 时返回当前公开配置。</p>
+                <p>六个字段均需提供。</p>
               </td>
+              <td><code>id</code>：新模型配置 ID</td>
+            </tr>
+            <tr id="settings-models-update">
+              <th scope="row">更新模型配置</th>
+              <td><code>POST /api/settings/models/update</code></td>
               <td>
                 <ul class="fields">
-                  <li><code>id</code>：稳定的模型配置 ID</li>
-                  <li><code>name</code>：生效的配置名</li>
-                  <li><code>protocol</code>：生效的协议</li>
-                  <li><code>base_url</code>：保存后的模型基础地址</li>
-                  <li><code>model</code>：上游模型名</li>
-                  <li><code>provider</code>：保存的模型品牌</li>
+                  <li><code>id</code>：已有模型配置的 ID</li>
+                  <li><code>name</code>：唯一配置名，提交值不能为空白，最长 80，按原样保存</li>
+                  <li><code>protocol</code>：responses 或 anthropic</li>
+                  <li><code>base_url</code>：模型基础地址，提供时需为非空白字符串</li>
+                  <li><code>provider</code>：模型品牌，可选值为deepseek、kimi、mimo、gpt、claude、gemini、qwen、minimax、glm、grok</li>
+                  <li><code>model</code>：非空白的上游模型名</li>
+                  <li><code>key</code>：只写的非空白密钥</li>
                 </ul>
+                <p>可修改字段省略或为 null 时保留原值，包括密钥。只传 ID 时保留现有配置。</p>
               </td>
+              <td>无</td>
             </tr>
             <tr>
               <th scope="row">删除单个模型配置</th>
@@ -1644,7 +1628,7 @@
               <td>
                 <ul class="fields">
                   <li><code>project_id</code>：项目 ID</li>
-                  <li><code>path</code>：项目根目录内的相对文件路径，来自资料、源码或工具修改目标</li>
+                  <li><code>path</code>：相对于项目根目录的路径，解析符号链接后需指向项目内的普通文件，不限制扩展名</li>
                 </ul>
               </td>
               <td>无</td>

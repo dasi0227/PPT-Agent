@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { BookOpenText, Component, NotebookText, Palette, Plus, Tags } from 'lucide-react';
-import { assetsApi, type AssetContent, type AssetDraft, type AssetInfo } from '../../api/assets';
+import { assetsApi, type AssetDetail, type AssetDraft, type AssetInfo } from '../../api/assets';
 import type { ResourceScope } from '../../api/types';
 import { IconButton } from '../../components/ui/primitives';
 import { Switch } from '../../components/ui/switch';
@@ -18,8 +18,7 @@ const sections = {
   theme: ['主题', Palette], component: ['组件', Component], skill: ['技能', BookOpenText], snippet: ['短语', NotebookText],
 } as const;
 const blank: AssetDraft = { name: '', description: '', tag_ids: [], content: '' };
-type Editor = { id?: string; hash?: string; value: AssetDraft };
-type Preview = AssetContent & { id: string; updated_at: number };
+type Editor = { id?: string; value: AssetDraft };
 const detailClasses = {
   theme: 'flex flex-col p-5 md:p-7 xl:p-9', component: 'flex items-center justify-center overflow-hidden p-5 md:p-7',
   skill: 'px-5 py-7 md:px-8 md:py-9', snippet: 'flex items-center justify-center p-5 md:p-8',
@@ -32,7 +31,7 @@ export function AssetRepositoryPage({ type, active = true }: { type: ResourceSco
   const [query, search] = useState('');
   const [filter, setFilter] = useState('');
   const [items, setItems] = useState<AssetInfo[]>([]);
-  const [preview, setPreview] = useState<Preview>();
+  const [preview, setPreview] = useState<AssetDetail>();
   const [previewError, setPreviewError] = useState('');
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [editor, setEditor] = useState<Editor>();
@@ -71,8 +70,13 @@ export function AssetRepositoryPage({ type, active = true }: { type: ResourceSco
     if (!active || !id || updatedAt === undefined || currentPreview) return;
     let current = true;
     setPreviewError('');
-    void assetsApi.content(id).then(body => {
-      if (current) setPreview({ ...body, id, updated_at: updatedAt });
+    void assetsApi.detail(id).then(detail => {
+      if (current) {
+        setPreview(detail);
+        if (detail.updated_at !== updatedAt) {
+          setItems(rows => rows.map(row => row.id === id ? detail : row));
+        }
+      }
     }).catch(err => { if (current) setPreviewError(err.message); });
     return () => { current = false; };
   }, [active, id, updatedAt, currentPreview, refreshVersion]);
@@ -83,36 +87,44 @@ export function AssetRepositoryPage({ type, active = true }: { type: ResourceSco
   async function edit(item: AssetInfo) {
     const version = ++editVersion.current;
     try {
-      const { content, hash } = await assetsApi.content(item.id);
-      if (editVersion.current === version) setEditor({ id: item.id, hash, value: { name: item.name, description: item.description, tag_ids: item.tag_ids, content } });
+      const { id, name, description, tag_ids, content } = await assetsApi.detail(item.id);
+      if (editVersion.current === version) setEditor({ id, value: { name, description, tag_ids, content } });
     } catch (err) { showGlobalError(err instanceof Error ? err.message : '正文加载失败'); }
+  }
+  async function refreshSavedAsset(id: string) {
+    try {
+      const detail = await assetsApi.detail(id);
+      ++listVersion.current;
+      setItems(rows => [detail, ...rows.filter(row => row.id !== id)]);
+      setPreview(detail);
+    } catch (cause) {
+      showGlobalError('资产已保存，读取详情失败。' + (cause instanceof Error ? cause.message : ''));
+      await loadList();
+    }
   }
   async function save(draft: AssetDraft) {
     if (!editor) return;
-    const { id, hash, value } = editor;
+    const { id, value } = editor;
     const changes = {
       ...(draft.name !== value.name && { name: draft.name }),
       ...(draft.description !== value.description && { description: draft.description }),
       ...(draft.tag_ids !== value.tag_ids && { tag_ids: draft.tag_ids }),
-      ...(draft.content !== value.content && { content: draft.content, base_hash: hash }),
+      ...(draft.content !== value.content && { content: draft.content }),
     };
     if (id && !Object.keys(changes).length) return;
-    const saved = id ? await assetsApi.update(id, changes) : await assetsApi.create(type, draft);
-    ++listVersion.current;
-    setItems(current => [saved, ...current.filter(item => item.id !== saved.id)]);
-    // Metadata-only updates may return the hash of a concurrent body edit.
-    if (!id || changes.content !== undefined || saved.hash === hash) {
-      setPreview({ id: saved.id, updated_at: saved.updated_at, hash: saved.hash, content: draft.content });
-    } else setPreview(undefined);
-    select(saved.id);
+    let savedId = id;
+    if (savedId) await assetsApi.update(savedId, type, changes);
+    else savedId = (await assetsApi.create(type, draft)).id;
+    await refreshSavedAsset(savedId);
+    select(savedId);
     search(''); setFilter('');
   }
   async function toggle(item: AssetInfo) {
     if (busy) return;
     setBusy(true);
     try {
-      const saved = await assetsApi.update(item.id, { enabled: !item.enabled });
-      setItems(current => [saved, ...current.filter(row => row.id !== saved.id)]);
+      await assetsApi.update(item.id, item.type, { enabled: !item.enabled });
+      await refreshSavedAsset(item.id);
     } catch (err) { showGlobalError(err instanceof Error ? err.message : '状态更新失败'); }
     finally { setBusy(false); }
   }
@@ -143,7 +155,7 @@ export function AssetRepositoryPage({ type, active = true }: { type: ResourceSco
             <span className={cn('text-xs font-semibold', selected.enabled ? 'text-success' : 'text-text-600')}>{selected.enabled ? '已启用' : '已关闭'}</span>
             <Switch checked={selected.enabled} aria-label={`切换${title}状态`} disabled={busy} onCheckedChange={() => void toggle(selected)} />
           </div>} contentClassName={detailClasses[type]} deleteNoun={title} onEdit={() => void edit(selected)} onDelete={() => remove(selected)}>
-          {currentPreview ? <AssetPreview item={selected} body={currentPreview} /> : previewError ? <RepositoryState text={previewError} error /> : <RepositoryLoading />}
+          {currentPreview ? <AssetPreview item={currentPreview} /> : previewError ? <RepositoryState text={previewError} error /> : <RepositoryLoading />}
         </RepositoryDetail> : <RepositoryState text={`请选择一个${title}`} className="min-h-[420px] bg-canvas/70" />}
       </RepositoryWorkspace>}
     </div>

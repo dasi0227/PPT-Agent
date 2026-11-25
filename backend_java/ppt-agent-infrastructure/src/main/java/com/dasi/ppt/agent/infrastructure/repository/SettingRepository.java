@@ -148,6 +148,15 @@ public class SettingRepository implements ISettingRepository {
     }
 
     @Override
+    public ModelConfigSettings readModel(String id) {
+        LlmConfigPo row = llmConfigMapper.find(id);
+        if (row == null) {
+            throw notFound(ErrorCode.MODEL_NOT_FOUND);
+        }
+        return toModelConfigSettings(row);
+    }
+
+    @Override
     public ModelRouteSettings readRoutes() {
         RouteSettingsPo row = Objects.requireNonNull(routeSettingsMapper.read(), "缺少 settings_route 初始化记录");
         return ModelRouteSettings.builder()
@@ -170,10 +179,8 @@ public class SettingRepository implements ISettingRepository {
     }
 
     @Override
-    public void requireModel(String id) {
-        if (!llmConfigMapper.exists(id)) {
-            throw notFound(ErrorCode.MODEL_NOT_FOUND);
-        }
+    public boolean modelExists(String id) {
+        return llmConfigMapper.exists(id);
     }
 
     @Override
@@ -187,12 +194,10 @@ public class SettingRepository implements ISettingRepository {
     }
 
     @Override
-    public ModelConfigSettings updateModel(ModelConfigSettings model) {
-        LlmConfigPo row = llmConfigMapper.update(toPo(model));
-        if (row == null) {
+    public void updateModel(ModelConfigSettings model) {
+        if (llmConfigMapper.update(toPo(model)) == 0) {
             throw notFound(ErrorCode.MODEL_NOT_FOUND);
         }
-        return toModelConfigSettings(row);
     }
 
     @Override
@@ -216,7 +221,6 @@ public class SettingRepository implements ISettingRepository {
                     .provider(ModelProvider.fromValue(row.getProvider()))
                     .baseUrl(row.getBaseUrl())
                     .model(row.getModel())
-                    .key(row.getKey())
                     .build();
         } catch (InvalidEnumValueException ex) {
             throw new DataRetrievalFailureException("settings_models 包含无效的枚举值", ex);

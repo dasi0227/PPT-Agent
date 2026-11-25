@@ -18,7 +18,7 @@ public interface IProjectRepository {
 
     Project create(Project project);
 
-    Project updateTitle(Project project);
+    Project update(Project project);
 
     List<String> delete(String projectId);
 

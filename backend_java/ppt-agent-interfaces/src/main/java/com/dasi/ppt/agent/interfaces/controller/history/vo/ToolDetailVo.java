@@ -9,7 +9,6 @@ import com.dasi.ppt.agent.domain.asset.model.enumeration.AssetType;
 import com.dasi.ppt.agent.domain.project.model.enumeration.ChangePart;
 import com.dasi.ppt.agent.domain.project.model.enumeration.ChangeStatus;
 import com.dasi.ppt.agent.interfaces.controller.interaction.vo.InteractionFormVo;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -27,7 +26,6 @@ public final class ToolDetailVo {
     private ToolResultVo result;
 
     @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     @Getter
     @AllArgsConstructor
     @NoArgsConstructor
@@ -44,7 +42,6 @@ public final class ToolDetailVo {
     }
 
     @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     @Getter
     @AllArgsConstructor
     @NoArgsConstructor
@@ -57,7 +54,6 @@ public final class ToolDetailVo {
     }
 
     @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     @Getter
     @AllArgsConstructor
     @NoArgsConstructor
@@ -78,7 +74,6 @@ public final class ToolDetailVo {
     }
 
     @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     @Getter
     @AllArgsConstructor
     @NoArgsConstructor
@@ -102,7 +97,6 @@ public final class ToolDetailVo {
     }
 
     @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     @Getter
     @AllArgsConstructor
     @NoArgsConstructor

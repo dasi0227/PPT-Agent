@@ -940,7 +940,7 @@
               <td class="nullable">否</td>
               <td>无</td>
               <td>资产列表、选择器与搜索使用的名称。</td>
-              <td class="decision">非空，最多 80 字符。同一类型内名称按去首尾空白后的 Unicode 小写值比较，必须唯一。</td>
+              <td class="decision">非空，最多 80 字符。同一类型内名称按原名称精确比较，必须唯一。</td>
             </tr>
             <tr id="assets-description">
               <th scope="row"><code>description</code></th>
@@ -964,7 +964,7 @@
               <td class="nullable">否</td>
               <td><code>1</code></td>
               <td>是否启用该资产。</td>
-              <td class="decision"><code>1</code> 为启用，<code>0</code> 为停用。主题被项目引用时禁止从启用改为停用。</td>
+              <td class="decision"><code>1</code> 为启用，<code>0</code> 为停用。主题被项目引用时禁止停用。</td>
             </tr>
             <tr id="assets-updated-at">
               <th scope="row"><code>updated_at</code></th>
@@ -1030,7 +1030,7 @@
               <td class="nullable">否</td>
               <td>无</td>
               <td>标签展示名称，如“极简”。</td>
-              <td class="decision">非空；同一 <code>type</code> 内不区分大小写唯一。</td>
+              <td class="decision">非空；同一 <code>type</code> 内按原名称保持唯一。</td>
             </tr>
           </tbody>
         </table>

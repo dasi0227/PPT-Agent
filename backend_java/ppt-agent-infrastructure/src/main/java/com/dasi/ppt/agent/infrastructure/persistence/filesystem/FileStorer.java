@@ -94,7 +94,7 @@ public class FileStorer {
 
     // 创建标记和待删除目录都保留到事务结束。若进程中断，以 SQLite 已提交的状态决定去留。
     public void recoverProjectDirectories(PathResolver paths, Predicate<String> projectExists) {
-        Path root = paths.projectsRoot();
+        Path root = paths.projectsRoot().normalize();
         if (Files.notExists(root)) {
             return;
         }
@@ -103,7 +103,11 @@ public class FileStorer {
                 String name = pending.getFileName().toString();
                 boolean creating = name.startsWith(CREATING);
                 String id = name.substring((creating ? CREATING : DELETING).length());
-                finish(paths.projectDirectory(id), pending, creating, projectExists.test(id));
+                Path directory = paths.projectDirectory(id).normalize();
+                if (!root.equals(directory.getParent())) {
+                    throw new IOException("项目恢复标记无效：" + pending);
+                }
+                finish(directory, pending, creating, projectExists.test(id));
             }
         } catch (IOException ex) {
             throw new UncheckedIOException(ex);

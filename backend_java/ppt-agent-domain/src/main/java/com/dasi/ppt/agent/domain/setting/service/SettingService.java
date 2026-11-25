@@ -18,6 +18,7 @@ import java.nio.file.Path;
 
 import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.conflict;
 import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.invalid;
+import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.notFound;
 
 @Service
 @RequiredArgsConstructor
@@ -47,7 +48,6 @@ public class SettingService {
 
     @Transactional
     public void saveShortcuts(ShortcutSettings settings) {
-        settings.validate();
         settingRepository.saveShortcuts(settings);
     }
 
@@ -68,31 +68,39 @@ public class SettingService {
                 .build();
     }
 
+    public ModelConfigSettings getModel(String id) {
+        return settingRepository.readModel(id);
+    }
+
     @Transactional
-    public ModelConfigSettings createModel(ModelConfigSettings config) {
-        config.normalize();
+    public String createModel(ModelConfigSettings config) {
+        config.removeTrailingSlashes();
         if (settingRepository.modelNameExists(config.getName(), null)) {
             throw invalid("模型配置名不能重复");
         }
         config.setId(IdUtil.genModelId());
         settingRepository.insertModel(config);
-        return config;
+        return config.getId();
     }
 
     @Transactional
-    public ModelConfigSettings updateModel(ModelConfigSettings config) {
-        settingRepository.requireModel(config.getId());
-        config.normalize();
+    public void updateModel(ModelConfigSettings config) {
+        config.removeTrailingSlashes();
         String name = config.getName();
         if (name != null && settingRepository.modelNameExists(name, config.getId())) {
+            if (!settingRepository.modelExists(config.getId())) {
+                throw notFound(ErrorCode.MODEL_NOT_FOUND);
+            }
             throw invalid("模型配置名不能重复");
         }
-        return settingRepository.updateModel(config);
+        settingRepository.updateModel(config);
     }
 
     @Transactional
     public void deleteModel(String id) {
-        settingRepository.requireModel(id);
+        if (!settingRepository.modelExists(id)) {
+            throw notFound(ErrorCode.MODEL_NOT_FOUND);
+        }
         if (settingRepository.countModels() == 1) {
             throw invalid("至少保留一个模型配置");
         }
@@ -104,11 +112,8 @@ public class SettingService {
 
     @Transactional
     public void saveRoute(ModelRoute route, String modelId) {
-        if (modelId == null && (route == ModelRoute.MAIN_DEFAULT || route == ModelRoute.SIDE_DEFAULT)) {
-            throw invalid("默认路由需指定模型配置 ID");
-        }
-        if (modelId != null) {
-            settingRepository.requireModel(modelId);
+        if (modelId != null && !settingRepository.modelExists(modelId)) {
+            throw notFound(ErrorCode.MODEL_NOT_FOUND);
         }
         settingRepository.saveRoute(route, modelId);
     }

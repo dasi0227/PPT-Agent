@@ -18,15 +18,9 @@ public class ModelConfigSettings {
     private String model;
     private String key;
 
-    public void normalize() {
-        if (name != null) {
-            name = name.strip();
-        }
+    public void removeTrailingSlashes() {
         if (baseUrl != null) {
-            baseUrl = baseUrl.strip().replaceFirst("([^/])/+$", "$1");
-        }
-        if (model != null) {
-            model = model.strip();
+            baseUrl = baseUrl.replaceFirst("([^/])/+$", "$1");
         }
     }
 }

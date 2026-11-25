@@ -8,11 +8,16 @@
         <result column="provider" property="provider"/>
         <result column="base_url" property="baseUrl"/>
         <result column="model" property="model"/>
-        <result column="key" property="key"/>
     </resultMap>
 
+    <sql id="publicColumns">id, name, protocol, provider, base_url, model</sql>
+
     <select id="list" resultMap="llmConfigPo">
-        SELECT * FROM settings_models ORDER BY name
+        SELECT <include refid="publicColumns"/> FROM settings_models ORDER BY name
+    </select>
+
+    <select id="find" resultMap="llmConfigPo">
+        SELECT <include refid="publicColumns"/> FROM settings_models WHERE id = #{id}
     </select>
 
     <select id="nameExists" resultType="boolean">
@@ -38,7 +43,7 @@
         VALUES (#{id}, #{name}, #{protocol}, #{provider}, #{baseUrl}, #{model}, #{key})
     </insert>
 
-    <select id="update" resultMap="llmConfigPo" affectData="true" flushCache="true" useCache="false">
+    <update id="update">
         UPDATE settings_models SET
             name = COALESCE(#{name}, name),
             protocol = COALESCE(#{protocol}, protocol),
@@ -47,8 +52,7 @@
             model = COALESCE(#{model}, model),
             key = COALESCE(#{key}, key)
         WHERE id = #{id}
-        RETURNING *
-    </select>
+    </update>
 
     <delete id="delete">
         DELETE FROM settings_models WHERE id = #{id}

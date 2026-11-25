@@ -2,7 +2,6 @@ package com.dasi.ppt.agent.interfaces.controller.project.vo;
 
 import com.dasi.ppt.agent.domain.project.model.entity.Project;
 import com.dasi.ppt.agent.domain.project.model.enumeration.DecorationPosition;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -13,7 +12,6 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public final class ProjectAppearanceVo {
-    @JsonInclude(JsonInclude.Include.ALWAYS)
     private String themeId;
     private DecorationPositionsVo positions;
     private boolean logo;

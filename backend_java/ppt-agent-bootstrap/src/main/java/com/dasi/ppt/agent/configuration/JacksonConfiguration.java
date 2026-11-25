@@ -3,6 +3,7 @@ package com.dasi.ppt.agent.configuration;
 import org.springframework.boot.jackson.autoconfigure.JsonMapperBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.MapperFeature;
 import tools.jackson.databind.PropertyNamingStrategies;
 import tools.jackson.databind.cfg.CoercionAction;
@@ -16,6 +17,7 @@ public class JacksonConfiguration {
     @Bean
     JsonMapperBuilderCustomizer apiJson() {
         return builder -> builder.propertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
+                .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
                 .disable(MapperFeature.ALLOW_COERCION_OF_SCALARS)
                 .enable(EnumFeature.FAIL_ON_NUMBERS_FOR_ENUMS)
                 .withCoercionConfig(LogicalType.Textual, rules -> rules

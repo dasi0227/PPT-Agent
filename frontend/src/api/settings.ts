@@ -21,8 +21,9 @@ export interface ModelSettings {
 type ModelInput = Omit<ModelConfig, 'id'> & { key: string };
 export const settingsApi = {
   get: () => fetchClient<ModelSettings>('/settings/models', { reportError: false, cache: 'no-store' }),
-  create: (input: ModelInput) => postJson<ModelConfig>('/settings/models/create', input),
-  update: (input: Partial<ModelInput> & { id: string }) => postJson<ModelConfig>('/settings/models/update', input),
+  detail: (id: string) => fetchClient<ModelConfig>('/settings/models/' + encodeURIComponent(id), { reportError: false, cache: 'no-store' }),
+  create: (input: ModelInput) => postJson<{ id: string }>('/settings/models/create', input),
+  update: (input: Partial<ModelInput> & { id: string }) => postJson<void>('/settings/models/update', input),
   delete: (id: string) => postJson<void>('/settings/models/delete', { id }),
   saveRoute: (route: Route, model_id: string | null) => postJson<void>('/settings/routes/save', { route, model_id }),
 };

@@ -16,7 +16,6 @@ import com.dasi.ppt.agent.infrastructure.persistence.filesystem.FileStorer;
 import com.dasi.ppt.agent.infrastructure.persistence.filesystem.PathResolver;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,6 +46,9 @@ public class ProjectRepository implements IProjectRepository {
     @Override
     public void requireWritable(String projectId) {
         fileStorer.requireWritable(pathResolver.projectDirectory(projectId));
+        if (!projectMapper.exists(projectId)) {
+            throw notFound(ErrorCode.PROJECT_NOT_FOUND);
+        }
     }
 
     @Override
@@ -100,7 +102,8 @@ public class ProjectRepository implements IProjectRepository {
     }
 
     @Override
-    public Project updateTitle(Project project) {
+    public Project update(Project project) {
+        fileStorer.requireWritable(pathResolver.projectDirectory(project.getId()));
         ProjectPo row = projectMapper.updateTitle(ProjectPo.builder()
                 .id(project.getId())
                 .title(project.getTitle())
@@ -115,6 +118,7 @@ public class ProjectRepository implements IProjectRepository {
     @Override
     @Transactional
     public List<String> delete(String projectId) {
+        fileStorer.requireWritable(pathResolver.projectDirectory(projectId));
         List<String> sessions = sessionMapper.listRevisions(projectId)
                 .stream()
                 .map(SessionPo::getId)
@@ -129,37 +133,24 @@ public class ProjectRepository implements IProjectRepository {
 
     @Override
     public boolean updateTheme(String projectId, String themeId) {
-        int updated = projectMapper.updateTheme(projectId, themeId, System.currentTimeMillis());
-        return appearanceChanged(projectId, updated);
+        return projectMapper.updateTheme(projectId, themeId, System.currentTimeMillis()) > 0;
     }
 
     @Override
     public boolean updatePositions(Project project) {
-        int updated = projectMapper.updatePositions(ProjectPo.builder()
+        return projectMapper.updatePositions(ProjectPo.builder()
                 .id(project.getId())
                 .slidePaginationPosition(project.getSlidePaginationPosition().getValue())
                 .deckTitlePosition(project.getDeckTitlePosition().getValue())
                 .sectionTitlePosition(project.getSectionTitlePosition().getValue())
                 .projectLogoPosition(project.getLogoPosition().getValue())
                 .updatedAt(System.currentTimeMillis())
-                .build());
-        return appearanceChanged(project.getId(), updated);
+                .build()) > 0;
     }
 
     @Override
     public boolean updateLogo(String projectId, byte[] logo) {
-        int updated = projectMapper.updateLogo(projectId, logo, System.currentTimeMillis());
-        return appearanceChanged(projectId, updated);
-    }
-
-    private boolean appearanceChanged(String projectId, int updated) {
-        if (updated != 0) {
-            return true;
-        }
-        if (!projectMapper.exists(projectId)) {
-            throw notFound(ErrorCode.PROJECT_NOT_FOUND);
-        }
-        return false;
+        return projectMapper.updateLogo(projectId, logo, System.currentTimeMillis()) > 0;
     }
 
     @Override

@@ -63,8 +63,8 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - 单个 POST 接口专用的成功响应 VO 按动作命名。有对应请求 DTO 时，两者使用相同的动作名。
 - `CreateProjectDto` 创建项目，`UpdateProjectDto` 修改项目名称。两者均返回顶层 `ProjectInfoVo`，包含已保存的项目 ID、名称和更新时间。`ProjectListVo.items` 复用该类型。
 - `SaveProjectThemeDto` 提交项目主题，`SaveProjectPositionsDto` 提交四项装饰位置，两者分别使用独立的顶层请求结构。
-- 创建标签接口返回顶层 `TagInfoVo`，标签列表的 `TagListVo.items` 复用该类型。
-- 创建与更新资产共用顶层 `AssetInfoVo`，返回保存后的资产信息和正文哈希。`AssetListVo.items` 复用该类型，列表项的 `hash` 为 `null`。
+- 资产、标签和模型配置的创建接口共用 `IdVo`。标签列表项使用 `TagInfoVo`。
+- 资产列表项和详情共用 `AssetInfoVo`，仅详情含 `content`。更新成功返回空响应体。
 - 选择本地应用使用 `PickApplicationVo` 返回 `path`，取消选择时该字段为 `null`。
 - `CreateExportDto` 对应 `CreateExportVo`，返回导出任务 `id`。
 - `UploadAttachmentDto` 对应 `UploadAttachmentVo`，返回附件 `id`。
@@ -76,7 +76,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `ContentHashVo` 供基本信息、约束、大纲、单页规格和单页 HTML 的保存接口共用。
 - 文稿正文沿用 `Meta`、`Constraint`、`Outline`、`Spec` 对应的 JSON 结构。
 - 文件打开设置的读取和保存共用 `FileOpenSettingsVo`，返回实际生效的打开方式和自定义应用列表。
-- `CreateModelDto` 创建模型配置，`UpdateModelDto` 局部更新已有配置，密钥均只写，两者共用 `ModelConfigVo` 返回公开配置。读取模型设置时，`ModelSettingsVo` 组合 `List<ModelConfigVo>` 和 `ModelRoutesVo`，后二者均为顶层类。`DeleteModelDto` 按 ID 删除模型，`SaveRouteDto` 指定路由项及目标模型 ID。[模型设置字段](API.html#settings)
+- `CreateModelDto` 创建模型配置，`UpdateModelDto` 局部更新已有配置，密钥均只写，更新成功返回空响应体。模型详情返回 `ModelConfigVo`。读取模型设置时，`ModelSettingsVo` 组合 `List<ModelConfigVo>` 和 `ModelRoutesVo`，后二者均为顶层类。`DeleteModelDto` 按 ID 删除模型，`SaveRouteDto` 指定路由项及目标模型 ID。[模型设置字段](API.html#settings)
 - `RunChangesVo` 在差异条目上直接返回 `type` 及对应明细字段。工具结果与权限审批候选将同一结构放入各条目的 `diff`。[变更与工具详情](API.html#history)
 - `InteractionRequestVo` 表示表单内容。待答表单附带 `type` 与 `version`，工具详情通过 `interaction.request` 返回当时的表单内容。[人工与工具详情](API.html#interactions)
 - `PublicReferenceVo` 仅用于历史展示。回退回填使用 `FullReferenceVo` 保留 DOM 原文与注释。[历史与回退](API_SPEC.md#消息)

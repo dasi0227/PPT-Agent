@@ -1,6 +1,5 @@
 package com.dasi.ppt.agent.interfaces.controller.project.dto;
 
-import com.dasi.ppt.agent.interfaces.controller.StrictRequestDto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
@@ -12,7 +11,7 @@ import lombok.NoArgsConstructor;
 @Getter
 @AllArgsConstructor
 @NoArgsConstructor
-public final class CreateProjectDto implements StrictRequestDto {
+public final class CreateProjectDto {
     @NotBlank
     @Size(max = 60, message = "项目名称需为 1–60 个字符")
     private String title;

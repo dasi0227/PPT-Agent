@@ -15,8 +15,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.stereotype.Repository;
 
+import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 
 import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.notFound;
 
@@ -46,6 +46,11 @@ public class AssetRepository implements IAssetRepository {
     }
 
     @Override
+    public boolean exists(String assetId, AssetType type) {
+        return assetMapper.exists(assetId, type.getValue());
+    }
+
+    @Override
     public List<Tag> listTags(AssetType type) {
         return tagMapper.list(type.getValue())
                 .stream()
@@ -58,8 +63,13 @@ public class AssetRepository implements IAssetRepository {
     }
 
     @Override
+    public int countTags(AssetType type, List<String> tagIds) {
+        return tagMapper.countByIds(type.getValue(), tagIds);
+    }
+
+    @Override
     public boolean existTagName(AssetType type, String name) {
-        return containsName(tagMapper.listNames(type.getValue()), name);
+        return tagMapper.nameExists(type.getValue(), name);
     }
 
     @Override
@@ -81,33 +91,30 @@ public class AssetRepository implements IAssetRepository {
 
     @Override
     public boolean existName(AssetType type, String name, String excludeAssetId) {
-        return containsName(assetMapper.listNames(type.getValue(), excludeAssetId), name);
-    }
-
-    private static boolean containsName(List<String> names, String name) {
-        String normalized = name.strip().toLowerCase(Locale.ROOT);
-        return names
-                .stream()
-                .anyMatch(existing -> existing.strip().toLowerCase(Locale.ROOT).equals(normalized));
+        return assetMapper.nameExists(type.getValue(), name, excludeAssetId);
     }
 
     @Override
     public void insert(Asset asset) {
         assetMapper.insert(toPo(asset));
-        if (!asset.getTagIds().isEmpty()) {
-            assetTagMapper.insert(asset.getId(), asset.getTagIds());
+        List<String> tagIds = asset.getTagIds();
+        if (tagIds != null && !tagIds.isEmpty()) {
+            assetTagMapper.insert(asset.getId(), tagIds);
         }
     }
 
     @Override
-    public void update(Asset asset, boolean tagsChanged) {
-        if (assetMapper.update(toPo(asset)) == 0) {
+    public void update(Asset asset) {
+        String id = asset.getId();
+        List<String> tagIds = asset.getTagIds();
+        boolean tagsChanged = tagIds != null && !new HashSet<>(assetTagMapper.listIds(id)).equals(new HashSet<>(tagIds));
+        if (assetMapper.update(asset, tagsChanged, System.currentTimeMillis()) == 0) {
             throw notFound(ErrorCode.ASSET_NOT_FOUND);
         }
         if (tagsChanged) {
-            assetTagMapper.deleteByAsset(asset.getId());
-            if (!asset.getTagIds().isEmpty()) {
-                assetTagMapper.insert(asset.getId(), asset.getTagIds());
+            assetTagMapper.deleteExcept(id, tagIds);
+            if (!tagIds.isEmpty()) {
+                assetTagMapper.insert(id, tagIds);
             }
         }
     }

@@ -1,6 +1,5 @@
 package com.dasi.ppt.agent.interfaces.controller.file.dto;
 
-import com.dasi.ppt.agent.interfaces.controller.StrictRequestDto;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -11,7 +10,7 @@ import lombok.NoArgsConstructor;
 @Getter
 @AllArgsConstructor
 @NoArgsConstructor
-public final class OpenProjectFileDto implements StrictRequestDto {
+public final class OpenProjectFileDto {
     @NotBlank(message = "需指定项目 ID")
     private String projectId;
     @NotBlank(message = "需指定项目内的文件路径")

@@ -198,10 +198,21 @@ export function SettingsPage() {
     if (message || !edit.provider) { setCardErrors(current => ({ ...current, [row.id]: message })); return; }
     const input = { name: edit.name, protocol: edit.protocol, provider: edit.provider, base_url: edit.base_url, model: edit.model };
     await persist(async () => {
-      const saved = row.saved
-        ? await settingsApi.update({ id: row.id, ...Object.fromEntries(Object.entries(input).filter(([field, value]) => row[field as keyof Editable] !== value)), ...(edit.key.trim() ? { key: edit.key } : {}) })
-        : await settingsApi.create({ ...input, key: edit.key });
-      return { ...draft, models: draft.models.map(item => item.id === row.id ? savedModel(saved) : item) };
+      let id = row.id;
+      if (row.saved) {
+        const changes = Object.fromEntries(Object.entries(input).filter(([field, value]) => row[field as keyof Editable] !== value));
+        await settingsApi.update({ id, ...changes, ...(edit.key.trim() ? { key: edit.key } : {}) });
+      } else {
+        id = (await settingsApi.create({ ...input, key: edit.key })).id;
+      }
+      const replaceCard = (model: DraftModel) => ({ ...draft, models: draft.models.map(item => item.id === row.id ? model : item) });
+      try {
+        return replaceCard(savedModel(await settingsApi.detail(id)));
+      } catch (cause) {
+        setDraft(replaceCard(savedModel({ ...input, id })));
+        setEdits(current => { const rest = { ...current }; delete rest[row.id]; return rest; });
+        throw new Error('模型已保存，读取详情失败。' + (cause instanceof Error ? cause.message : ''));
+      }
     }, '模型已保存，新任务将使用新配置。', row.id);
   }
 

@@ -36,9 +36,7 @@ public class BusinessException extends RuntimeException {
         this.code = code;
     }
 
-    public static BusinessException failed(ErrorCode code, Throwable cause) {
-        BusinessException failure = new BusinessException(code, code.getDefaultMessage());
-        failure.initCause(cause);
-        return failure;
+    public static BusinessException failed(ErrorCode code, String message) {
+        return new BusinessException(code, message);
     }
 }

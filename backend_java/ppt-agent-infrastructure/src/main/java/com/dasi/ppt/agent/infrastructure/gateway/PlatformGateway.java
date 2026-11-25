@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.Locale;
 
 import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.failed;
 
@@ -55,18 +56,28 @@ public class PlatformGateway implements IPlatformGateway {
             } else {
                 throw new IOException("当前平台没有应用选择器");
             }
-            String selected = run(picker).stripTrailing();
+            String selected = run(picker);
+            // osascript 在结果后输出一个换行符，路径本身可包含空白。
+            if (os.startsWith("Mac") && selected.endsWith("\n")) {
+                selected = selected.substring(0, selected.length() - 1);
+            }
             return selected.isEmpty() ? null : Path.of(selected);
         } catch (IOException e) {
-            throw failed(ErrorCode.APPLICATION_PICK_FAILED, e);
+            throw failed(ErrorCode.APPLICATION_PICK_FAILED, e.getMessage());
         }
     }
 
     @Override
     public void openFile(String projectId, String relativePath, Path application) {
-        Path file = pathResolver.resolveOpenFile(projectId, relativePath);
+        Path file = pathResolver.resolveFile(projectId, relativePath);
         String os = System.getProperty("os.name");
         try {
+            if (application != null) {
+                String suffix = os.startsWith("Windows") ? ".exe" : ".app";
+                if (!application.isAbsolute() || !application.toString().toLowerCase(Locale.ROOT).endsWith(suffix)) {
+                    throw new IOException("无法使用所选应用打开文件：" + application);
+                }
+            }
             if (os.startsWith("Mac")) {
                 ProcessBuilder opener = application == null
                         ? new ProcessBuilder("open", file.toString())
@@ -87,7 +98,7 @@ public class PlatformGateway implements IPlatformGateway {
                 throw new IOException("当前平台不支持打开项目文件");
             }
         } catch (IOException e) {
-            throw failed(ErrorCode.FILE_OPEN_FAILED, e);
+            throw failed(ErrorCode.FILE_OPEN_FAILED, e.getMessage());
         }
     }
 

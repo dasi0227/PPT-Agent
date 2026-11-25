@@ -6,14 +6,23 @@
         <id column="tag_id" property="tagId"/>
     </resultMap>
 
+    <select id="listIds" resultType="string">
+        SELECT tag_id FROM asset_tags WHERE asset_id = #{assetId} ORDER BY tag_id
+    </select>
+
     <insert id="insert">
         INSERT INTO asset_tags (asset_id, tag_id) VALUES
         <foreach collection="tagIds" item="tagId" separator=",">
             (#{assetId}, #{tagId})
         </foreach>
+        ON CONFLICT (asset_id, tag_id) DO NOTHING
     </insert>
 
-    <delete id="deleteByAsset">
+    <delete id="deleteExcept">
         DELETE FROM asset_tags WHERE asset_id = #{assetId}
+        <if test="!tagIds.isEmpty()">
+            AND tag_id NOT IN
+            <foreach collection="tagIds" item="tagId" open="(" separator="," close=")">#{tagId}</foreach>
+        </if>
     </delete>
 </mapper>

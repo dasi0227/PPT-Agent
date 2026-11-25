@@ -6,7 +6,6 @@ import com.dasi.ppt.agent.domain.agent.model.enumeration.RunMode;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.RunStatus;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.ToolResultStatus;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.RunActivity;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -36,7 +35,6 @@ public final class RunDetailVo {
     private List<RunMessageVo> messages;
 
     @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     @Getter
     @AllArgsConstructor
     @NoArgsConstructor

@@ -14,9 +14,11 @@ import com.dasi.ppt.agent.interfaces.controller.setting.vo.ModelConfigVo;
 import com.dasi.ppt.agent.interfaces.controller.setting.vo.ModelSettingsVo;
 import com.dasi.ppt.agent.interfaces.controller.setting.vo.PickApplicationVo;
 import com.dasi.ppt.agent.interfaces.controller.setting.vo.ShortcutSettingsVo;
+import com.dasi.ppt.agent.interfaces.controller.IdVo;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -62,14 +64,21 @@ public class SettingController {
         return ModelSettingsVo.toVo(settingService.getModelSettings());
     }
 
+    @GetMapping("/models/{id}")
+    public ModelConfigVo getModel(@PathVariable("id") String id) {
+        return ModelConfigVo.toVo(settingService.getModel(id));
+    }
+
     @PostMapping("/models/create")
-    public ModelConfigVo createModel(@Valid @RequestBody CreateModelDto request) {
-        return ModelConfigVo.toVo(settingService.createModel(request.toModelConfigSettings()));
+    public IdVo createModel(@Valid @RequestBody CreateModelDto request) {
+        return IdVo.builder()
+                .id(settingService.createModel(request.toModelConfigSettings()))
+                .build();
     }
 
     @PostMapping("/models/update")
-    public ModelConfigVo updateModel(@Valid @RequestBody UpdateModelDto request) {
-        return ModelConfigVo.toVo(settingService.updateModel(request.toModelConfigSettings()));
+    public void updateModel(@Valid @RequestBody UpdateModelDto request) {
+        settingService.updateModel(request.toModelConfigSettings());
     }
 
     @PostMapping("/models/delete")

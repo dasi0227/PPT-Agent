@@ -2,7 +2,6 @@ package com.dasi.ppt.agent.interfaces.controller.asset.dto;
 
 import com.dasi.ppt.agent.domain.asset.model.entity.Asset;
 import com.dasi.ppt.agent.domain.asset.model.enumeration.AssetType;
-import com.dasi.ppt.agent.interfaces.controller.StrictRequestDto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -18,7 +17,7 @@ import java.util.List;
 @Getter
 @AllArgsConstructor
 @NoArgsConstructor
-public final class CreateAssetDto implements StrictRequestDto {
+public final class CreateAssetDto {
     @NotNull(message = "创建资产需指定 type")
     private AssetType type;
     @NotBlank(message = "资产名称不能为空白")

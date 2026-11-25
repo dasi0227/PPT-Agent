@@ -13,15 +13,14 @@ const button = (page, name) => page.getByRole('button', { name, exact: true });
 const dialog = page => page.getByRole('dialog');
 const endpoint = response => new URL(response.url()).pathname;
 const go = (page, route) => page.goto(origin + route, { waitUntil: 'domcontentloaded' });
-async function action(page, route, click, conflict = false) {
+async function action(page, route, click) {
   const wait = page.waitForResponse(r => endpoint(r) === '/api' + route && r.request().method() === 'POST');
   await click();
   const response = await wait;
   const raw = await response.text();
   const body = raw && JSON.parse(raw);
   assert.equal(response.status(), 200);
-  if (conflict) assert.equal(body.error?.code, 'CONTENT_CONFLICT');
-  else assert.ok(!body?.error, body?.error?.message);
+  assert.ok(!body?.error, body?.error?.message);
   return { body, sent: response.request().postDataJSON() };
 }
 async function get(page, route) {
@@ -48,9 +47,11 @@ async function settings(page) {
   await form.getByText('请选择厂商。', { exact: true }).waitFor();
   await choice(page, '厂商', 'gpt');
   const created = await action(page, '/settings/models/create', () => button(form, '保存').click());
-  assert.equal(created.body.provider, 'gpt');
-  assert.equal(created.body.base_url, 'https://example.invalid/v1');
-  assert.ok(!('key' in created.body));
+  assert.deepEqual(Object.keys(created.body), ['id']);
+  const model = await get(page, '/settings/models/' + created.body.id);
+  assert.equal(model.provider, 'gpt');
+  assert.equal(model.base_url, 'https://example.invalid/v1');
+  assert.ok(!('key' in model));
   await button(page, '模型分配').click();
   const routed = await action(page, '/settings/routes/save', () => choice(page, '主路备用模型', name));
   assert.deepEqual(routed.sent, { route: 'main_fallback', model_id: created.body.id });
@@ -60,6 +61,7 @@ async function settings(page) {
   assert.equal(await form.getByPlaceholder('已配置，留空保留').inputValue(), '');
   await form.getByPlaceholder('配置名称').fill(name + '-改名');
   const updated = await action(page, '/settings/models/update', () => button(form, '保存').click());
+  assert.equal(updated.body, '');
   assert.deepEqual(updated.sent, { id: created.body.id, name: name + '-改名' });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await button(page, '模型分配').click();
@@ -126,7 +128,7 @@ async function settings(page) {
   await page.getByRole('combobox', { name: 'HTML 文件' }).getByText('跟随默认').waitFor();
   console.log('PASS 文件设置同源保存、路径去重、刷新和删除应用后的服务端回退');
 }
-async function assets(page, context) {
+async function assets(page) {
   await page.getByRole('link', { name: '仓库', exact: true }).click();
   for (const [type, title, source] of [
     ['theme', '主题', ':root { --color-bg: white; }'], ['component', '组件', '<p>Example</p>'],
@@ -139,8 +141,6 @@ async function assets(page, context) {
     }
     const name = prefix + title;
     const tag = prefix + '-标签';
-    const list = await get(page, '/assets?type=' + type);
-    assert.ok(list.items.every(row => row.hash === null));
     await button(page, '管理标签').click();
     await dialog(page).getByLabel('标签名称').fill(tag);
     const createdTag = await action(page, '/assets/tags/create', () => button(dialog(page), '创建标签').click());
@@ -152,19 +152,22 @@ async function assets(page, context) {
     await dialog(page).getByLabel('正文', { exact: true }).fill(source);
     await button(dialog(page), tag).click();
     const created = await action(page, '/assets/create', () => button(dialog(page), '保存').click());
-    assert.deepEqual(created.body.tag_ids, [createdTag.body.id]);
+    assert.deepEqual(Object.keys(createdTag.body), ['id']);
+    assert.deepEqual(Object.keys(created.body), ['id']);
     const id = created.body.id;
-    let hash = created.body.hash;
+    assert.deepEqual((await get(page, '/assets/' + id)).tag_ids, [createdTag.body.id]);
+    let content = source;
     for (const suffix of ['1', '2']) {
       const read = page.waitForResponse(r => endpoint(r) === '/api/assets/' + id);
       await button(page, '编辑' + name).click();
-      assert.equal((await (await read).json()).hash, hash);
+      assert.equal((await (await read).json()).content, content);
       await dialog(page).getByLabel('正文').fill(source + suffix);
       if (suffix === '2') await button(dialog(page), tag).click();
       const updated = await action(page, '/assets/update', () => button(dialog(page), '保存').click());
-      assert.equal(updated.sent.base_hash, hash);
-      assert.notEqual(updated.body.hash, hash);
-      hash = updated.body.hash;
+      assert.equal(updated.body, '');
+      content = source + suffix;
+      assert.equal(updated.sent.content, content);
+      assert.equal(updated.sent.type, type);
       if (suffix === '2') assert.deepEqual(updated.sent.tag_ids, []);
     }
     await page.reload({ waitUntil: 'domcontentloaded' });
@@ -175,24 +178,8 @@ async function assets(page, context) {
     await page.getByRole('heading', { name, exact: true }).waitFor();
     for (const enabled of [false, true]) {
       const toggle = await action(page, '/assets/update', () => page.getByRole('switch', { name: '切换' + title + '状态' }).click());
-      assert.deepEqual(toggle.sent, { asset_id: id, enabled });
+      assert.deepEqual(toggle.sent, { asset_id: id, type, enabled });
       await page.getByText(enabled ? '已启用' : '已关闭', { exact: true }).waitFor();
-    }
-    if (type === 'snippet') {
-      await button(page, '编辑' + name).click();
-      await dialog(page).getByLabel('正文').fill('保留的草稿');
-      const other = await context.newPage();
-      await go(other, '/assets/snippet?id=' + id);
-      await button(other, '编辑' + name).click();
-      await dialog(other).getByLabel('正文').fill('另一窗口保存的内容');
-      await action(other, '/assets/update', () => button(dialog(other), '保存').click());
-      await other.close();
-      await action(page, '/assets/update', () => button(dialog(page), '保存').click(), true);
-      assert.equal(await dialog(page).getByLabel('正文').inputValue(), '保留的草稿');
-      await page.getByText('资产正文已更新，请重新读取后保存', { exact: true }).waitFor();
-      assert.equal((await get(page, '/assets/' + id)).content, '另一窗口保存的内容');
-      page.once('dialog', notice => notice.accept());
-      await button(dialog(page), '取消').click();
     }
     await button(page, '管理标签').click();
     page.once('dialog', notice => notice.accept());
@@ -203,7 +190,7 @@ async function assets(page, context) {
     await action(page, '/assets/delete', () => button(dialog(page), '删除').click());
     await page.getByRole('heading', { name, exact: true }).waitFor({ state: 'hidden' });
     assert.equal((await get(page, '/assets?type=' + type + '&query=' + encodeURIComponent(name))).items.length, 0);
-    console.log('PASS ' + title + ' 创建、标签、连续版本保存、搜索、启停、刷新、删除' + (type === 'snippet' ? '、双窗口版本冲突和草稿保留' : ''));
+    console.log('PASS ' + title + ' 创建、标签、连续保存、搜索、启停、刷新、删除');
   }
 }
 (async () => {
@@ -215,7 +202,7 @@ async function assets(page, context) {
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await settings(page);
-    try { await assets(page, context); }
+    try { await assets(page); }
     catch (cause) {
       console.error(page.url(), (await page.locator('body').innerText()).slice(0, 1800), errors);
       throw cause;

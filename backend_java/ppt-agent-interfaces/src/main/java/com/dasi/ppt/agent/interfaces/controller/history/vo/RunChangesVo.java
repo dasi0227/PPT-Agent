@@ -5,7 +5,6 @@ import com.dasi.ppt.agent.domain.project.model.enumeration.ChangeStatus;
 import com.dasi.ppt.agent.domain.project.model.enumeration.DiffRowType;
 import com.dasi.ppt.agent.domain.project.model.enumeration.DiffType;
 import com.dasi.ppt.agent.domain.project.model.enumeration.OutlineNodeType;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -22,7 +21,6 @@ public final class RunChangesVo {
     private List<RunChangeDetailVo> items;
 
     @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     @Getter
     @AllArgsConstructor
     @NoArgsConstructor
@@ -44,7 +42,6 @@ public final class RunChangesVo {
     }
 
     @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     @Getter
     @AllArgsConstructor
     @NoArgsConstructor
@@ -57,7 +54,6 @@ public final class RunChangesVo {
     }
 
     @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     @Getter
     @AllArgsConstructor
     @NoArgsConstructor
@@ -85,7 +81,6 @@ public final class RunChangesVo {
     }
 
     @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     @Getter
     @AllArgsConstructor
     @NoArgsConstructor
@@ -110,7 +105,6 @@ public final class RunChangesVo {
     }
 
     @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     @Getter
     @AllArgsConstructor
     @NoArgsConstructor
