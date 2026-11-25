@@ -59,7 +59,7 @@ export const RenamePanel: React.FC = () => {
 				<div className="min-w-0 text-sm font-semibold text-text-900">会话命名</div>
 				<div className="agent-inline-panel-settings">
 					<span className="text-xs text-text-600">自动命名</span>
-					<Switch aria-label="自动命名" checked={automaticEnabled && thread.auto_rename_enabled}
+					<Switch aria-label="自动命名" checked={automaticEnabled && thread.auto_rename_enabled === true}
 						disabled={Boolean(busy) || !automaticEnabled} onCheckedChange={() => void run(thread.auto_rename_enabled ? 'disable' : 'enable')}
 						title={automaticEnabled && thread.auto_rename_enabled ? '自动命名已开启' : '自动命名已关闭'} />
 				</div>

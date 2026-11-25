@@ -6,49 +6,38 @@ import { homeRoute, projectRoute } from './routes';
 import { useWorkspaceUrlState } from './useWorkspaceUrlState';
 import { useThreadStore } from '../../stores/threadStore';
 import { useSessionStore } from '../../stores/sessionStore';
-import { compareRevision } from '../../api/session';
-
-const PROJECT_CONTENT_CHECK_INTERVAL_MS = 4_000;
+import { showGlobalError } from '../../stores/toastStore';
 
 function useSessionSync(projectId: string | undefined) {
   const threadId = useThreadStore(state => projectId ? state.activeThreadIdByProjectId[projectId] : null);
   React.useEffect(() => {
-    if (!projectId) return;
-    const check = () => {
-      if (document.visibilityState === 'visible') void useProjectStore.getState().checkProjectContent(projectId);
-    };
-    const timer = window.setInterval(check, PROJECT_CONTENT_CHECK_INTERVAL_MS);
-    window.addEventListener('focus', check);
-    document.addEventListener('visibilitychange', check);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener('focus', check);
-      document.removeEventListener('visibilitychange', check);
-    };
-  }, [projectId]);
-
-  React.useEffect(() => {
     if (!projectId || !threadId) return;
     const release = useSessionStore.getState().retain(threadId, projectId);
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const unsubscribe = useSessionStore.subscribe((next, previous) => {
-      const state = next.sessions[threadId], before = previous.sessions[threadId];
-      if (!state || !before?.appliedSeq || state.sceneRevision !== before.sceneRevision || state.appliedSeq === before.appliedSeq) return;
-      const fileChange = Object.values(state.itemsById).some(item => item.kind === 'tool'
-        && item.summary.status === 'completed' && compareRevision(item.updated_seq, before.appliedSeq!) > 0);
-      const ended = before.thread?.active_run_id && state.thread?.active_run_id !== before.thread.active_run_id;
-      if (!fileChange && !ended) return;
-      clearTimeout(timer);
-      timer = setTimeout(() => void useProjectStore.getState().checkProjectContent(projectId), 100);
+    const source = typeof EventSource === 'undefined' ? null : new EventSource('/api/sessions/' + encodeURIComponent(threadId) + '/events');
+    const refresh = (areas: readonly unknown[]) => {
+      const projectStore = useProjectStore.getState();
+      if (areas.includes('content')) void projectStore.loadProjectContent(projectId);
+      if (areas.includes('appearance')) void projectStore.loadProjectAppearance(projectId)
+        .catch(cause => showGlobalError(cause instanceof Error ? cause.message : '项目外观加载失败'));
+      if (areas.includes('sessions')) void useThreadStore.getState().loadThreads(projectId);
+    };
+    const refreshAll = () => refresh(['content', 'appearance', 'sessions']);
+    source?.addEventListener('open', refreshAll);
+    source?.addEventListener('reset', refreshAll);
+    source?.addEventListener('project_changed', event => {
+      try {
+        const data = JSON.parse(event.data);
+        if (Array.isArray(data?.areas)) refresh(data.areas);
+      } catch { /* An invalid event carries no refresh information. */ }
     });
     const focus = () => {
-      if (document.visibilityState !== 'visible') return;
-      void useSessionStore.getState().reconnect(threadId);
+      if (document.visibilityState === 'visible') void useSessionStore.getState().reconnect(threadId);
     };
     window.addEventListener('focus', focus);
     document.addEventListener('visibilitychange', focus);
     return () => {
-      clearTimeout(timer); unsubscribe(); release();
+      source?.close();
+      release();
       window.removeEventListener('focus', focus);
       document.removeEventListener('visibilitychange', focus);
     };
@@ -99,8 +88,8 @@ export function WorkspaceRoute() {
 
     let canceled = false;
     const validateAndLoad = async () => {
-      await loadProjects();
-      if (canceled) return;
+      const loaded = await loadProjects();
+      if (!loaded || canceled) return;
 
       const state = useProjectStore.getState();
       const exists = state.projects.some((project) => project.id === projectId);

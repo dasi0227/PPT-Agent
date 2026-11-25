@@ -28,7 +28,7 @@ SQL
 export PPT_AGENT_ROOT="$tmp" PPT_AGENT_DB="$tmp/data.db"
 export PPT_AGENT_JEV_MODEL=test PPT_AGENT_JEV_KEY=integration-test-only
 export PPT_AGENT_SANDBOX_ALLOWED_FILEPATHS="$tmp" PPT_AGENT_SANDBOX_ALLOWED_DOMAINS=localhost
-if curl -s --max-time 1 "http://127.0.0.1:$api_port/api/settings/shortcuts" >/dev/null; then
+if curl -s --max-time 1 "http://127.0.0.1:$api_port/api/healthz" >/dev/null; then
   echo "Java test port $api_port already in use" >&2
   exit 1
 fi
@@ -36,10 +36,10 @@ java -jar "$root/backend_java/ppt-agent-bootstrap/target/ppt-agent.jar" --server
 java_pid=$!
 for i in {1..60}; do
   kill -0 "$java_pid" || { tail -40 java.log; exit 1; }
-  if curl -fsS "http://127.0.0.1:$api_port/api/settings/shortcuts" >/dev/null 2>&1; then break; fi
+  if curl -fsS "http://127.0.0.1:$api_port/api/healthz" >/dev/null 2>&1; then break; fi
   sleep 1
 done
-curl -fsS "http://127.0.0.1:$api_port/api/settings/shortcuts" >/dev/null
+curl -fsS "http://127.0.0.1:$api_port/api/healthz" >/dev/null
 (cd "$root/frontend" && export PPT_JAVA_ORIGIN="http://127.0.0.1:$api_port" && exec node_modules/.bin/vite --host 127.0.0.1 --port "$ui_port" --strictPort) &
 ui_pid=$!
 if [[ ${1:-} == --verify ]]; then

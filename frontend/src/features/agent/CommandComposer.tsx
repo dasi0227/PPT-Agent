@@ -320,7 +320,7 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
   };
   const themeOptions = useMemo<SlashMenuOption[]>(() => {
     if (!themePicker || themePicker.loading || themePicker.error) return [];
-    return themePicker.themes.filter((theme) => !theme.disabled && theme.content_state === 'ready').map((theme) => ({
+    return themePicker.themes.filter((theme) => theme.enabled).map((theme) => ({
       id: theme.id,
       label: theme.name,
       selected: theme.id === themePicker.themeId,

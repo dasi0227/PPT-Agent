@@ -1,3 +1,5 @@
+import { applyOutlineCommand, newOutlineNode, type OutlineCommand } from '../viewer/outlineEditing';
+import { showGlobalError } from '../../stores/toastStore';
 import { ContentRequirementsIcon } from '../../components/ui/ContentRequirementsIcon';
 import { GlobalConstraintIcon } from '../../components/ui/GlobalConstraintIcon';
 import {
@@ -26,7 +28,6 @@ import type {
   MutationPosition,
   OutlineSection,
   OutlineSlideNode,
-  PPTMutation,
   ProjectContentSnapshot,
   Slide,
 } from '../../api/types';
@@ -55,7 +56,6 @@ import { TextField } from '../../components/ui/text-field';
 import { partLabel } from '../viewer/semanticLabels';
 import { flattenOutline, orderedSlides } from './selectors';
 
-const clientRef = (kind: string) => `${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 type EditTarget =
   | { kind: 'section'; id: string; value: string; hash?: string; scene?: string }
@@ -265,7 +265,7 @@ function SlideRow({
 export function DeckNavigator() {
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const snapshot = useProjectStore((state) => activeProjectId ? state.contentByProjectId[activeProjectId] : undefined);
-  const mutateProject = useProjectStore((state) => state.mutateProject);
+  const saveProjectFile = useProjectStore((state) => state.saveProjectFile);
   const pendingMutation = useProjectStore((state) => activeProjectId ? state.mutationPendingByProjectId[activeProjectId] : false);
   const currentSlideId = useDeckStore((state) => state.currentSlideId);
   const activeDocument = useDeckStore((state) => state.activeDocument);
@@ -287,16 +287,18 @@ export function DeckNavigator() {
   const locked = pendingMutation || runLocked || Boolean(managementBlocked);
   const outlineHash = snapshot?.hashes.outline;
 
-  const commitMutation = async (request: PPTMutation) => {
-    if (!activeProjectId || locked) throw new Error(managementBlocked ?? '项目正忙，请稍后重试。');
-    await mutateProject(activeProjectId, { expected_scene_revision: snapshot?.scene_revision, ...request });
+  const commitMutation = async (command: OutlineCommand) => {
+    if (!activeProjectId || !snapshot || locked) throw new Error(managementBlocked ?? '项目正忙，请稍后重试。');
+    await saveProjectFile(activeProjectId, outlineHash ?? null, {
+      part: 'outline', content: applyOutlineCommand(snapshot.outline, command),
+    });
   };
 
-  const mutate = async (request: PPTMutation) => {
+  const mutate = async (command: OutlineCommand) => {
     try {
-      await commitMutation(request);
-    } catch {
-      // The API client reports non-Agent backend errors through the global toast layer.
+      await commitMutation(command);
+    } catch (cause) {
+      showGlobalError(cause instanceof Error ? cause.message : '目录保存失败');
     }
   };
 
@@ -304,9 +306,7 @@ export function DeckNavigator() {
     index < siblings.length ? { parent_id: parentId, before_id: siblings[index] } : { parent_id: parentId };
 
   const insertPage = (parentId: string) => mutate({
-    op: 'outline.insert',
-    expected_hash: outlineHash,
-    node: { kind: 'slide', client_ref: clientRef('slide'), title: '新页面' },
+    type: 'insert', kind: 'slide', node: newOutlineNode('slide'),
     position: { parent_id: parentId },
   });
 
@@ -314,9 +314,7 @@ export function DeckNavigator() {
     const without = siblings.filter((item) => item.id !== slideId).map((item) => item.id);
     const clamped = Math.max(0, Math.min(targetIndex, without.length));
     void mutate({
-      op: 'outline.move',
-      expected_hash: outlineHash,
-      node_id: slideId,
+      type: 'move', id: slideId,
       position: positionForSibling(parentId, without, clamped),
     });
   };
@@ -325,22 +323,15 @@ export function DeckNavigator() {
     const index = siblings.indexOf(id);
     const target = siblings[index + direction];
     if (!target) return;
-    void mutate({ op: 'outline.move', expected_hash: outlineHash, node_id: id,
+    void mutate({ type: 'move', id,
       position: { parent_id: parentId, ...(direction < 0 ? { before_id: target } : { after_id: target }) } });
   };
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     if (deleteTarget.hash !== outlineHash || deleteTarget.scene !== snapshot?.scene_revision) throw new Error('目录已更新，请关闭后重新操作。');
-    const request: PPTMutation = {
-      op: 'outline.remove',
-      expected_hash: deleteTarget.hash,
-      expected_scene_revision: deleteTarget.scene,
-      node_id: deleteTarget.id,
-      ...(deleteTarget.kind === 'subsection' && deleteTarget.promote ? { child_policy: 'promote_to_section' as const } : {}),
-    };
     const index = deleteTarget.kind === 'page' ? slides.findIndex((item) => item.id === deleteTarget.id) : -1;
-    await commitMutation(request);
+    await commitMutation({ type: 'remove', id: deleteTarget.id, promote: deleteTarget.kind === 'subsection' && deleteTarget.promote });
     if (deleteTarget.kind === 'page' && currentSlideId === deleteTarget.id) {
       const next = slides[index + 1] ?? slides[index - 1];
       useDeckStore.setState({ currentSlideId: next?.id ?? null });
@@ -572,8 +563,7 @@ export function DeckNavigator() {
           if (!editTarget) return;
           if (locked) throw new Error('项目正忙，请稍后再保存。');
           if (editTarget.hash !== outlineHash || editTarget.scene !== snapshot?.scene_revision) throw new Error('目录已更新，请关闭后重新编辑。');
-          await commitMutation({ op: 'outline.update', expected_hash: editTarget.hash, expected_scene_revision: editTarget.scene, node_id: editTarget.id,
-            changes: { title: value.title.trim() } });
+          await commitMutation({ type: 'update', id: editTarget.id, title: value.title.trim() });
         }}
         renderField={(value, setValue, error) => <div className="space-y-4">
           <TextField label="名称" value={value.title} minLength={1} maxLength={160} onChange={title => setValue({ ...value, title })} />
@@ -596,16 +586,9 @@ export function DeckNavigator() {
           if (newSubsectionTarget.hash !== outlineHash || newSubsectionTarget.scene !== snapshot?.scene_revision) throw new Error('目录已更新，请关闭后重新操作。');
           const section = newSubsectionTarget.section;
           await commitMutation({
-            op: 'outline.insert',
-            expected_hash: newSubsectionTarget.hash,
-            expected_scene_revision: newSubsectionTarget.scene,
-            node: {
-              kind: 'subsection',
-              client_ref: clientRef('subsection'),
-              title: value.title.trim(),
-            },
+            type: 'insert', kind: 'subsection',
+            node: { ...newOutlineNode('subsection'), title: value.title.trim() },
             position: { parent_id: section.id },
-            ...(section.slides.length > 0 ? { direct_slides_policy: 'move_into_new_subsection' as const } : {}),
           });
         }}
         renderField={(value, setValue, error) => (

@@ -28,7 +28,7 @@ export const OpenExistingProjectModal: React.FC<OpenExistingProjectModalProps> =
     onOpenChange(false);
   };
 
-  const sortedProjects = [...projects].sort((a, b) => b.updated_at - a.updated_at);
+  const sortedProjects = projects;
 
   const formatRelativeTime = (timestamp: number) => {
     const rtf = new Intl.RelativeTimeFormat('zh-CN', { numeric: 'auto' });

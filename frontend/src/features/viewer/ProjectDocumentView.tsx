@@ -6,7 +6,7 @@ import type { ProjectContentSnapshot } from '../../api/types';
 import { Button, InlineNotice, Skeleton } from '../../components/ui/primitives';
 import { useDeckStore, type ProjectDocument } from '../../stores/deckStore';
 import { DocumentCanvas } from './DocumentCanvas';
-import { changedFields, ManagementEditor } from './ManagementEditor';
+import { ManagementEditor } from './ManagementEditor';
 import { MetaFields, ConstraintFields } from './AuthoringFields';
 import { partLabel } from './semanticLabels';
 import { useProjectStore } from '../../stores/projectStore';
@@ -30,10 +30,20 @@ function MissingDocument({ snapshot, document, blocked, notice }: { snapshot: Pr
     setCreating(true);
     setCreateError('');
     try {
-      await useProjectStore.getState().mutateProject(snapshot.project_id, {
-        op: `${document}.create`,
-        expected_scene_revision: snapshot.scene_revision,
-      });
+      const store = useProjectStore.getState();
+      if (document === 'meta') {
+        await store.saveProjectFile(snapshot.project_id, null, {
+          part: 'meta', content: { title: '', language: '', count: '', audience: '', goal: '' },
+        });
+      } else if (document === 'constraint') {
+        await store.saveProjectFile(snapshot.project_id, null, {
+          part: 'constraint', content: {
+            content: { requirements: [], prohibitions: [] }, visual: { requirements: [], prohibitions: [] },
+          },
+        });
+      } else {
+        await store.saveProjectFile(snapshot.project_id, null, { part: 'outline', content: { sections: [] } });
+      }
     } catch (error) {
       await useProjectStore.getState().loadProjectContent(snapshot.project_id);
       setCreateError(error instanceof Error ? error.message : '新建失败');
@@ -77,13 +87,13 @@ export function ProjectDocumentView({ document, snapshot, error, onRetry, blocke
   if (document === 'meta') {
     if (!snapshot.meta) return <MissingDocument snapshot={snapshot} document="meta" blocked={unavailable} notice={notice} />;
     return <ManagementEditor {...common} key={`${snapshot.project_id}:meta`} resourceKey="meta" value={snapshot.meta} hash={snapshot.hashes.meta}
-      mutation={(next, previous) => ({ op: 'meta.patch', patch: changedFields(previous, next) })}>
+      toFile={content => ({ part: 'meta', content })}>
       {editor => <MetaFields editor={editor} />}
     </ManagementEditor>;
   }
   if (!snapshot.constraint) return <MissingDocument snapshot={snapshot} document="constraint" blocked={unavailable} notice={notice} />;
   return <ManagementEditor {...common} key={`${snapshot.project_id}:constraint`} resourceKey="constraint" value={snapshot.constraint} hash={snapshot.hashes.constraint}
-    mutation={(next, previous) => ({ op: 'constraint.patch', patch: changedFields(previous, next) })}>
+    toFile={content => ({ part: 'constraint', content })}>
     {editor => <ConstraintFields editor={editor} />}
   </ManagementEditor>;
 }

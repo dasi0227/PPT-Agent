@@ -8,7 +8,7 @@ import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { SpecFields } from './AuthoringFields';
 import { DocumentCanvas } from './DocumentCanvas';
-import { changedFields, ManagementEditor } from './ManagementEditor';
+import { ManagementEditor } from './ManagementEditor';
 import { ManagementSection } from './ManagementFields';
 import { partLabel, slidePurposeOptions } from './semanticLabels';
 
@@ -23,17 +23,17 @@ export function SlideSpecCard({ spec, projectId, slideId, hash, sceneRevision, b
   </InlineNotice> : undefined;
   const unavailable = error ? '加载失败，请重试后编辑。' : blocked;
   if (!spec) return <SpecCreationForm key={`${projectId}:${slideId}`} projectId={projectId} slideId={slideId}
-    hash={hash} sceneRevision={sceneRevision} blocked={unavailable} notice={notice} />;
+    hash={hash} blocked={unavailable} notice={notice} />;
   return <ManagementEditor key={`${projectId}:${slideId}`} projectId={slideId ? projectId : undefined} resourceKey={`spec:${slideId}`}
     title={partLabel('spec')} icon={ClipboardCheck} value={spec} hash={hash} sceneRevision={sceneRevision}
     blocked={unavailable} notice={notice}
-    mutation={(next, previous) => ({ op: 'slide.spec.patch', slide_id: slideId!, patch: changedFields(previous, next) })}>
+    toFile={content => ({ part: 'spec', slideId: slideId!, content })}>
     {editor => <SpecFields editor={editor} />}
   </ManagementEditor>;
 }
 
-function SpecCreationForm({ projectId, slideId, hash, sceneRevision, blocked, notice }: {
-  projectId?: string; slideId?: string; hash?: string; sceneRevision?: string; blocked?: string; notice?: ReactNode;
+function SpecCreationForm({ projectId, slideId, hash, blocked, notice }: {
+  projectId?: string; slideId?: string; hash?: string; blocked?: string; notice?: ReactNode;
 }) {
   const [core, setCore] = useState('');
   const [purpose, setPurpose] = useState<SlidePurpose | ''>('');
@@ -54,10 +54,9 @@ function SpecCreationForm({ projectId, slideId, hash, sceneRevision, blocked, no
     if (disabled || !valid || !projectId || !slideId || !purpose || pending.current) return;
     pending.current = true; setSaving(true); setError(undefined);
     try {
-      await useProjectStore.getState().mutateProject(projectId, {
-        op: 'slide.spec.write', slide_id: slideId,
-        spec: { core: core.trim(), purpose, layout: layout.trim(), elements: [] },
-        expected_hash: hash, expected_scene_revision: sceneRevision,
+      await useProjectStore.getState().saveProjectFile(projectId, hash ?? null, {
+        part: 'spec', slideId,
+        content: { core: core.trim(), purpose, layout: layout.trim(), elements: [] },
       });
     } catch (cause) {
       if (mounted.current) setError(cause instanceof Error ? cause.message : '保存失败，请重试。');

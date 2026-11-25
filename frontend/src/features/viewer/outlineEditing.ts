@@ -1,4 +1,4 @@
-import type { MutationPosition, Outline, OutlineSection, OutlineSlideNode, OutlineSubsection, PPTMutation } from '../../api/types';
+import type { MutationPosition, Outline, OutlineSection, OutlineSlideNode, OutlineSubsection } from '../../api/types';
 
 export type OutlineKind = 'section' | 'subsection' | 'slide';
 export type OutlineNode = OutlineSection | OutlineSubsection | OutlineSlideNode;
@@ -93,16 +93,4 @@ export function applyOutlineCommand(outline: Outline, command: OutlineCommand): 
   if (index < 0) throw new Error('移动位置已更新');
   siblings.splice(index + (after_id ? 1 : 0), 0, node);
   return next;
-}
-
-export function outlineMutation(command: OutlineCommand): PPTMutation {
-  if (command.type === 'update') return { op: 'outline.update', node_id: command.id,
-    changes: { title: command.title } };
-  if (command.type === 'remove') return { op: 'outline.remove', node_id: command.id, ...(command.promote ? { child_policy: 'promote_to_section' } : {}) };
-  if (command.type === 'move') return { op: 'outline.move', node_id: command.id, position: command.position };
-  const { node, kind } = command;
-  const common = { client_ref: node.id, title: node.title };
-  return { op: 'outline.insert', position: command.position,
-    ...(kind === 'subsection' ? { direct_slides_policy: 'move_into_new_subsection' as const } : {}),
-    node: kind === 'section' ? { kind, ...common, slides: [], subsections: [] } : { kind, ...common } };
 }

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { CornerUpLeft } from 'lucide-react';
 import type { PublicTarget } from '../../api/types';
-import { readHTMLSource } from '../../api/htmlSource';
 import { useProjectStore } from '../../stores/projectStore';
 import { useDeckStore } from '../../stores/deckStore';
 import { orderedSlides, slideSpecPath } from '../deck/selectors';
@@ -63,15 +62,14 @@ export function TargetSourceCard({ target }: { target: PublicTarget }) {
   const snapshot = useProjectStore(state => projectId ? state.contentByProjectId[projectId] : undefined);
   const slideId = target.slide_id;
   const exists = target.type === 'deck' || orderedSlides(snapshot).some(slide => slide.id === slideId);
-  const hash = slideId ? snapshot?.slides_by_id[slideId]?.html_hash : undefined;
+  const slide = slideId ? snapshot?.slides_by_id[slideId] : undefined;
+  const hash = slide?.html_hash;
+  const html = slide?.html;
   const loadHTML = useCallback(async () => {
     if (!projectId || !slideId || !exists) throw new Error('页面已删除或不可用。');
-    const document = await readHTMLSource(projectId, slideId);
-    if (document.project_id !== projectId || document.slide_id !== slideId || (hash && document.source_hash !== hash)) {
-      throw new Error('页面内容已更新，请稍后重试。');
-    }
-    return formatHTMLForDisplay(document.content, document.source_hash);
-  }, [projectId, slideId, exists, hash]);
+    if (html == null || !hash) throw new Error('此页 HTML 尚未生成。');
+    return formatHTMLForDisplay(html, hash);
+  }, [projectId, slideId, exists, hash, html]);
   const action = <IconButton label="预览" className="h-7 w-7 rounded" disabled={!projectId || !exists} onClick={() => openSourceTarget(target)}>{openIcon}</IconButton>;
   if (target.part === 'html') return <AsyncSourceCard key={`${projectId}:${slideId}:${hash}`} identity={`${projectId}:${slideId}:${hash}`} load={loadHTML} language="HTML" filename={`${slideId ?? "slide"}.html`} action={action} />;
   const source = target.type === 'slide' ? (slideId ? snapshot?.slides_by_id[slideId]?.spec : undefined)

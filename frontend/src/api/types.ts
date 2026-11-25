@@ -1,11 +1,6 @@
 export interface Project {
   id: string;
   title: string;
-  work_dir: string;
-  theme: string;
-  decorations: Decorations;
-  logo: ProjectLogo | null;
-  created_at: number;
   updated_at: number;
 }
 
@@ -59,11 +54,6 @@ export interface ConstraintRules {
 export interface Constraint {
   content: ConstraintRules;
   visual: ConstraintRules;
-}
-
-export interface ProjectLogo {
-  hash: string; original_name: string; media_type: string; extension: string;
-  size_bytes: number; width: number; height: number;
 }
 
 export interface RuntimeLogo { src: string; hash: string }
@@ -376,39 +366,11 @@ export interface ProjectContentSnapshot {
   constraint: Constraint | null;
   slides_by_id: Record<string, {
     spec_state: 'pending' | 'ready' | 'invalid'; spec: SlideSpec | null; html_state: HTMLState;
-    html_hash: string;
+    html_hash: string; html: string | null;
   }>;
 }
 
-export type RestrictedPatch =
-  | { op: 'add'; path: string; value: unknown }
-  | { op: 'remove'; path: string }
-  | { op: 'replace'; path: string; value: unknown };
-export interface DraftSlide { client_ref: string; title: string }
-export interface DraftSubsection { client_ref: string; title: string; slides: DraftSlide[] }
-export interface DraftSection { client_ref: string; title: string; slides: DraftSlide[]; subsections: DraftSubsection[] }
-export type DraftOutlineNode =
-  | ({ kind: 'section' } & DraftSection)
-  | { kind: 'subsection'; client_ref: string; title: string }
-  | ({ kind: 'slide' } & DraftSlide);
-export type OutlineNodeChanges = { title?: string };
-export type PPTMutation = { expected_scene_revision?: string } & (
-  | { op: 'meta.create'; expected_hash?: string }
-  | { op: 'meta.patch'; expected_hash?: string; patch: RestrictedPatch[] }
-  | { op: 'outline.create'; expected_hash?: string }
-  | { op: 'outline.init'; expected_hash?: string; structure: DraftSection[] }
-  | { op: 'outline.insert'; expected_hash?: string; node: DraftOutlineNode; position: MutationPosition; direct_slides_policy?: 'move_into_new_subsection' }
-  | { op: 'outline.move'; expected_hash?: string; node_id: string; position: MutationPosition }
-  | { op: 'outline.update'; expected_hash?: string; node_id: string; changes: OutlineNodeChanges }
-  | { op: 'outline.remove'; expected_hash?: string; node_id: string; child_policy?: 'promote_to_section' }
-  | { op: 'constraint.create'; expected_hash?: string }
-  | { op: 'constraint.write'; expected_hash?: string; constraint: Constraint }
-  | { op: 'constraint.patch'; expected_hash?: string; patch: RestrictedPatch[] }
-  | { op: 'slide.spec.write'; expected_hash?: string; slide_id: string; spec: SlideSpec }
-  | { op: 'slide.spec.patch'; expected_hash?: string; slide_id: string; patch: RestrictedPatch[] }
-);
 export interface MutationPosition { parent_id?: string; before_id?: string; after_id?: string }
-export interface MutationResponse { mutation: { operation: string; hashes: Record<string, string>; created: Record<string, string>; affected_slide_ids: string[] }; content: ProjectContentSnapshot }
 
 export interface RunInputPayload {
   content: string;

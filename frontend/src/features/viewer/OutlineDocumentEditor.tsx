@@ -3,7 +3,7 @@ import type { ProjectContentSnapshot } from '../../api/types';
 import { useProjectStore } from '../../stores/projectStore';
 import { useDeckStore } from '../../stores/deckStore';
 import { OutlineEditor } from './OutlineEditor';
-import { outlineMutation } from './outlineEditing';
+import { applyOutlineCommand } from './outlineEditing';
 
 export function OutlineDocumentEditor({ snapshot, blocked, notice }: { snapshot: ProjectContentSnapshot; blocked?: string; notice?: ReactNode }) {
   const version = `${snapshot.hashes.outline ?? ''}:${snapshot.scene_revision ?? ''}`;
@@ -18,7 +18,9 @@ export function OutlineDocumentEditor({ snapshot, blocked, notice }: { snapshot:
       if (blocked) throw new Error(blocked);
       if (!latest || `${latest.hashes.outline ?? ''}:${latest.scene_revision ?? ''}` !== capturedVersion) throw new Error('目录已更新，请取消后重新编辑。');
       try {
-        await store.mutateProject(snapshot.project_id, { ...outlineMutation(command), expected_hash: latest.hashes.outline, expected_scene_revision: latest.scene_revision });
+        await store.saveProjectFile(snapshot.project_id, latest.hashes.outline ?? null, {
+          part: 'outline', content: applyOutlineCommand(latest.outline, command),
+        });
       } catch (cause) {
         void store.loadProjectContent(snapshot.project_id);
         throw cause;

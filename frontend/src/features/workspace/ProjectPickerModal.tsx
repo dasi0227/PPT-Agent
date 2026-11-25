@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { useProjectStore } from '../../stores/projectStore';
 import { ArrowLeft, FilePlus, FolderOpen, Loader2 } from 'lucide-react';
 import { projectRoute } from './routes';
+import { showGlobalError } from '../../stores/toastStore';
 
 interface ProjectPickerModalProps {
   open: boolean;
@@ -36,18 +37,17 @@ export const ProjectPickerModal: React.FC<ProjectPickerModalProps> = ({ open, on
 
   const handleCreateProject = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const projectTitle = title.trim();
-    if (!projectTitle || isCreating) return;
+    if (!title.trim() || title.length > 60 || isCreating) return;
 
     setIsCreating(true);
     try {
-      const project = await createProject(projectTitle);
+      const project = await createProject(title);
       openProject(project.id);
       navigate(projectRoute(project.id));
       reset();
       onOpenChange(false);
-    } catch {
-      // The API client reports non-Agent backend errors through the global toast layer.
+    } catch (cause) {
+      showGlobalError(cause instanceof Error ? cause.message : '创建项目失败');
       setIsCreating(false);
     }
   };
@@ -118,6 +118,7 @@ export const ProjectPickerModal: React.FC<ProjectPickerModalProps> = ({ open, on
                 id="new-project-title"
                 autoFocus
                 value={title}
+                maxLength={60}
                 onChange={(event) => setTitle(event.target.value)}
                 disabled={isCreating}
                 placeholder="例如：2026 品牌发布会"

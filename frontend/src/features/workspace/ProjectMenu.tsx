@@ -4,6 +4,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import { FormModal } from '../../components/ui/modal-form';
 import { ConfirmModal } from '../../components/ui/modal-confirm';
 import { useProjectStore } from '../../stores/projectStore';
+import { showGlobalError } from '../../stores/toastStore';
 import { Project } from '../../api/types';
 import { homeRoute, projectRoute } from './routes';
 
@@ -55,13 +56,12 @@ export const ProjectMenu: React.FC<ProjectMenuProps> = ({ project, children }) =
         title="重命名项目"
         initialValue={project.title || ''}
         validate={(val) => {
-          const t = val.trim();
-          if (t.length < 1) return '名称不能为空';
-          if (t.length > 60) return '名称不能超过 60 个字符';
+          if (!val.trim()) return '名称不能为空';
+          if (val.length > 60) return '名称不能超过 60 个字符';
           return null;
         }}
         onSubmit={async (val) => {
-          await renameProject(project.id, val.trim());
+          await renameProject(project.id, val);
         }}
         renderField={(val, setVal) => (
           <div>
@@ -69,6 +69,7 @@ export const ProjectMenu: React.FC<ProjectMenuProps> = ({ project, children }) =
               autoFocus
               type="text"
               value={val}
+              maxLength={60}
               onChange={(e) => setVal(e.target.value)}
               className="w-full px-3 py-2 bg-panel border border-border rounded-md text-sm transition-colors"
               placeholder="请输入项目名称"
@@ -86,9 +87,13 @@ export const ProjectMenu: React.FC<ProjectMenuProps> = ({ project, children }) =
         variant="danger"
         onConfirm={async () => {
           const wasActive = useProjectStore.getState().activeProjectId === project.id;
-          const deleting = deleteProject(project.id);
+          try {
+            await deleteProject(project.id);
+          } catch (cause) {
+            showGlobalError(cause instanceof Error ? cause.message : '项目删除失败');
+            throw cause;
+          }
           if (wasActive || routeProjectId === project.id) navigateToProject(useProjectStore.getState().activeProjectId);
-          await deleting;
         }}
       />
     </>

@@ -4,6 +4,14 @@ import { parseCommitReceipt } from './session';
 import { runCommand } from './commands';
 import { CompactContextResponse, ContextWindowSnapshot, Thread, ThreadNamingAction } from './types';
 
+interface ProjectSession {
+  id: string;
+  title: string;
+  updated_at: number;
+  run_status: 'pending' | 'running' | 'waiting' | 'cancelling' | null;
+  has_active_commands: boolean;
+}
+
 async function renameThread(id: string, input: { mode: 'automatic' | 'manual'; title?: string },
   options: { signal?: AbortSignal; onProgress?: (phase: number) => void; commandId?: string }): Promise<Thread> {
   await runCommand<{ title: string }>(id, 'rename', input, options);
@@ -13,7 +21,9 @@ async function renameThread(id: string, input: { mode: 'automatic' | 'manual'; t
 }
 
 export const threadsApi = {
-  list: (projectId: string) => fetchClient<Thread[]>(`/projects/${projectId}/threads`, { reportError: false }),
+  list: (projectId: string) => fetchClient<{ items: ProjectSession[] }>(
+    `/projects/${encodeURIComponent(projectId)}/sessions`, { reportError: false, cache: 'no-store' },
+  ).then(response => response.items),
   create: (projectId: string, title?: string) => fetchClient<Thread>(`/projects/${projectId}/threads`, {
     method: 'POST',
     body: JSON.stringify({ title: title || '' })

@@ -69,7 +69,7 @@ wait_for_url() {
   local deadline=$((SECONDS + 60))
   while (( SECONDS < deadline )); do
     if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then return 1; fi
-    curl -sf --connect-timeout 1 --max-time 2 "$url" >/dev/null 2>&1 && return 0
+    if [ "$(curl -s --connect-timeout 1 --max-time 2 -o /dev/null -w '%{http_code}' "$url")" = 200 ]; then return 0; fi
     sleep 0.1
   done
   return 1

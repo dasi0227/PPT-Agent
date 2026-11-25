@@ -38,9 +38,6 @@ public class SystemController {
 
     @GetMapping("/runtime/{file}")
     public ResponseEntity<Resource> resource(@PathVariable String file) throws IOException {
-        if (file.contains("/") || file.contains("\\") || file.equals(".") || file.equals("..")) {
-            return ResponseEntity.notFound().build();
-        }
         Resource resource = resourceLoader.getResource("classpath:runtime/" + file);
         if (!resource.isReadable()) {
             return ResponseEntity.notFound().build();

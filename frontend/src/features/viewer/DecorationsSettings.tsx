@@ -1,15 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { ImageOff, Loader2, PanelsTopLeft, Trash2, Upload } from 'lucide-react';
 import { RequestCanceledError } from '../../api/client';
-import { projectsApi } from '../../api/projects';
-import type { Project } from '../../api/types';
 import {
   AnchoredPopover, AnchoredPopoverContent, AnchoredPopoverTitle, AnchoredPopoverTrigger,
 } from '../../components/ui/anchored-popover';
 import { floatingPanelTitleClassName } from '../../components/ui/dropdown-styles';
 import { Button, IconButton } from '../../components/ui/primitives';
 import { cn } from '../../lib/utils';
-import { useProjectStore } from '../../stores/projectStore';
+import { defaultPositions, useProjectStore } from '../../stores/projectStore';
 import { showGlobalError } from '../../stores/toastStore';
 import { DecorationPlacementEditor } from './DecorationPlacementEditor';
 import { useAuthoringBlock } from './useAuthoringBlock';
@@ -18,11 +16,12 @@ type SaveOperation = 'positions' | 'upload' | 'delete';
 
 export function DecorationsSettings({ projectId }: { projectId: string | null }) {
   const project = useProjectStore(state => state.projects.find(value => value.id === projectId));
+  const appearance = useProjectStore(state => projectId ? state.appearanceByProjectId[projectId] : undefined);
   const loadAppearance = useProjectStore(state => state.loadProjectAppearance);
   const setDecorations = useProjectStore(state => state.setProjectDecorations);
   const uploadLogo = useProjectStore(state => state.uploadProjectLogo);
   const deleteLogo = useProjectStore(state => state.deleteProjectLogo);
-  const blocked = useAuthoringBlock(projectId);
+  const blocked = useAuthoringBlock(projectId, false);
   const anchorRef = useRef<HTMLButtonElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const savingRef = useRef(false);
@@ -36,8 +35,8 @@ export function DecorationsSettings({ projectId }: { projectId: string | null })
   const [saving, setSaving] = useState<SaveOperation | null>(null);
   const [fileDragging, setFileDragging] = useState(false);
   const [logoError, setLogoError] = useState(false);
-  const logo = project?.logo;
-  const disabled = !project || !projectId || loading || loadError || Boolean(blocked) || Boolean(saving);
+  const logo = appearance?.logo;
+  const disabled = !appearance || !project || !projectId || loading || loadError || Boolean(blocked) || Boolean(saving);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -49,7 +48,7 @@ export function DecorationsSettings({ projectId }: { projectId: string | null })
     const controller = new AbortController();
     setLoading(true);
     setLoadError(false);
-    void loadAppearance(projectId, controller.signal).catch(error => {
+    void loadAppearance(projectId).catch(error => {
       if (!controller.signal.aborted && !(error instanceof RequestCanceledError)) setLoadError(true);
     }).finally(() => {
       if (!controller.signal.aborted) setLoading(false);
@@ -57,7 +56,7 @@ export function DecorationsSettings({ projectId }: { projectId: string | null })
     return () => { controller.abort(); };
   }, [open, projectId, loadAppearance, loadAttempt]);
 
-  const save = async (operation: SaveOperation, write: () => Promise<Project>): Promise<boolean> => {
+  const save = async (operation: SaveOperation, write: () => Promise<void>): Promise<boolean> => {
     if (disabled || savingRef.current) return false;
     savingRef.current = true;
     setSaving(operation);
@@ -84,18 +83,17 @@ export function DecorationsSettings({ projectId }: { projectId: string | null })
   const uploadFiles = (files: File[]) => {
     if (!projectId || disabled || files.length === 0) return;
     if (files.length !== 1) {
-      showGlobalError('请选择一张 PNG 或 JPEG 图片');
+      showGlobalError('请选择一张 PNG 图片');
       return;
     }
     const file = files[0];
-    const supported = ['image/png', 'image/jpeg'].includes(file.type)
-      || (!file.type && /\.(png|jpe?g)$/i.test(file.name));
+    const supported = file.type === 'image/png' || (!file.type && /\.png$/i.test(file.name));
     if (!supported) {
-      showGlobalError('仅支持 PNG 和 JPEG 图片');
+      showGlobalError('仅支持 PNG 图片');
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      showGlobalError('图片超过 10 MiB，请压缩后重试');
+    if (file.size > 2_000_000) {
+      showGlobalError('图片超过 2 MB，请压缩后重试');
       return;
     }
     void save('upload', () => uploadLogo(projectId, file));
@@ -128,7 +126,7 @@ export function DecorationsSettings({ projectId }: { projectId: string | null })
               </button>
             </>
           ) : (
-            <DecorationPlacementEditor key={project.id} value={project.decorations} disabled={disabled} loading={loading} blocked={blocked}
+            <DecorationPlacementEditor key={project.id} value={appearance?.decorations ?? defaultPositions} disabled={disabled} loading={loading} blocked={blocked}
               onChange={positions => save('positions', () => setDecorations(project.id, positions))} />
           )}
           <div className={cn('decorations-upload border-t border-border transition-colors', fileDragging && !disabled && 'bg-hover')}
@@ -147,17 +145,17 @@ export function DecorationsSettings({ projectId }: { projectId: string | null })
               setFileDragging(false);
               uploadFiles(Array.from(event.dataTransfer.files));
             }}>
-            <input ref={fileRef} type="file" accept="image/png,image/jpeg" disabled={disabled} className="hidden"
+            <input ref={fileRef} type="file" accept="image/png" disabled={disabled} className="hidden"
               onChange={event => { uploadFiles(Array.from(event.currentTarget.files ?? [])); event.currentTarget.value = ''; }} />
             {logo ? (
               <div className="flex min-h-[34px] items-center gap-2.5">
                 <div className="flex h-[30px] w-11 shrink-0 items-center justify-center rounded-md border border-border bg-panel p-1">
                   {logoError ? <ImageOff className="h-4 w-4 text-text-400" aria-label="标识图片加载失败" /> : (
-                    <img key={logo.hash} src={projectsApi.logoContentUrl(project.id, logo.hash)} alt="演示标识" draggable={false}
+                    <img key={logo.hash} src={logo.src} alt="演示标识" draggable={false}
                       className="h-full w-full object-contain" onError={() => setLogoError(true)} />
                   )}
                 </div>
-                <span className="min-w-0 flex-1 truncate text-xs text-text-700" title={logo.original_name}>{logo.original_name}</span>
+                <span className="min-w-0 flex-1 truncate text-xs text-text-700">演示标识</span>
                 <IconButton label="更换标识" disabled={disabled} title={blocked ?? '更换标识'} onClick={() => fileRef.current?.click()} className="h-7 w-7">
                   {saving === 'upload' ? <Loader2 className="h-[15px] w-[15px] animate-spin motion-reduce:animate-none" /> : <Upload className="h-[15px] w-[15px]" strokeWidth={1.75} />}
                 </IconButton>

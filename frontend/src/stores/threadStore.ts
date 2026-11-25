@@ -1,4 +1,4 @@
-import { compareRevision, isRevision } from '../api/session';
+import { compareRevision } from '../api/session';
 import { generateNameCommand } from './textCommandStore';
 import { create } from 'zustand';
 import { Thread, ThreadNamingAction } from '../api/types';
@@ -12,12 +12,11 @@ import { rememberDeletion, recoverDeletionNotices } from './deletionStore';
 
 interface RenamePanelTarget { projectId: string; threadId: string }
 
-interface ThreadStreamState { epoch: string; sequence: string }
-const streamStateByProject = new Map<string, ThreadStreamState>();
-const eventSourceByProject = new Map<string, EventSource>();
+type ListedThread = Pick<Thread, 'id' | 'title' | 'updated_at'> & Partial<Thread>;
+const threadListVersions = new Map<string, number>();
 
 interface ThreadState {
-  threadsByProjectId: Record<string, Thread[]>;
+  threadsByProjectId: Record<string, ListedThread[]>;
   openThreadIdsByProjectId: Record<string, string[]>;
   activeThreadIdByProjectId: Record<string, string | null>;
   errorByProjectId: Record<string, string | null>;
@@ -34,68 +33,15 @@ interface ThreadState {
 	closeSuggestPanel: () => void;
 	setAutoSuggest: (projectId: string, threadId: string, enabled: boolean) => Promise<void>;
 	performNamingAction: (projectId: string, threadId: string, action: ThreadNamingAction, title?: string) => Promise<void>;
-	applyThreadSnapshot: (projectId: string, epoch: string, sequence: string, threads: Thread[]) => void;
-	applyThreadNamingUpdate: (projectId: string, epoch: string, sequence: string, thread: Thread) => void;
   setActiveThread: (projectId: string, threadId: string) => void;
   ensureActiveThread: (projectId: string) => Promise<string>;
   getActiveThreadId: (projectId: string) => string | null;
-  displayThreads: (projectId: string) => Thread[];
-  closeProjectThreads: (projectId: string) => void;
+  displayThreads: (projectId: string) => ListedThread[];
   dropProject: (projectId: string) => string[];
 }
 
 function withOpen(ids: string[], threadId: string): string[] {
   return ids.includes(threadId) ? ids : [...ids, threadId];
-}
-
-function isThread(value: unknown): value is Thread {
-	if (!value || typeof value !== 'object') return false;
-	const thread = value as Partial<Thread>;
-	return typeof thread.id === 'string' && typeof thread.project_id === 'string'
-		&& typeof thread.title === 'string' && typeof thread.auto_rename_enabled === 'boolean'
-		&& isRevision(thread.naming_revision) && typeof thread.auto_suggest_enabled === 'boolean';
-}
-
-function parseThreadEvent(projectId: string, name: string, raw: string) {
-	let data: Record<string, unknown>;
-	try {
-		data = JSON.parse(raw) as Record<string, unknown>;
-	} catch {
-		return;
-	}
-	if (data.schema_version !== 1 || data.project_id !== projectId
-		|| typeof data.stream_epoch !== 'string' || !isRevision(data.sequence)) return;
-	const epoch = data.stream_epoch;
-	const sequence = data.sequence;
-	if (name === 'threads.snapshot') {
-		if (!Array.isArray(data.threads) || !data.threads.every(isThread)) return;
-		useThreadStore.getState().applyThreadSnapshot(projectId, epoch, sequence, data.threads);
-		return;
-	}
-	if (name === 'thread.naming.updated' && isThread(data.thread)) {
-		useThreadStore.getState().applyThreadNamingUpdate(projectId, epoch, sequence, data.thread);
-		return;
-	}
-}
-
-function ensureThreadEvents(projectId: string) {
-  if (isProjectDeleted(projectId)) return;
-	if (typeof EventSource === 'undefined') return;
-	if (eventSourceByProject.has(projectId)) return;
-	const source = new EventSource(`/api/v1/projects/${encodeURIComponent(projectId)}/thread-events`);
-	for (const name of ['threads.snapshot', 'thread.naming.updated']) {
-		source.addEventListener(name, (event) => parseThreadEvent(projectId, name, (event as MessageEvent<string>).data));
-	}
-	source.onerror = () => {
-		// EventSource reconnects automatically; the server starts every connection with an authoritative snapshot.
-	};
-	eventSourceByProject.set(projectId, source);
-}
-
-function closeThreadEvents(projectId: string) {
-	eventSourceByProject.get(projectId)?.close();
-	eventSourceByProject.delete(projectId);
-	streamStateByProject.delete(projectId);
 }
 
 export const useThreadStore = create<ThreadState>((set, get) => ({
@@ -111,11 +57,14 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
 
   loadThreads: async (projectId) => {
     if (isProjectDeleted(projectId)) return;
+    const version = (threadListVersions.get(projectId) ?? 0) + 1;
+    threadListVersions.set(projectId, version);
     try {
       const threads = (await threadsApi.list(projectId)).filter(thread => !isThreadDeleted(thread.id));
-      if (isProjectDeleted(projectId)) return;
+      if (isProjectDeleted(projectId) || threadListVersions.get(projectId) !== version) return;
       set((state) => {
-        const nextThreads = { ...state.threadsByProjectId, [projectId]: threads };
+        const previous = new Map((state.threadsByProjectId[projectId] ?? []).map(thread => [thread.id, thread]));
+        const nextThreads = { ...state.threadsByProjectId, [projectId]: threads.map(thread => ({ ...previous.get(thread.id), ...thread })) };
         const valid = new Set(threads.map((thread) => thread.id));
         const alreadyOpen = state.openThreadIdsByProjectId[projectId]?.filter((id) => valid.has(id));
         const nextOpen = { ...state.openThreadIdsByProjectId };
@@ -133,9 +82,8 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
           errorByProjectId: { ...state.errorByProjectId, [projectId]: null },
         };
       });
-		ensureThreadEvents(projectId);
     } catch (err) {
-      if (isProjectDeleted(projectId)) return;
+      if (isProjectDeleted(projectId) || threadListVersions.get(projectId) !== version) return;
       set((state) => ({
         errorByProjectId: {
           ...state.errorByProjectId,
@@ -170,7 +118,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
 		const updated = await threadsApi.setAutoSuggest(threadId, enabled);
 		set(state => ({ threadsByProjectId: { ...state.threadsByProjectId,
 			[projectId]: (state.threadsByProjectId[projectId] ?? []).map(thread =>
-				thread.id === threadId && compareRevision(updated.naming_revision, thread.naming_revision) >= 0 ? updated : thread),
+				thread.id === threadId && (!thread.naming_revision || compareRevision(updated.naming_revision, thread.naming_revision) >= 0) ? updated : thread),
 		} }));
 	},
 
@@ -179,7 +127,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
       threadsByProjectId: {
         ...state.threadsByProjectId,
         [projectId]: (state.threadsByProjectId[projectId] ?? []).map(thread =>
-          thread.id === threadId && compareRevision(updated.naming_revision, thread.naming_revision) >= 0 ? updated : thread),
+          thread.id === threadId && (!thread.naming_revision || compareRevision(updated.naming_revision, thread.naming_revision) >= 0) ? updated : thread),
       },
     }));
     if (action === 'generate') {
@@ -201,45 +149,6 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
     apply(await threadsApi.naming(threadId, operationId, action, title));
 
   },
-
-	applyThreadSnapshot: (projectId, epoch, sequence, threads) => {
-		if (isProjectDeleted(projectId)) return;
-		threads = threads.filter(thread => !isThreadDeleted(thread.id));
-		const current = streamStateByProject.get(projectId);
-		if (current?.epoch === epoch && compareRevision(sequence, current.sequence) < 0) return;
-		const epochChanged = Boolean(current && current.epoch !== epoch);
-		streamStateByProject.set(projectId, { epoch, sequence });
-		set((state) => {
-			const valid = new Set(threads.map((thread) => thread.id));
-			const previousThreadIds = new Set((state.threadsByProjectId[projectId] || []).map((thread) => thread.id));
-			const open = (state.openThreadIdsByProjectId[projectId] || []).filter((id) => valid.has(id));
-			const active = state.activeThreadIdByProjectId[projectId];
-			const pending = { ...state.pendingNamingOperationByThreadId };
-			if (epochChanged) {
-				for (const threadId of new Set([...previousThreadIds, ...valid])) delete pending[threadId];
-			}
-			return {
-				threadsByProjectId: { ...state.threadsByProjectId, [projectId]: threads },
-				openThreadIdsByProjectId: { ...state.openThreadIdsByProjectId, [projectId]: open.length > 0 ? open : threads.map((thread) => thread.id) },
-				activeThreadIdByProjectId: { ...state.activeThreadIdByProjectId, [projectId]: active && valid.has(active) ? active : threads[0]?.id ?? null },
-				pendingNamingOperationByThreadId: pending,
-			};
-		});
-	},
-
-	applyThreadNamingUpdate: (projectId, epoch, sequence, updated) => {
-		if (isProjectDeleted(projectId) || isThreadDeleted(updated.id)) return;
-		const current = streamStateByProject.get(projectId);
-		if (!current || current.epoch !== epoch || compareRevision(sequence, current.sequence) <= 0) return;
-		streamStateByProject.set(projectId, { epoch, sequence });
-		set((state) => ({
-			threadsByProjectId: {
-				...state.threadsByProjectId,
-				[projectId]: (state.threadsByProjectId[projectId] || []).map((thread) =>
-					thread.id === updated.id && compareRevision(updated.naming_revision, thread.naming_revision) >= 0 ? updated : thread),
-			},
-		}));
-	},
 
   deleteThread: async (projectId, threadId) => {
     if (isThreadDeleted(threadId)) return;
@@ -310,10 +219,8 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
 
   getActiveThreadId: (projectId) => get().activeThreadIdByProjectId[projectId] ?? null,
 
-  closeProjectThreads: (projectId) => { closeThreadEvents(projectId); },
-
   dropProject: (projectId) => {
-		closeThreadEvents(projectId);
+    threadListVersions.delete(projectId);
     const ids = new Set<string>([
       ...(get().openThreadIdsByProjectId[projectId] || []),
       ...(get().threadsByProjectId[projectId] || []).map((t) => t.id),

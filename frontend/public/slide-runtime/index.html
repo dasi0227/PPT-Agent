@@ -182,7 +182,7 @@
       const normalized = source.startsWith('/') ? source : `/${source}`;
       const match = normalized.match(/^\/attachments\/(att_[A-Za-z0-9_-]{1,128})\/original\.(png|jpe?g|webp)$/i);
       if (!match) return null;
-      return `/api/v1/projects/${encodeURIComponent(projectID)}/attachments/${encodeURIComponent(match[1])}/content?variant=original${resourceHash ? `&v=${encodeURIComponent(resourceHash)}` : ''}`;
+      return `/api/projects/${encodeURIComponent(projectID)}/attachments/${encodeURIComponent(match[1])}?variant=original${resourceHash ? `&v=${encodeURIComponent(resourceHash)}` : ''}`;
     }
 
     function bridgeAttachmentPaths(source, projectID, resourceHash) {

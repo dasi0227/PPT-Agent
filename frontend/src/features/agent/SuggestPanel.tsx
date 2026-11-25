@@ -69,7 +69,7 @@ export const SuggestPanel: React.FC = () => {
         </div>
         <div className="agent-inline-panel-settings">
           <span className="text-xs text-text-600">自动建议</span>
-          <Switch aria-label="自动建议" checked={automaticEnabled && thread.auto_suggest_enabled}
+          <Switch aria-label="自动建议" checked={automaticEnabled && thread.auto_suggest_enabled === true}
             disabled={Boolean(busy) || !automaticEnabled} onCheckedChange={() => void toggle()} title={automaticEnabled && thread.auto_suggest_enabled ? '自动建议已开启' : '自动建议已关闭'} />
         </div>
         <button type="button" onClick={close} className="agent-inline-panel-close inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-text-600 ui-interactive" aria-label="关闭建议面板" title="关闭建议面板">

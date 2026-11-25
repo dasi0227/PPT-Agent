@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom';
 import { RotateCcw } from 'lucide-react';
 import type { ProjectContentSnapshot, Slide } from '../../api/types';
-import { Button, Disclosure, IconButton, InlineNotice, Skeleton } from '../../components/ui/primitives';
+import { Button, IconButton, InlineNotice } from '../../components/ui/primitives';
 import { IllustratedEmptyState } from '../../components/ui/IllustratedEmptyState';
 import { cn } from '../../lib/utils';
 import { useAppShortcuts } from '../../lib/useAppShortcuts';
@@ -17,8 +17,7 @@ import { buildRuntimeFrame } from './runtimeFrame';
 import { slidePurposeLabel } from './semanticLabels';
 import { SlideSpecCard } from './SlideSpecCard';
 import { SlideThumbnail } from './SlideThumbnail';
-import { hasRenderedHTML, ResourceState, useSlideRenderCache } from './useSlideRenderCache';
-import { orderedSlides } from '../deck/selectors';
+import { hasRenderedHTML, orderedSlides } from '../deck/selectors';
 import { useComposerStore } from '../../stores/composerStore';
 import { useThreadStore } from '../../stores/threadStore';
 import { useActiveSession, useActiveThreadId } from '../agent/useActiveSession';
@@ -38,23 +37,14 @@ const HTMLSourceView = React.lazy(() => import('./HTMLSourceView').then((module)
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 1.15;
 
-function visibleHTML(state: ResourceState<string>): string | undefined {
-  if (state.status === 'ready') return state.data;
-  if (state.status === 'loading' || state.status === 'error') return state.previous;
-  return undefined;
-}
-
 function PreviewFrame({
   slide,
-  state,
-  retry,
   title,
   active,
   snapshot,
   fullscreen = false,
   runtimeSlides,
   runtimeIndex,
-  fallbackFrame,
   selectionMode,
   selectionSlide,
   draftSelections,
@@ -66,15 +56,12 @@ function PreviewFrame({
   replayRequest,
 }: {
   slide: Slide;
-  state: ResourceState<string>;
-  retry: () => void;
   title: string;
   active: boolean;
   snapshot: ProjectContentSnapshot;
   fullscreen?: boolean;
-  runtimeSlides?: RuntimeSlide[];
-  runtimeIndex?: number;
-  fallbackFrame?: RuntimeSlide['frame'];
+  runtimeSlides: RuntimeSlide[];
+  runtimeIndex: number;
   selectionMode?: 'element' | 'region' | 'none';
   selectionSlide?: { id: string; hash: string };
   draftSelections?: DOMSelection[];
@@ -88,16 +75,6 @@ function PreviewFrame({
   const [displayedKey, setDisplayedKey] = useState<string>();
   const displayKey = `${slide.id}:${slide.html_hash}:${snapshot.hashes[`assets:${slide.id}`] || ''}`;
   const onDisplayChange = useCallback((displayed: boolean) => setDisplayedKey(displayed ? displayKey : undefined), [displayKey]);
-  const visibleHtml = visibleHTML(state);
-  const deck = runtimeSlides
-    ? runtimeSlides
-    : visibleHtml !== undefined
-      ? fallbackFrame ? [{ id: slide.id, html: visibleHtml, frame: fallbackFrame }] : []
-      : [];
-  const deckIndex = runtimeSlides
-    ? runtimeIndex ?? -1
-    : 0;
-
   return (
     <div className={cn(
       'relative h-full w-full overflow-hidden bg-transparent',
@@ -105,10 +82,10 @@ function PreviewFrame({
     )}>
       <IsolatedSlidePreview
         keyboardShortcuts
-        active={active && deckIndex >= 0}
+        active={active && runtimeIndex >= 0}
         onDisplayChange={onDisplayChange}
-        slides={deck}
-        index={deckIndex}
+        slides={runtimeSlides}
+        index={runtimeIndex}
         className="h-full w-full border-0"
         title={title}
         selectionMode={selectionMode}
@@ -121,33 +98,10 @@ function PreviewFrame({
         onSelectionPresence={onSelectionPresence}
         replayRequest={replayRequest}
       />
-      {(state.status === 'idle' || (state.status === 'loading' && !state.previous)) && (
-        <div className="absolute inset-0 flex flex-col gap-3 p-8">
-          <Skeleton className="h-10 w-2/3" />
-          <Skeleton className="h-5 w-1/2" />
-          <Skeleton className="mt-auto h-1/2 w-full" />
-          <span className="sr-only">HTML 正在加载</span>
-        </div>
-      )}
-      {state.status === 'loading' && state.previous && (
-        <div className="absolute right-3 top-3 rounded-md border border-accent/20 bg-panel/95 px-2 py-1 text-xs text-accent shadow-overlay">
-          页面正在更新
-        </div>
-      )}
       {active && displayedKey !== displayKey && (
         <SlideThumbnail slide={slide} snapshot={snapshot} cachedOnly className="pointer-events-none absolute inset-0 h-full" />
       )}
-      {state.status === 'error' && (
-        <InlineNotice tone="danger" className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-3 bg-danger-soft/95">
-          <div className="min-w-0">
-            <span>HTML 加载失败，请检查网络后重试。</span>
-            <Disclosure label="错误详情">
-              <p className="break-all font-mono text-[11px]">{state.error.message}</p>
-            </Disclosure>
-          </div>
-          <Button variant="secondary" onClick={retry}>重试</Button>
-        </InlineNotice>
-      )}
+
     </div>
   );
 }
@@ -235,7 +189,6 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   } = useDeckStore();
   const {
     activeProjectId,
-    projects,
     contentByProjectId,
     contentErrorByProjectId,
     loadProjectContent,
@@ -263,7 +216,6 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
     () => orderedSlides(snapshot),
     [snapshot],
   );
-  const { getState, load } = useSlideRenderCache(projectId);
   const [fullscreen, setFullscreen] = useState(false);
   const [replayRequest, setReplayRequest] = useState<{ id: number; slideId: string }>();
   const replayRequestIDRef = useRef(0);
@@ -292,7 +244,6 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   const currentHasHTML = currentSlide ? hasRenderedHTML(currentSlide) : false;
   const presentationSlide = currentHasHTML ? currentSlide : slides.find(hasRenderedHTML);
   const currentView = currentSlide ? globalView : 'html';
-  const project = projects.find(item => item.id === projectId);
   const previewFilename = activeDocument
     ? snapshot?.hashes[activeDocument] ? `.${activeDocument}.json` : undefined
     : previewMode === 'main' && currentSlide
@@ -300,25 +251,24 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
         ? currentSlide.spec_path || undefined
         : currentHasHTML ? currentSlide.html_path : undefined
       : undefined;
-  const externalOpenUrl = project?.work_dir && snapshot?.project_id === projectId && previewFilename
-    ? `/api/v1/files/open?path=${encodeURIComponent(`${project.work_dir.replace(/\/$/, '')}/${previewFilename}`)}`
+  const externalOpenUrl = projectId && snapshot?.project_id === projectId && previewFilename
+    ? '/api/files/open?' + new URLSearchParams({ project_id: projectId, path: previewFilename })
     : undefined;
-  const currentState = currentSlide ? getState(currentSlide) : { status: 'idle' as const };
   const runtimeSlides = useMemo<RuntimeSlide[]>(() => {
     return slides.slice(Math.max(0, safePage - 2), safePage + 3).flatMap((slide) => {
       if (!hasRenderedHTML(slide)) return [];
-      const html = visibleHTML(getState(slide));
+      const html = snapshot?.slides_by_id[slide.id]?.html;
       const frame = snapshot ? buildRuntimeFrame(snapshot, slide.id) : undefined;
-      return html === undefined || !frame ? [] : [{ id: slide.id, html, frame, resource_hash: snapshot?.hashes[`assets:${slide.id}`] || '' }];
+      return html == null || !frame ? [] : [{ id: slide.id, html, frame }];
     });
-  }, [getState, safePage, slides, snapshot]);
+  }, [safePage, slides, snapshot]);
   const runtimeIndex = currentSlide
     ? runtimeSlides.findIndex((slide) => slide.id === currentSlide.id)
     : -1;
   const draftSelections = useMemo(() => activeThreadId
     ? (composer.threadReferences[activeThreadId] ?? []).flatMap((item) => item.kind === 'dom' ? [item.selection] : [])
     : [], [activeThreadId, composer.threadReferences]);
-  const selectionSlide = currentState.status === 'ready' && currentSlide?.html_hash ? {
+  const selectionSlide = currentHasHTML && currentSlide?.html_hash ? {
     id: currentSlide.id, hash: currentSlide.html_hash,
   } : undefined;
   const selectionEnabled = !activeDocument && contentMode === 'preview' && previewMode === 'main' && currentView === 'html' && Boolean(selectionSlide) && !fullscreen
@@ -381,19 +331,6 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
     showRightPanel();
     setSelectionMode('none');
   }, [activeThreadId, ensureActiveThread, projectId, selectionMode, showRightPanel]);
-
-  useEffect(() => {
-    if (!mainCanvasVisible || !currentSlide || !currentHasHTML || currentState.status === 'error') return;
-    void load(currentSlide, 'current').then(() => {
-      const deck = useDeckStore.getState();
-      if (useProjectStore.getState().activeProjectId !== projectId || (deck.currentSlideId && deck.currentSlideId !== currentSlide.id)
-        || deck.activeDocument || deck.previewMode !== 'main' || deck.globalView !== 'html' || deck.contentMode !== 'preview') return;
-      const previous = slides[safePage - 1];
-      const next = slides[safePage + 1];
-      if (previous && hasRenderedHTML(previous)) void load(previous, 'prefetch');
-      if (next && hasRenderedHTML(next)) void load(next, 'prefetch');
-    });
-  }, [mainCanvasVisible, currentHasHTML, currentSlide, currentState.status, load, projectId, safePage, slides]);
 
   useEffect(() => {
     const onFullscreenChange = () => setFullscreen(Boolean(canvasRef.current && document.fullscreenElement === canvasRef.current));
@@ -525,7 +462,8 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
       <div className="preview-content" data-status-bar={showStatusBar || undefined}>
         {contentMode === 'source' && !activeDocument && globalView === 'html' && previewMode === 'main' && projectId && selectedIndex >= 0 ? (
           <React.Suspense fallback={<div className="flex flex-1 items-center justify-center text-sm text-text-400">正在加载源码…</div>}>
-            <HTMLSourceView projectId={projectId} slideId={currentSlide?.id} title={currentSlide?.title} ordinal={safePage + 1} hash={currentSlide?.html_hash} sceneRevision={snapshot?.scene_revision} available={currentHasHTML} />
+            <HTMLSourceView slideId={currentSlide?.id} title={currentSlide?.title} ordinal={safePage + 1}
+              hash={currentSlide?.html_hash} html={currentSlide ? snapshot?.slides_by_id[currentSlide.id]?.html : undefined} />
           </React.Suspense>
         ) : activeDocument ? (
           <ProjectDocumentView
@@ -570,6 +508,11 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
             >
               {!projectId ? (
                 <InlineNotice tone="info">请先从顶部项目 Tab 打开或新建项目。</InlineNotice>
+              ) : !snapshot && specError ? (
+                <InlineNotice tone="danger" className="flex items-center gap-3">
+                  <span>内容加载失败，请重试。</span>
+                  <Button variant="secondary" onClick={() => void loadProjectContent(projectId)}>重试</Button>
+                </InlineNotice>
               ) : !hasSlides ? (
                 <IllustratedEmptyState illustration="slides" label="暂无页面" />
               ) : currentHasHTML ? (
@@ -578,13 +521,10 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
                   active={mainCanvasVisible}
                   snapshot={snapshot!}
                   slide={currentSlide}
-                  state={currentState}
-                  retry={() => void load(currentSlide, 'current')}
                   title={`第 ${safePage + 1} 页 HTML 预览`}
                   fullscreen={fullscreen}
                   runtimeSlides={runtimeSlides}
                   runtimeIndex={runtimeIndex}
-                  fallbackFrame={snapshot ? buildRuntimeFrame(snapshot, currentSlide.id) : undefined}
                   selectionMode={selectionEnabled ? selectionMode : 'none'}
                   selectionSlide={selectionSlide}
                   draftSelections={draftSelections}

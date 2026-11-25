@@ -1,8 +1,7 @@
 import { useAppShortcuts } from '../../lib/useAppShortcuts';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Check, Loader2, Palette } from 'lucide-react';
-import { repositoriesApi } from '../../api/repositories';
-import type { Theme } from '../../api/types';
+import { assetsApi, type AssetInfo } from '../../api/assets';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu';
@@ -13,20 +12,16 @@ import { showGlobalError } from '../../stores/toastStore';
 import { useAuthoringBlock } from './useAuthoringBlock';
 
 export function ThemeSelector({ projectId }: { projectId: string | null }) {
-  const themeId = useProjectStore(state => {
-    if (!projectId) return '';
-    const snapshot = state.contentByProjectId[projectId];
-    return (snapshot ? snapshot.theme : state.projects.find(project => project.id === projectId)?.theme) ?? '';
-  });
+  const themeId = useProjectStore(state => projectId ? state.appearanceByProjectId[projectId]?.theme ?? '' : '');
   const setProjectTheme = useProjectStore(state => state.setProjectTheme);
-  const blocked = useAuthoringBlock(projectId);
+  const blocked = useAuthoringBlock(projectId, false);
   const [open, setOpen] = useState(false);
   useEffect(() => { setOpen(false); }, [projectId]);
-  const [themes, setThemes] = useState<Theme[]>([]);
+  const [themes, setThemes] = useState<AssetInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [applying, setApplying] = useState(false);
-  const loadingRef = useRef<Promise<Theme[] | null> | null>(null);
+  const loadingRef = useRef<Promise<AssetInfo[] | null> | null>(null);
   const applyingRef = useRef(false);
   const cyclingRef = useRef(false);
 
@@ -34,9 +29,9 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
     if (loadingRef.current) return loadingRef.current;
     setLoading(true);
     setError(false);
-    loadingRef.current = repositoriesApi.listThemes().then(response => {
-      setThemes(response.themes);
-      return response.themes;
+    loadingRef.current = assetsApi.list('theme', '').then(response => {
+      setThemes(response.items);
+      return response.items;
     }).catch(() => {
       setError(true);
       return null;
@@ -49,8 +44,8 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
 
   useEffect(() => { if (projectId) void load(); }, [projectId, load]);
 
-  const apply = useCallback(async (theme: Theme) => {
-    if (!projectId || blocked || theme.disabled || theme.content_state !== 'ready' || theme.id === themeId || applyingRef.current) return;
+  const apply = useCallback(async (theme: AssetInfo) => {
+    if (!projectId || blocked || !theme.enabled || theme.id === themeId || applyingRef.current) return;
     applyingRef.current = true;
     setApplying(true);
     try {
@@ -77,7 +72,7 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
     try {
       const current = await load();
       if (!current) { showGlobalError('主题加载失败'); return; }
-      const available = current.filter(theme => !theme.disabled && theme.content_state === 'ready');
+      const available = current.filter(theme => theme.enabled);
       if (!available.length) return;
       const nextIndex = (available.findIndex(theme => theme.id === themeId) + 1) % available.length;
       await apply(available[nextIndex]);
@@ -89,7 +84,7 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
   useAppShortcuts(projectId ? { 'deck.theme': () => { void cycleTheme(); } } : {});
 
   const name = themes.find(theme => theme.id === themeId)?.name || themeId || '选择主题';
-  const enabledThemes = themes.filter(theme => !theme.disabled && theme.content_state === 'ready');
+  const enabledThemes = themes.filter(theme => theme.enabled);
   return (
     <DropdownMenu open={open} onOpenChange={value => { setOpen(value); if (value) void load(); }}>
       <DropdownMenuTrigger asChild>

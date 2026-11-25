@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import type { PPTMutation, ProjectContentSnapshot, RestrictedPatch } from '../../api/types';
+import type { ProjectFileWrite } from '../../api/projects';
 import { Button } from '../../components/ui/primitives';
 import { TextField } from '../../components/ui/text-field';
 import { useDeckStore } from '../../stores/deckStore';
@@ -26,22 +26,10 @@ export interface ManagementController<T> {
   error?: string;
 }
 
-/** Only changed business fields are submitted. Optional fields are removed, never stored as null. */
-export function changedFields<T extends object>(previous: T, next: T): RestrictedPatch[] {
-  const before = previous as Record<string, unknown>;
-  const after = next as Record<string, unknown>;
-  return [...new Set([...Object.keys(before), ...Object.keys(after)])].flatMap((key): RestrictedPatch[] => {
-    if (JSON.stringify(before[key]) === JSON.stringify(after[key])) return [];
-    const path = `/${key.replace(/~/g, '~0').replace(/\//g, '~1')}`;
-    if (after[key] === undefined) return [{ op: 'remove', path }];
-    return [{ op: before[key] === undefined ? 'add' : 'replace', path, value: after[key] }];
-  });
-}
-
-export function ManagementEditor<T>({ projectId, resourceKey, title, icon, value, hash, sceneRevision, blocked, mutation, children, notice, jsonAvailable = true }: {
+export function ManagementEditor<T>({ projectId, resourceKey, title, icon, value, hash, sceneRevision, blocked, toFile, children, notice, jsonAvailable = true }: {
   projectId?: string; resourceKey: string; title: string; icon: LucideIcon; value: T;
   hash?: string; sceneRevision?: string; blocked?: string;
-  mutation: (next: T, previous: T) => PPTMutation;
+  toFile: (next: T) => ProjectFileWrite;
   children: (editor: ManagementController<T>) => ReactNode;
   notice?: ReactNode; jsonAvailable?: boolean;
 }) {
@@ -103,13 +91,11 @@ export function ManagementEditor<T>({ projectId, resourceKey, title, icon, value
     clearUndo();
     pending.current = true; setSaving(true); setError(undefined);
     try {
-      const result: ProjectContentSnapshot = await useProjectStore.getState().mutateProject(projectId, {
-        ...mutation(next, base), expected_hash: capturedHash, expected_scene_revision: capturedScene,
-      });
+      const savedHash = await useProjectStore.getState().saveProjectFile(projectId, capturedHash ?? null, toFile(next));
       if (!mounted.current) return true;
       setDraft(undefined);
       if (undoable) {
-        const record = { toastId: '', value: base, hash: result.hashes[resourceKey], scene: result.scene_revision, projectId, resourceKey };
+        const record = { toastId: '', value: base, hash: savedHash, scene: capturedScene, projectId, resourceKey };
         record.toastId = showGlobalSuccess('已删除条目', { label: '撤销', onClick: () => {
           if (!mounted.current || pending.current || undo.current !== record) return;
           undo.current = undefined;

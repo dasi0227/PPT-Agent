@@ -30,4 +30,8 @@ export function orderedSlides(snapshot?: ProjectContentSnapshot): Slide[] {
   });
 }
 
+export function hasRenderedHTML(slide: Slide): boolean {
+  return slide.html_state === 'available';
+}
+
 export function ordinalBySlideId(outline?: Outline): Record<string, number> { return Object.fromEntries(flattenOutline(outline).map((item) => [item.node.id, item.ordinal])); }
