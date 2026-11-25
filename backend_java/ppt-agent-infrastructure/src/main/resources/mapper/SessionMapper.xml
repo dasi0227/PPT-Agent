@@ -17,14 +17,4 @@
         SELECT id FROM sessions WHERE project_id = #{projectId}
     </select>
 
-    <select id="listRevisions" resultMap="sessionPo">
-        SELECT id, revision FROM sessions WHERE project_id = #{projectId}
-    </select>
-
-    <select id="advanceCheckpointRevisions" resultType="string" affectData="true" flushCache="true">
-        UPDATE sessions SET revision = revision + 1
-        WHERE project_id = #{projectId} AND EXISTS (
-            SELECT 1 FROM checkpoints WHERE checkpoints.session_id = sessions.id
-        ) RETURNING id
-    </select>
 </mapper>

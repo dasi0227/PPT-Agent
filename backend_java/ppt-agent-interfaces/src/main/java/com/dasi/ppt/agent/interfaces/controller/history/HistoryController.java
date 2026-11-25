@@ -9,8 +9,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.io.IOException;
-
 @RestController
 @RequiredArgsConstructor
 public class HistoryController {
@@ -19,7 +17,7 @@ public class HistoryController {
     private final SseEventPublisher sseEventPublisher;
 
     @GetMapping(value = "/sessions/{sessionId}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter subscribe(@PathVariable String sessionId) throws IOException {
+    public SseEmitter subscribe(@PathVariable String sessionId) {
         return sseEventPublisher.subscribe(sessionId);
     }
 }

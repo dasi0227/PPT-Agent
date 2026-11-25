@@ -8,7 +8,7 @@
 
 1. `ExecutionController` 调用 DTO 的 `toEntity()` 转换请求，`RunService` 协调 `InputService` 按全局唯一的 `message_id` 检查归属。同一会话同参重发返回原 Run ID，跨会话复用或异参返回 `IDEMPOTENCY_CONFLICT`。先识别重发，再对新请求做占用和分支校验，避免网络重发创建第二次执行。
 2. 校验所属会话、模式、模型、引用和授权范围。同一会话最多一个非终态 Run，且与本会话的手动压缩互斥。同项目不同会话可以并行，但新 Run 须避开项目历史切换、Git 提交等排他操作。处于回退位置时，同时核对 `branch_revision`。
-3. 在项目写锁内，`CheckpointService` 从同一次一致读取取得 Run 开始前的会话、文稿和外观。这份读取同时提供用于历史恢复的持久检查点和本 Run 审查用的内存文件基准。`RunService` 从 `SettingService` 取得全局设置，按本次模型选择和路由组装 `RunConfig`，固定主模型、旁路及备用模型、两项审批开关和自动命名／建议开关，再将配置和审查基准放入本次 `RunState`。
+3. 在项目写锁内，`CheckpointService` 从同一次一致读取取得 Run 开始前的会话数据和五类文稿文件。这份读取同时提供用于历史恢复的持久检查点和本 Run 审查用的内存文件基准。`RunService` 从 `SettingService` 取得全局设置，按本次模型选择和路由组装 `RunConfig`，固定主模型、旁路及备用模型、两项审批开关和自动命名／建议开关，再将配置和审查基准放入本次 `RunState`。
 4. `IRunRepository` 在同一 SQLite 事务中写入普通检查点、`pending` Run、首条 `queued` 指令和 `create_run` 凭据，同时更新会话版本。需要放弃返回入口时，在该事务内清理。事务失败不调度执行。
 5. 执行材料就绪且事务成功后，`RunService` 释放项目写锁，调度后台循环。耗时的模型请求与人工等待均在锁外进行。[执行接口](API_SPEC.md#执行) · [检查点](DATABASE_SPEC.md#checkpoints) · [提交凭据](DATABASE_SPEC.md#receipts)
 
@@ -147,7 +147,8 @@ JEV 的 Intent、Prune、Rechristen、Preview 分别由 `IntentHook`、`ToolPrun
 
 | 具体事件 | SSE 事件名 | `data` |
 |---|---|---|
-| `SseEvent.Changed` | `changed` | 接收会话的 `revision`（十进制字符串）和非空、无重复的 `areas`（`ChangeArea` 数组）。持久变化可读取后发送。 |
+| `SseEvent.ProjectChanged` | `project_changed` | 仅含非空、无重复的 `areas`（`ProjectChangeArea` 数组）。 |
+| `SseEvent.SessionChanged` | `session_changed` | 接收会话的 `revision`（十进制字符串）和非空、无重复的 `areas`（`SessionChangeArea` 数组）。 |
 | `SseEvent.RunProgress` | `progress` | `run_id`、`activity`、`commentary`。后两项可为 `null`，`activity` 与 Run 详情共用 `RunActivity`。 |
 | `SseEvent.InteractionChanged` | `interaction` | `run_id`。接收方重读该 Run 的待答项。 |
 | `SseEvent.CommandProgress` | `command_progress` | 单次命令执行的 `id` 和当前阶段序号 `phase`（整数）。 |
@@ -155,22 +156,24 @@ JEV 的 Intent、Prune、Rechristen、Preview 分别由 `IntentHook`、`ToolPrun
 
 | 变化 | 接收方及重新读取的数据 |
 |---|---|
-| 文稿或外观实际提交，包括人工保存、Agent 写入、历史切换 | 同项目所有已连接会话（含来源会话）收到 `content`，重读项目文稿和外观，必要时用 ETag 复验 Logo。同值或失败不发。 |
+| 项目会话列表变化 | 同项目所有已连接会话收到 `project_changed` 的 `sessions` 区域，重读项目会话列表。 |
+| 项目外观实际变化 | 同项目所有已连接会话收到 `project_changed` 的 `appearance` 区域，读取项目外观，必要时用 ETag 复验 Logo。 |
+| 人工保存、Agent 写入或历史切换实际改变共享文稿 | 同项目所有已连接会话（含来源会话）收到 `project_changed` 的 `content` 区域，读取文稿。 |
 | 工具过程、最终回复、净差异或终态 | 所属会话读取 `run`。影响历史分组时同时通知 `history`。命令修订或结果改变分组时通知 `commands` 与 `history`。 |
-| 计划、上下文估算或检查点 | 只通知相应数据受影响的会话。每条通知使用接收会话自身的 `revision`。单纯收到项目通知或估算更新不递增版本，同版本通知仍须处理。 |
+| 计划、上下文估算或检查点 | 只通知相应数据受影响的会话。`session_changed` 使用接收会话自身的 `revision`。上下文估算更新可发送同版本通知。 |
 | 历史切换、重连 | 历史切换向受影响会话发送 `reset`。收到 `reset` 或重新建连后废弃旧快照与游标，按订阅契约重读。 |
 
 ## 6. 回退、返回与启动恢复
 
-1. **核对预览。** 客户端用相应预览的 `revision` 提交 `expected_revision`。`CheckpointService` 在项目写锁下复核目标和会话版本。项目有非终态 Run、目标会话有非终态命令或项目处于互斥操作时拒绝切换。快照含非空主题 ID 时检查资产是否存在，资产缺失时整次切换失败。
-2. **准备恢复材料。** 从目标快照取得五类文稿文件、主题 ID、装饰位置、Logo，以及目标会话的标题、计划、消息、Run、命令和 `agent` 凭据。首次回退另从当前状态采集返回快照，连续回退沿用原返回行。目标快照决定文稿文件的内容和存在状态，即使磁盘经过外部编辑也按快照覆盖。快照主题为空或已停用时，将项目恢复为未选主题，快照保留原主题 ID。已启用主题使用当前资产正文。附件、历史截图和其他会话的业务历史保留。
+1. **核对预览。** 客户端用相应预览的 `revision` 提交 `expected_revision`。`CheckpointService` 在项目写锁下复核目标和会话版本。项目有非终态 Run、目标会话有非终态命令或项目处于互斥操作时拒绝切换。
+2. **准备恢复材料。** 从目标快照取得五类文稿文件，以及目标会话的标题、计划、消息、Run、命令和 `agent` 凭据。首次回退另从当前状态采集返回快照，连续回退沿用原返回行。目标快照决定文稿文件的内容和存在状态，即使磁盘经过外部编辑也按快照覆盖。项目主题、装饰位置和 Logo 沿用当前值。附件、历史截图和其他会话的业务历史保留。
 3. **先写日志，再改文稿。** 有文件变化时，在 `.runtime/mutations/{operation_hash}.json` 记录 `type=switch`、目标 `session_id`、锁内核对的 `base_revision` 及各变更路径的前后字节或缺失状态。完整日志原子替换并同步到磁盘后才增、改、删文稿文件。文件及目录项全部落盘后再提交数据库。仅涉及数据库的切换直接进入第 4 步。[日志字段](STRUCTURE_SPEC.md#项目目录)
-4. **提交 SQLite。** 同一事务按主题当前的存在和启用状态确定恢复值，恢复目标快照内的业务记录和项目外观，并按 `session_id` 和 `revision = base_revision` 更新目标会话，恰好命中一行并将版本加一。首次回退在此事务插入 `run_id IS NULL` 的返回行，返回最新时删除该行。共享文稿或外观实际变化时，一并清除同项目其他受影响会话的检查点及返回行，每个受影响会话的版本只加一。会话建议从恢复后的输入和命令读取。[检查点事务](DATABASE_SPEC.md#checkpoints)
+4. **提交 SQLite。** 同一事务恢复目标快照内的会话业务记录，并按 `session_id` 和 `revision = base_revision` 更新目标会话，恰好命中一行并将版本加一。首次回退在此事务插入 `run_id IS NULL` 的返回行，返回最新时删除该行。只有共享文稿文件实际变化时，才清除同项目其他会话的检查点及返回行，并将实际失去恢复点的会话版本各加一。会话建议从恢复后的输入和命令读取。[检查点事务](DATABASE_SPEC.md#checkpoints)
 5. **收尾并通知。** 确认数据库提交且文件与目标一致后，持久移除日志，释放项目写锁，再按第 5 节通知。回退成功响应带可回填的原始输入。回退与返回都不续跑历史 Run。提交失败或结果未知时，按下表核对文件后才能开放后续写入。[检查点接口](API_SPEC.md#检查点)
 
 从锁内核对版本到日志持久移除，其他会推进目标会话版本或删除该会话的操作也须经过同一项目写锁。这样，即使 SQLite 已提交而日志尚在，恢复时读到的版本也只可能由本次切换推进。目标会话的版本始终向前递增，不从快照还原。
 
-历史位置新开 Run、发起非 `polish` 命令或修订 `handoff`，须在受理事务中核对 `branch_revision` 并清理返回行及脱离当前历史的检查点。`polish` 保留返回入口。手动改名和删除计划使用 `expected_revision`。实际改名或删除计划成功后放弃返回入口，同名或失败时保留。人工实际改动共享文稿或外观时，项目内**所有会话**的检查点失效。历史切换保留原有的 `create_run`、`create_command` 受理凭据。[检查点事务](DATABASE_SPEC.md#checkpoints)
+历史位置新开 Run、发起非 `polish` 命令或修订 `handoff`，须在受理事务中核对 `branch_revision` 并清理返回行及脱离当前历史的检查点。`polish` 保留返回入口。手动改名和删除计划使用 `expected_revision`。实际改名或删除计划成功后放弃返回入口，同名或失败时保留。无会话归属的人工保存实际改变共享文稿文件时，项目内**所有会话**的检查点和返回行失效。历史切换保留原有的 `create_run`、`create_command` 受理凭据。[检查点事务](DATABASE_SPEC.md#checkpoints)
 
 新建导出同样需要采集一致的项目数据。项目内有非终态 Run、正在 Git 提交或切换历史时，创建返回 `PROJECT_BUSY`。`ExportService` 在项目写锁内读取文稿，并从同一数据库读事务取得外观和项目标题，组装不可变的 `ExportSnapshot`。快照含项目管理名称、页序、逐页标题与 HTML、装饰位置及 Logo 字节。已选主题时同时读取并固定主题 CSS。与预览相同，`deck_title` 取 `Meta.title`，每页的 `section_title` 取所属章标题，两者都在锁内固定。后台渲染和打包在释放锁后使用这份快照，按基础样式、可选主题 CSS、单页样式的顺序应用。[导出接口](API_SPEC.md#导出) · [项目读取约束](DATABASE_SPEC.md#projects)
 

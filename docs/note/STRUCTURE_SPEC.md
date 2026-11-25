@@ -86,8 +86,8 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `domain/gateway/` 与业务包平级，集中存放领域层调用外部能力的接口，实现类位于 `infrastructure/gateway/`。
 - `domain/shared/` 与业务包平级，`exception/` 存放共用异常与错误码，`constant/` 和 `util/` 存放跨领域常量和辅助函数。
 - `domain/shared/sse/EventPublisher` 接收投递目标和 `SseEvent`，供项目与 Agent 服务发布订阅通知。
-- `domain/shared/sse/SseEvent` 是普通 Java 接口，五个实现均在接口内声明为嵌套类，分别为 `Changed`、`RunProgress`、`InteractionChanged`、`CommandProgress` 和 `Reset`。[事件名与字段](API.html#history)
-- `domain/shared/sse/ChangeArea` 对应 `changed.areas`，取 `history / run / commands / plan / suggestions / context / checkpoints / content / sessions`。[重读范围](API_SPEC.md#消息)
+- `domain/shared/sse/SseEvent` 是普通 Java 接口，六个实现均在接口内声明为嵌套类，分别为 `ProjectChanged`、`SessionChanged`、`RunProgress`、`InteractionChanged`、`CommandProgress` 和 `Reset`。[事件名与字段](API.html#history)
+- `domain/shared/sse/ProjectChangeArea` 对应 `project_changed.areas`，取 `content / appearance / sessions`。`domain/shared/sse/SessionChangeArea` 对应 `session_changed.areas`，取 `history / run / commands / plan / suggestions / context / checkpoints`。[重读范围](API_SPEC.md#消息)
 - `domain/shared/enumeration/RunActivity` 供 Run 详情的 `activity` 与 SSE 的 `progress.activity` 共用。当前无活动或 Run 已终态时返回 `null`。[活动取值与订阅字段](API.html#history)
 - 每个领域的 `model/` 存放值对象及业务输入和结果，`model/entity/` 存放实体，`model/enumeration/` 存放枚举。
 - 领域仓储接口位于各自的 `repository/`，外部能力接口位于各自的 `gateway/`。
@@ -128,7 +128,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `agent/model/InstructionReference` 表示一条引用。指令按输入顺序保存引用，供提示词拼装和回退回填使用。
 - `agent/model/DomSelection` 是 DOM 引用的选区内容，保存页面与选区标识、标注序号、提交时的 HTML、源码哈希、注释及元素或装饰定位。[选区字段](API.html#runs)
 - `agent/model/enumeration/InstructionReferenceType` 对应 `references[].type`，取 `skill / component / slide / image / dom`。追加输入只接受 `image` 和 `dom`。[引用字段](API.html#runs)
-- `agent/model/CheckpointSnapshot` 是 `Checkpoint` 的恢复内容，包括目标会话记录与 `agent` 凭据、五类文稿文件、可为 `null` 的主题 ID、装饰位置及 Logo 字节。普通检查点另含用于回填的原始输入。[快照范围](DATABASE_SPEC.md#checkpoints)
+- `agent/model/CheckpointSnapshot` 是 `Checkpoint` 的恢复内容，包括目标会话记录、`agent` 凭据和五类文稿文件。普通检查点另含用于回填的原始输入。[快照范围](DATABASE_SPEC.md#checkpoints)
 - `asset/model/` 存放资产、标签及其类型。
 - `IAssetRepository` 负责资产、标签及关联的持久化。
 - `setting/model/` 存放模型配置和各组全局设置。

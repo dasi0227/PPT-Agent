@@ -1367,7 +1367,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <a class="class-link" href="#class-IDeckRepository" aria-label="查看 IDeckRepository 职责">
 <text class="node-name" x="16" y="48">IDeckRepository</text>
 </a>
-<text class="node-caption" x="16" y="74">恢复会话、计划、文稿和外观</text>
+<text class="node-caption" x="16" y="74">恢复会话和五类文稿文件</text>
 </g>
 <text class="lane-label" x="24" y="1144" text-anchor="start">通知与启动清理</text>
 <g id="support-subscribe" class="node plain" transform="translate(24 1172)">
@@ -1384,7 +1384,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <a class="class-link" href="#class-SseEventPublisher" aria-label="查看 SseEventPublisher 职责">
 <text class="node-name" x="16" y="50">SseEventPublisher</text>
 </a>
-<text class="node-caption" x="16" y="76">changed / reset / 进度 / interaction</text>
+<text class="node-caption" x="16" y="76">项目与会话变更、重置、进度及交互</text>
 </g>
 <g id="support-event" class="node plain" transform="translate(900 1172)">
 <rect width="316" height="100" rx="10"/>
@@ -2262,7 +2262,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>新 Run 的起始状态，或回退 / 返回请求与预览版本</td>
 <td>起始快照、可用回退目标，或历史恢复结果</td>
-<td>受理时从同一份一致读取生成持久检查点和 Run 内存审查基准。回退与返回均恢复目标会话标题、计划及步骤、历史和建议，以及项目文稿、主题 ID、四项装饰位置与 Logo 字节。共享文稿或外观实际变化时清理受影响会话的检查点及返回快照。</td>
+<td>受理时从同一份一致读取生成持久检查点和 Run 内存审查基准。回退与返回均恢复目标会话标题、计划及步骤、历史和建议，以及五类项目文稿文件。共享文稿文件实际变化时清理同项目其他会话的检查点及返回快照。</td>
 </tr>
 </tbody>
 <tbody>
@@ -2543,7 +2543,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>投递目标和具体 <code>SseEvent</code></td>
 <td>面向会话订阅者的通知</td>
-<td>项目和 Agent 服务共用的发布接口。持久变化可查询后发布 changed，进度与待答通知按当前状态发布。</td>
+<td>项目和 Agent 服务共用的发布接口。持久变化可查询后按归属发布 project_changed 或 session_changed，进度与待答通知按当前状态发布。</td>
 </tr>
 </tbody>
 <tbody>
@@ -2556,7 +2556,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>会话订阅、投递目标与 <code>SseEvent</code></td>
 <td>SSE 流中的事件名和 JSON 数据</td>
-<td>实现 EventPublisher，管理订阅连接。共享文稿或外观变化时通知同项目的所有已连接会话，按各接收会话的 revision 发送 changed。历史、计划和检查点变化只通知受影响的会话。断线后 Run 继续，重连或 reset 后通过查询重新同步。</td>
+<td>实现 EventPublisher，管理订阅连接。项目文稿、外观或会话列表变化时向同项目所有已连接会话发送 project_changed，对应区域为 content、appearance 或 sessions。历史、计划和检查点变化时向受影响的会话发送 session_changed，携带该会话的 revision。断线后 Run 继续，重连或 reset 后通过查询重新同步。</td>
 </tr>
 </tbody>
 <tbody>

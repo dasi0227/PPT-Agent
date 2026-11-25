@@ -23,50 +23,43 @@ import java.util.concurrent.CopyOnWriteArraySet;
 public class SseEventPublisher implements EventPublisher {
 
     private final ObjectMapper objectMapper;
-    private final ISessionRepository sessions;
+    private final ISessionRepository sessionRepository;
     private final Map<String, Set<SseEmitter>> connections = new ConcurrentHashMap<>();
 
-    public SseEmitter subscribe(String sessionId) throws IOException {
+    public SseEmitter subscribe(String sessionId) {
+        // 创建对象，每个连接都需要有独立的 SseEmitter
         SseEmitter emitter = new SseEmitter(0L);
+
+        // 登记清理回调
         emitter.onCompletion(() -> remove(sessionId, emitter));
         emitter.onTimeout(() -> remove(sessionId, emitter));
         emitter.onError(error -> remove(sessionId, emitter));
-        emitter.send(SseEmitter.event().comment("connected"));
+
+        // 登记订阅关系：一个会话可以与多个浏览器窗口形成连接
         connections.compute(sessionId, (subscribedSessionId, current) -> {
-            if (!sessions.exists(subscribedSessionId)) {
+            if (!sessionRepository.exists(subscribedSessionId)) {
                 throw new ResponseStatusException(HttpStatus.NOT_FOUND);
             }
             Set<SseEmitter> subscribers = current == null ? new CopyOnWriteArraySet<>() : current;
             subscribers.add(emitter);
             return subscribers;
         });
+
         return emitter;
     }
 
     @Override
     public void publish(String sessionId, SseEvent event) {
+        // 根据会话 id 拿到所有订阅者
         Set<SseEmitter> subscribers = connections.get(sessionId);
         if (subscribers == null) {
             return;
         }
-        String name;
-        if (event instanceof SseEvent.Changed) {
-            name = "changed";
-        } else if (event instanceof SseEvent.Reset) {
-            name = "reset";
-        } else if (event instanceof SseEvent.RunProgress) {
-            name = "progress";
-        } else if (event instanceof SseEvent.CommandProgress) {
-            name = "command_progress";
-        } else if (event instanceof SseEvent.InteractionChanged) {
-            name = "interaction";
-        } else {
-            throw new IllegalArgumentException("未知的 SSE 事件");
-        }
+        // 转换为字符串发送
         String data = objectMapper.writeValueAsString(event);
         for (SseEmitter emitter : subscribers) {
             try {
-                emitter.send(SseEmitter.event().name(name).data(data));
+                emitter.send(SseEmitter.event().name(event.eventName()).data(data));
             } catch (IOException | IllegalStateException disconnected) {
                 remove(sessionId, emitter);
             }
@@ -80,16 +73,18 @@ public class SseEventPublisher implements EventPublisher {
         });
     }
 
-    @EventListener(ContextClosedEvent.class)
-    public void closeConnections() {
-        connections.keySet().forEach(this::close);
-    }
-
+    // 注定关闭连接
     @Override
     public void close(String sessionId) {
         Set<SseEmitter> subscribers = connections.remove(sessionId);
         if (subscribers != null) {
             subscribers.forEach(SseEmitter::complete);
         }
+    }
+
+    // 应用程序关闭时，主动断开所有连接
+    @EventListener(ContextClosedEvent.class)
+    public void shutdown() {
+        connections.keySet().forEach(this::close);
     }
 }

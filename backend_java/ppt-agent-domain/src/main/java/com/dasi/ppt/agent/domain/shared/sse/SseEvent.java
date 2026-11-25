@@ -11,13 +11,33 @@ import java.util.List;
 
 public interface SseEvent {
 
+    String eventName();
+
     @Builder
     @Getter
     @AllArgsConstructor
     @NoArgsConstructor
-    final class Changed implements SseEvent {
+    final class SessionChanged implements SseEvent {
         private String revision;
-        private List<ChangeArea> areas;
+        private List<SessionChangeArea> areas;
+
+        @Override
+        public String eventName() {
+            return "session_changed";
+        }
+    }
+
+    @Builder
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    final class ProjectChanged implements SseEvent {
+        private List<ProjectChangeArea> areas;
+
+        @Override
+        public String eventName() {
+            return "project_changed";
+        }
     }
 
     @Builder
@@ -28,6 +48,11 @@ public interface SseEvent {
         private String runId;
         private RunActivity activity;
         private String commentary;
+
+        @Override
+        public String eventName() {
+            return "progress";
+        }
     }
 
     @Builder
@@ -36,6 +61,11 @@ public interface SseEvent {
     @NoArgsConstructor
     final class InteractionChanged implements SseEvent {
         private String runId;
+
+        @Override
+        public String eventName() {
+            return "interaction";
+        }
     }
 
     @Builder
@@ -45,11 +75,20 @@ public interface SseEvent {
     final class CommandProgress implements SseEvent {
         private String id;
         private int phase;
+
+        @Override
+        public String eventName() {
+            return "command_progress";
+        }
     }
 
     @Builder
     @NoArgsConstructor
     @JsonSerialize
     final class Reset implements SseEvent {
+        @Override
+        public String eventName() {
+            return "reset";
+        }
     }
 }

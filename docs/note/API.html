@@ -1227,7 +1227,8 @@
               </td>
               <td>
                 <ul class="fields">
-                  <li><code>changed</code>：SSE 事件，data 含 revision、areas。areas 为 history / run / commands / plan / suggestions / context / checkpoints / content / sessions 数组，重读对应数据</li>
+                  <li><code>project_changed</code>：data 仅含 areas。content 表示项目文稿，appearance 表示项目外观，sessions 表示项目会话列表</li>
+                  <li><code>session_changed</code>：data 含 revision、areas。areas 为 history / run / commands / plan / suggestions / context / checkpoints 数组，重读对应数据</li>
                   <li><code>progress</code>：SSE 事件，data 含 run_id、activity、commentary，后两项可为 null</li>
                   <li><code>interaction</code>：SSE 事件，data 含 run_id；重读 Run 当前待答项</li>
                   <li><code>command_progress</code>：SSE 事件，data 含 id、phase（当前阶段序号，整数），id 为单次命令执行的 ID</li>

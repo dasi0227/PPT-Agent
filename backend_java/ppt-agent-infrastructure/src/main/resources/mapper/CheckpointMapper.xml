@@ -6,7 +6,4 @@
         <id column="run_id" property="runId"/>
         <result column="snapshot" property="snapshot"/>
     </resultMap>
-    <delete id="deleteByProject">
-        DELETE FROM checkpoints WHERE session_id IN (SELECT id FROM sessions WHERE project_id = #{projectId})
-    </delete>
 </mapper>

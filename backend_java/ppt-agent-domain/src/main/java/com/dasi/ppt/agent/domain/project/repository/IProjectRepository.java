@@ -1,10 +1,8 @@
 package com.dasi.ppt.agent.domain.project.repository;
 
 import com.dasi.ppt.agent.domain.project.model.entity.Project;
-import com.dasi.ppt.agent.domain.shared.sse.SseEvent;
 
 import java.util.List;
-import java.util.Map;
 
 public interface IProjectRepository {
 
@@ -31,6 +29,4 @@ public interface IProjectRepository {
     byte[] findProjectLogo(String projectId);
 
     int updateProjectLogo(String projectId, byte[] logo, long updatedAt);
-
-    Map<String, SseEvent.Changed> invalidateCheckpoints(String projectId);
 }

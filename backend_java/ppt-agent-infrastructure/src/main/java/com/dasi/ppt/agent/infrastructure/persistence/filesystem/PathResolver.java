@@ -21,11 +21,11 @@ public class PathResolver {
     private Path dataRoot;
 
     public Path projectsRoot() {
-        return dataRoot.resolve("projects");
+        return dataRoot.resolve("projects").normalize();
     }
 
     public Path projectDirectory(String projectId) {
-        return projectsRoot().resolve(projectId);
+        return projectsRoot().resolve(projectId).normalize();
     }
 
     public Path resolveFile(String projectId, String relativePath) {

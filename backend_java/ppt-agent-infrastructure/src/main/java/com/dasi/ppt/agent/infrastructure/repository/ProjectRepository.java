@@ -3,32 +3,23 @@ package com.dasi.ppt.agent.infrastructure.repository;
 import com.dasi.ppt.agent.domain.project.model.entity.Project;
 import com.dasi.ppt.agent.domain.project.model.enumeration.DecorationPosition;
 import com.dasi.ppt.agent.domain.project.repository.IProjectRepository;
-import com.dasi.ppt.agent.domain.shared.sse.ChangeArea;
-import com.dasi.ppt.agent.domain.shared.sse.SseEvent;
-import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.CheckpointMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.ProjectMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.ReceiptMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.SessionMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.database.po.ProjectPo;
-import com.dasi.ppt.agent.infrastructure.persistence.database.po.SessionPo;
 import com.dasi.ppt.agent.infrastructure.persistence.filesystem.FileStorer;
 import com.dasi.ppt.agent.infrastructure.persistence.filesystem.PathResolver;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 @Repository
 @RequiredArgsConstructor
 public class ProjectRepository implements IProjectRepository {
 
     private final ProjectMapper projectMapper;
-    private final CheckpointMapper checkpointMapper;
     private final SessionMapper sessionMapper;
     private final ReceiptMapper receiptMapper;
     private final FileStorer fileStorer;
@@ -36,7 +27,7 @@ public class ProjectRepository implements IProjectRepository {
 
     @PostConstruct
     void recoverDirectories() {
-        fileStorer.recoverProjectDirectories(pathResolver, projectMapper::existsProject);
+        fileStorer.recoverProjectDirectories();
     }
 
     @Override
@@ -107,22 +98,6 @@ public class ProjectRepository implements IProjectRepository {
     @Override
     public int updateProjectLogo(String projectId, byte[] logo, long updatedAt) {
         return projectMapper.updateProjectLogo(projectId, logo, updatedAt);
-    }
-
-    @Override
-    public Map<String, SseEvent.Changed> invalidateCheckpoints(String projectId) {
-        Set<String> affectedSessionIds = new HashSet<>(sessionMapper.advanceCheckpointRevisions(projectId));
-        checkpointMapper.deleteByProject(projectId);
-        Map<String, SseEvent.Changed> changes = new HashMap<>();
-        for (SessionPo session : sessionMapper.listRevisions(projectId)) {
-            List<ChangeArea> areas = affectedSessionIds.contains(session.getId())
-                    ? List.of(ChangeArea.CONTENT, ChangeArea.CHECKPOINTS) : List.of(ChangeArea.CONTENT);
-            changes.put(session.getId(), SseEvent.Changed.builder()
-                    .revision(Long.toString(session.getRevision()))
-                    .areas(areas)
-                    .build());
-        }
-        return changes;
     }
 
     private static Project toEntity(ProjectPo po) {

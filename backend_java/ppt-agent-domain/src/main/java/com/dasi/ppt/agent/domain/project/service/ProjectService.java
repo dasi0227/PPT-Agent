@@ -11,6 +11,7 @@ import com.dasi.ppt.agent.domain.setting.service.SettingService;
 import com.dasi.ppt.agent.domain.shared.exception.ErrorCode;
 import com.dasi.ppt.agent.domain.shared.gateway.IPlatformGateway;
 import com.dasi.ppt.agent.domain.shared.sse.EventPublisher;
+import com.dasi.ppt.agent.domain.shared.sse.ProjectChangeArea;
 import com.dasi.ppt.agent.domain.shared.sse.SseEvent;
 import com.dasi.ppt.agent.domain.shared.util.IdUtil;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +23,6 @@ import java.nio.file.Path;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.SYSTEM_OPEN;
 import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.INHERIT_OPEN;
@@ -62,6 +62,7 @@ public class ProjectService {
         }
     }
 
+    // 1.上锁 2.判断是否可更改 3.拿到所有会话id 4.删除整个项目 5.关闭所有会话的连接
     public void deleteProject(String projectId) {
         synchronized (projectWriteLock.lockFor(projectId)) {
             List<String> deletedSessionIds = transaction.execute(status -> {
@@ -84,9 +85,10 @@ public class ProjectService {
         return project;
     }
 
+    // 1.上锁 2.判断是否可更改 3.检查主题可用 4.拿到所有会话id 5.通知项目已经改变
     public void saveProjectTheme(String projectId, String themeId) {
         synchronized (projectWriteLock.lockFor(projectId)) {
-            Map<String, SseEvent.Changed> changes = transaction.execute(status -> {
+            List<String> sessionIds = transaction.execute(status -> {
                 projectRepository.requireWritableProjectFiles(projectId);
                 if (!projectRepository.existsProject(projectId)) {
                     throw notFound(ErrorCode.PROJECT_NOT_FOUND);
@@ -101,16 +103,16 @@ public class ProjectService {
                 }
 
                 int updatedRows = projectRepository.updateProjectTheme(projectId, themeId, System.currentTimeMillis());
-                return updatedRows == 0 ? Map.of() : projectRepository.invalidateCheckpoints(projectId);
+                return updatedRows == 0 ? List.of() : projectRepository.listProjectSessionIds(projectId);
             });
-            changes.forEach(eventPublisher::publish);
+            publishAppearanceChange(sessionIds);
         }
     }
 
     public void saveProjectPositions(Project project) {
         String projectId = project.getId();
         synchronized (projectWriteLock.lockFor(projectId)) {
-            Map<String, SseEvent.Changed> changes = transaction.execute(status -> {
+            List<String> sessionIds = transaction.execute(status -> {
                 projectRepository.requireWritableProjectFiles(projectId);
                 if (!projectRepository.existsProject(projectId)) {
                     throw notFound(ErrorCode.PROJECT_NOT_FOUND);
@@ -125,9 +127,9 @@ public class ProjectService {
                 project.setUpdatedAt(System.currentTimeMillis());
 
                 int updatedRows = projectRepository.updateProjectPositions(project);
-                return updatedRows == 0 ? Map.of() : projectRepository.invalidateCheckpoints(projectId);
+                return updatedRows == 0 ? List.of() : projectRepository.listProjectSessionIds(projectId);
             });
-            changes.forEach(eventPublisher::publish);
+            publishAppearanceChange(sessionIds);
         }
     }
 
@@ -137,30 +139,37 @@ public class ProjectService {
 
     public void saveProjectLogo(String projectId, byte[] logo) {
         synchronized (projectWriteLock.lockFor(projectId)) {
-            Map<String, SseEvent.Changed> changes = transaction.execute(status -> {
+            List<String> sessionIds = transaction.execute(status -> {
                 projectRepository.requireWritableProjectFiles(projectId);
                 if (!projectRepository.existsProject(projectId)) {
                     throw notFound(ErrorCode.PROJECT_NOT_FOUND);
                 }
                 int updatedRows = projectRepository.updateProjectLogo(projectId, logo, System.currentTimeMillis());
-                return updatedRows == 0 ? Map.of() : projectRepository.invalidateCheckpoints(projectId);
+                return updatedRows == 0 ? List.of() : projectRepository.listProjectSessionIds(projectId);
             });
-            changes.forEach(eventPublisher::publish);
+            publishAppearanceChange(sessionIds);
         }
     }
 
     public void deleteProjectLogo(String projectId) {
         synchronized (projectWriteLock.lockFor(projectId)) {
-            Map<String, SseEvent.Changed> changes = transaction.execute(status -> {
+            List<String> sessionIds = transaction.execute(status -> {
                 projectRepository.requireWritableProjectFiles(projectId);
                 if (!projectRepository.existsProject(projectId)) {
                     throw notFound(ErrorCode.PROJECT_NOT_FOUND);
                 }
                 int updatedRows = projectRepository.updateProjectLogo(projectId, null, System.currentTimeMillis());
-                return updatedRows == 0 ? Map.of() : projectRepository.invalidateCheckpoints(projectId);
+                return updatedRows == 0 ? List.of() : projectRepository.listProjectSessionIds(projectId);
             });
-            changes.forEach(eventPublisher::publish);
+            publishAppearanceChange(sessionIds);
         }
+    }
+
+    private void publishAppearanceChange(List<String> sessionIds) {
+        SseEvent.ProjectChanged event = SseEvent.ProjectChanged.builder()
+                .areas(List.of(ProjectChangeArea.APPEARANCE))
+                .build();
+        sessionIds.forEach(sessionId -> eventPublisher.publish(sessionId, event));
     }
 
     public void openFile(String projectId, String relativePath) {
