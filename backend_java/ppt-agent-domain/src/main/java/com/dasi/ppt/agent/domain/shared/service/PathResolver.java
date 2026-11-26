@@ -14,7 +14,6 @@ import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.illeg
 @Component
 public class PathResolver {
 
-    private static final String CREATING = ".creating-";
     private static final String DELETING = ".deleting-";
     private static final Set<String> PROJECT_DOCUMENTS = Set.of(META_FILE_NAME, CONSTRAINT_FILE_NAME, OUTLINE_FILE_NAME);
     private static final Pattern SLIDE_FILE = Pattern.compile("(sli_[A-Za-z0-9_-]+)\\.(?:json|html)");
@@ -50,19 +49,7 @@ public class PathResolver {
         return projectDirectory(projectId).resolve(slideId + ".html").normalize();
     }
 
-    public Path mutationDirectory(String projectId) {
-        return projectDirectory(projectId).resolve(".runtime/mutations").normalize();
-    }
-
-    public Path mutationPath(String projectId, String operationId) {
-        return mutationDirectory(projectId).resolve(operationId + ".json").normalize();
-    }
-
-    public Path creatingMarker(String projectId) {
-        return projectsRoot().resolve(CREATING + projectId).normalize();
-    }
-
-    public Path deletingMarker(String projectId) {
+    public Path deletingDirectory(String projectId) {
         return projectsRoot().resolve(DELETING + projectId).normalize();
     }
 
@@ -75,17 +62,15 @@ public class PathResolver {
         return fileName != null && (PROJECT_DOCUMENTS.contains(fileName) || SLIDE_FILE.matcher(fileName).matches());
     }
 
-    public boolean isProjectMarker(Path path) {
-        String name = path.getFileName().toString();
-        return name.startsWith(CREATING) || name.startsWith(DELETING);
+    public boolean isDeletingDirectory(Path path) {
+        return path.getFileName().toString().startsWith(DELETING);
     }
 
-    public Path projectDirectoryFromMarker(Path marker) {
-        String name = marker.getFileName().toString();
-        String prefix = name.startsWith(CREATING) ? CREATING : DELETING;
-        Path directory = projectDirectory(name.substring(prefix.length()));
+    public Path projectDirectoryFromDeletion(Path deletingDirectory) {
+        String name = deletingDirectory.getFileName().toString();
+        Path directory = projectDirectory(name.substring(DELETING.length()));
         if (!projectsRoot().equals(directory.getParent())) {
-            throw illegal("项目恢复标记无效：" + marker);
+            throw illegal("项目删除暂存目录无效：" + deletingDirectory);
         }
         return directory;
     }

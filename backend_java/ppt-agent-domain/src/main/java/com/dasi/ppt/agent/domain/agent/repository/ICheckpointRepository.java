@@ -7,4 +7,6 @@ import java.util.List;
 public interface ICheckpointRepository {
 
     List<Checkpoint> listCheckpoints(String sessionId);
+
+    int advanceSessionRevision(String sessionId, long expectedRevision);
 }

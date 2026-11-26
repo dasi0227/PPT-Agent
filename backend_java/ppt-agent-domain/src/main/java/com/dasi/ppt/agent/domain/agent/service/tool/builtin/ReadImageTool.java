@@ -6,7 +6,7 @@ import com.dasi.ppt.agent.domain.agent.model.result.ToolResult;
 import com.dasi.ppt.agent.domain.agent.service.run.RunState;
 import com.dasi.ppt.agent.domain.agent.service.tool.AgentTool;
 import com.dasi.ppt.agent.domain.project.service.AttachmentService;
-import com.dasi.ppt.agent.domain.project.service.SlidePreviewService;
+import com.dasi.ppt.agent.domain.project.service.ThumbnailService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -17,7 +17,7 @@ import java.util.Set;
 public class ReadImageTool implements AgentTool {
 
     private final AttachmentService attachmentService;
-    private final SlidePreviewService slidePreviewService;
+    private final ThumbnailService thumbnailService;
 
     @Override
     public Set<ToolName> names() {

@@ -8,24 +8,23 @@ import lombok.Getter;
 
 @Getter
 @AllArgsConstructor
-public enum ExportStatus {
-    SNAPSHOTTING("snapshotting"),
-    RENDERING("rendering"),
-    PACKAGING("packaging"),
-    READY("ready"),
-    FAILED("failed"),
-    CANCELED("canceled");
+public enum DeckFileType {
+    META("meta"),
+    CONSTRAINT("constraint"),
+    OUTLINE("outline"),
+    SPEC("spec"),
+    HTML("html");
 
     @JsonValue
     private final String value;
 
     @JsonCreator
-    public static ExportStatus fromValue(String value) {
-        for (ExportStatus candidate : values()) {
+    public static DeckFileType fromValue(String value) {
+        for (DeckFileType candidate : values()) {
             if (candidate.value.equals(value)) {
                 return candidate;
             }
         }
-        throw new InvalidEnumValueException(ExportStatus.class, value);
+        throw new InvalidEnumValueException(DeckFileType.class, value);
     }
 }

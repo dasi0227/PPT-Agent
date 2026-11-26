@@ -27,12 +27,13 @@ public final class DeckInfoVo {
     public static DeckInfoVo toVo(Deck deck) {
         Map<String, SlideContentVo> slides = new LinkedHashMap<>();
         Map<String, SlideHashesVo> hashes = new LinkedHashMap<>();
-        deck.getSlides().forEach((id, slide) -> {
-            slides.put(id, SlideContentVo.builder()
+        deck.getSlides().forEach(slide -> {
+            String slideId = slide.getSlideId();
+            slides.put(slideId, SlideContentVo.builder()
                     .spec(slide.getSpec())
                     .html(slide.getHtml())
                     .build());
-            hashes.put(id, SlideHashesVo.builder()
+            hashes.put(slideId, SlideHashesVo.builder()
                     .spec(slide.getSpecHash())
                     .html(slide.getHtmlHash())
                     .build());

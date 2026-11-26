@@ -10,7 +10,7 @@ import com.dasi.ppt.agent.domain.agent.service.tool.AgentTool;
 import com.dasi.ppt.agent.domain.project.model.entity.Constraint;
 import com.dasi.ppt.agent.domain.project.model.entity.Meta;
 import com.dasi.ppt.agent.domain.project.model.entity.Spec;
-import com.dasi.ppt.agent.domain.project.service.SlidePreviewService;
+import com.dasi.ppt.agent.domain.project.service.ThumbnailService;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -24,7 +24,7 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class RenderSlideTool implements AgentTool {
 
-    private final SlidePreviewService slidePreviewService;
+    private final ThumbnailService thumbnailService;
     private final IJevGateway jevGateway;
     private final PreviewPromptAssembler previewPromptAssembler;
 

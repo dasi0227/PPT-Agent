@@ -22,17 +22,6 @@ public final class CheckpointSnapshot {
     private List<Run> runs;
     private List<Message> messages;
     private List<Command> commands;
-    private List<AgentReceipt> receipts;
     private Map<String, byte[]> files;
     private JsonNode input;
-
-    @Builder
-    @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
-    public static final class AgentReceipt {
-        private String runId;
-        private String toolCallId;
-        private String requestHash;
-    }
 }

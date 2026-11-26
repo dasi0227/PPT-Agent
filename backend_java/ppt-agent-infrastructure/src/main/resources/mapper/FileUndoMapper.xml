@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.dasi.ppt.agent.infrastructure.persistence.database.mapper.FileUndoMapper">
+    <resultMap id="fileUndoPo" type="com.dasi.ppt.agent.infrastructure.persistence.database.po.FileUndoPo">
+        <id column="project_id" property="projectId"/>
+        <id column="file_name" property="fileName"/>
+        <result column="before_content" property="beforeContent"/>
+    </resultMap>
+    <select id="listPendingProjectIds" resultType="string">
+        SELECT DISTINCT project_id FROM file_undo ORDER BY project_id
+    </select>
+    <select id="hasFileUndo" resultType="boolean">
+        SELECT EXISTS (SELECT 1 FROM file_undo WHERE project_id = #{projectId})
+    </select>
+    <select id="listFileUndo" resultMap="fileUndoPo">
+        SELECT project_id, file_name, before_content FROM file_undo
+        WHERE project_id = #{projectId} ORDER BY file_name
+    </select>
+    <insert id="insertFileUndo">
+        INSERT INTO file_undo (project_id, file_name, before_content)
+        VALUES (#{projectId}, #{fileName}, #{beforeContent,jdbcType=BLOB})
+    </insert>
+    <delete id="deleteFileUndo">
+        DELETE FROM file_undo WHERE project_id = #{projectId}
+    </delete>
+</mapper>

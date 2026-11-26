@@ -2,6 +2,8 @@ package com.dasi.ppt.agent.infrastructure.persistence.database.mapper;
 
 import com.dasi.ppt.agent.infrastructure.persistence.database.po.SessionPo;
 
+import org.apache.ibatis.annotations.Param;
+
 import java.util.List;
 
 public interface SessionMapper {
@@ -10,7 +12,11 @@ public interface SessionMapper {
 
     List<String> listProjectSessionIds(String projectId);
 
+    SessionPo findSession(String sessionId);
+
     List<SessionPo> listProjectSessions(String projectId);
 
     void insertSession(SessionPo session);
+
+    int advanceSessionRevision(@Param("sessionId") String sessionId, @Param("expectedRevision") long expectedRevision);
 }

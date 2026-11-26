@@ -106,12 +106,12 @@ CREATE TABLE commands (
     seq INTEGER NOT NULL,
     type TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',
-    input TEXT NOT NULL,
+    renderMaterial TEXT NOT NULL,
     result TEXT DEFAULT NULL,
     error TEXT DEFAULT NULL,
     created_at INTEGER NOT NULL,
     FOREIGN KEY (run_id, session_id) REFERENCES runs(id, session_id),
-    CHECK (json_valid(input) AND json_type(input) = 'object'),
+    CHECK (json_valid(renderMaterial) AND json_type(renderMaterial) = 'object'),
     CHECK (result IS NULL OR (json_valid(result))),
     CHECK (error IS NULL OR (json_valid(error) AND json_type(error) = 'object'))
 );
@@ -123,12 +123,11 @@ CREATE TABLE checkpoints (
     CHECK (json_valid(snapshot) AND json_type(snapshot) = 'object')
 );
 
-CREATE TABLE receipts (
-    type TEXT NOT NULL,
-    owner_id TEXT NOT NULL,
-    request_id TEXT NOT NULL,
-    request_hash TEXT NOT NULL,
-    PRIMARY KEY (type, owner_id, request_id)
+CREATE TABLE file_undo (
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+    file_name TEXT NOT NULL,
+    before_content BLOB,
+    PRIMARY KEY (project_id, file_name)
 );
 
 CREATE TABLE asset_tags (

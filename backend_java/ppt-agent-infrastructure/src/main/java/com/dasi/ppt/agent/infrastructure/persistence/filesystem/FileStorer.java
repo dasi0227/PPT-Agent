@@ -2,6 +2,7 @@ package com.dasi.ppt.agent.infrastructure.persistence.filesystem;
 
 import com.dasi.ppt.agent.domain.shared.service.PathResolver;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.ProjectMapper;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -20,8 +21,6 @@ import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.util.List;
-import java.util.stream.Stream;
 
 import static java.nio.file.LinkOption.NOFOLLOW_LINKS;
 import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
@@ -45,55 +44,72 @@ public class FileStorer {
         }
     }
 
-    public List<Path> listMutationLogs(String projectId) {
-        try (Stream<Path> entries = Files.list(pathResolver.mutationDirectory(projectId))) {
-            return entries.filter(path -> path.getFileName().toString().endsWith(".json"))
-                    .sorted()
-                    .toList();
-        } catch (NoSuchFileException ex) {
-            return List.of();
+    public void createFile(Path path, byte[] bytes) {
+        try {
+            Files.createDirectories(path.getParent());
+            FileChannel channel = FileChannel.open(path, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+            try (channel) {
+                writeBytes(channel, bytes);
+            } catch (IOException ex) {
+                Files.deleteIfExists(path);
+                throw ex;
+            }
+            syncDirectory(path.getParent());
         } catch (IOException ex) {
             throw new UncheckedIOException(ex);
         }
     }
 
-    public void writeMutationLog(Path path, byte[] log) {
-        Path mutations = path.getParent();
+    public void deleteFile(Path path) {
         try {
-            Files.createDirectories(mutations);
-            syncDirectory(mutations.getParent().getParent());
-            syncDirectory(mutations.getParent());
+            Files.deleteIfExists(path);
+            syncDirectory(path.getParent());
+        } catch (NoSuchFileException ignored) {
+            // 项目目录尚未创建时，文件已经是所需的缺失状态。
         } catch (IOException ex) {
             throw new UncheckedIOException(ex);
         }
-        applyFileChange(path, log);
     }
 
     // 先写到临时文件，再做一次原子替换
     public void applyFileChange(Path path, byte[] bytes) {
+        if (bytes == null) {
+            deleteFile(path);
+            return;
+        }
         Path directory = path.getParent();
         try {
-            if (bytes == null) {
-                Files.deleteIfExists(path);
-            } else {
-                Path temp = Files.createTempFile(directory, ".writing-", ".tmp");
-                try {
-                    try (FileChannel channel = FileChannel.open(temp, StandardOpenOption.WRITE)) {
-                        ByteBuffer buffer = ByteBuffer.wrap(bytes);
-                        while (buffer.hasRemaining()) {
-                            channel.write(buffer);
-                        }
-                        channel.force(true);
-                    }
-                    Files.move(temp, path, ATOMIC_MOVE, REPLACE_EXISTING);
-                } finally {
-                    Files.deleteIfExists(temp);
+            createDirectories(directory);
+            Path temp = Files.createTempFile(directory, ".writing-", ".tmp");
+            try {
+                try (FileChannel channel = FileChannel.open(temp, StandardOpenOption.WRITE)) {
+                    writeBytes(channel, bytes);
                 }
+                Files.move(temp, path, ATOMIC_MOVE, REPLACE_EXISTING);
+            } finally {
+                Files.deleteIfExists(temp);
             }
             syncDirectory(directory);
         } catch (IOException ex) {
             throw new UncheckedIOException(ex);
         }
+    }
+
+    // 首次写文稿时项目目录可能尚不存在。新目录在父目录中的条目也要先落盘。
+    private void createDirectories(Path directory) throws IOException {
+        if (Files.isDirectory(directory)) return;
+        Path parent = directory.toAbsolutePath().getParent();
+        createDirectories(parent);
+        Files.createDirectories(directory);
+        syncDirectory(parent);
+    }
+
+    private void writeBytes(FileChannel channel, byte[] bytes) throws IOException {
+        ByteBuffer buffer = ByteBuffer.wrap(bytes);
+        while (buffer.hasRemaining()) {
+            channel.write(buffer);
+        }
+        channel.force(true);
     }
 
     private void syncDirectory(Path directory) throws IOException {
@@ -102,104 +118,53 @@ public class FileStorer {
         }
     }
 
-    public boolean hasPendingFileOperation(String projectId) {
-        Path creatingTag = pathResolver.creatingMarker(projectId);
-        Path deletingTag = pathResolver.deletingMarker(projectId);
-        if (Files.exists(creatingTag, NOFOLLOW_LINKS) || Files.exists(deletingTag, NOFOLLOW_LINKS)) {
-            return true;
-        }
-        try (DirectoryStream<Path> logs = Files.newDirectoryStream(pathResolver.mutationDirectory(projectId), "*.json")) {
-            return logs.iterator().hasNext();
-        } catch (NoSuchFileException ignored) {
-            return false;
-        } catch (IOException ex) {
-            throw new UncheckedIOException(ex);
-        }
+    public boolean hasDeletingDirectory(String projectId) {
+        return Files.exists(pathResolver.deletingDirectory(projectId), NOFOLLOW_LINKS);
     }
 
-    public void recoverProjectDirectories() {
+    @PostConstruct
+    void recoverProjectDeletions() {
         Path projectsRoot = pathResolver.projectsRoot();
-        if (Files.notExists(projectsRoot)) {
-            return;
-        }
-        try (DirectoryStream<Path> entries = Files.newDirectoryStream(projectsRoot, pathResolver::isProjectMarker)) {
-            for (Path pending : entries) {
-                Path directory = pathResolver.projectDirectoryFromMarker(pending);
-                String projectId = directory.getFileName().toString();
-                boolean isCreating = pending.equals(pathResolver.creatingMarker(projectId));
-                alignProjectDirectoryWithDatabase(directory, pending, isCreating, projectMapper.existsProject(projectId));
+        if (Files.notExists(projectsRoot)) return;
+        try (DirectoryStream<Path> entries = Files.newDirectoryStream(projectsRoot, pathResolver::isDeletingDirectory)) {
+            for (Path deletingDirectory : entries) {
+                Path projectDirectory = pathResolver.projectDirectoryFromDeletion(deletingDirectory);
+                String projectId = projectDirectory.getFileName().toString();
+                finishProjectDeletion(projectDirectory, deletingDirectory, projectMapper.existsProject(projectId));
             }
-        } catch (IOException ex) {
-            throw new UncheckedIOException(ex);
-        }
-    }
-
-    public void createProjectDirectory(String projectId) {
-        Path projectDirectory = pathResolver.projectDirectory(projectId);
-        Path creatingTag = pathResolver.creatingMarker(projectId);
-        try {
-            Files.createDirectories(projectDirectory.getParent());
-            if (Files.exists(projectDirectory, NOFOLLOW_LINKS)) {
-                throw new IOException("项目目录已存在：" + projectDirectory);
-            }
-            Files.createFile(creatingTag);
-            try {
-                Files.createDirectory(projectDirectory);
-            } catch (IOException ex) {
-                Files.delete(creatingTag);
-                throw ex;
-            }
-            finishAfterTransaction(projectDirectory, creatingTag, true);
         } catch (IOException ex) {
             throw new UncheckedIOException(ex);
         }
     }
 
     public void stageProjectDeletion(String projectId) {
-        Path directory = pathResolver.projectDirectory(projectId);
-        Path deletingTag = pathResolver.deletingMarker(projectId);
+        Path projectDirectory = pathResolver.projectDirectory(projectId);
+        Path deletingDirectory = pathResolver.deletingDirectory(projectId);
+        if (Files.notExists(projectDirectory, NOFOLLOW_LINKS)) return;
         try {
-            if (Files.notExists(directory, NOFOLLOW_LINKS)) {
-                return;
-            }
-            Files.move(directory, deletingTag, ATOMIC_MOVE);
-            finishAfterTransaction(directory, deletingTag, false);
+            Files.move(projectDirectory, deletingDirectory, ATOMIC_MOVE);
         } catch (IOException ex) {
             throw new UncheckedIOException(ex);
         }
-    }
 
-    private void finishAfterTransaction(Path processing, Path pending, boolean isCreating) {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCompletion(int status) {
-                if (status == STATUS_UNKNOWN) {
-                    return;
-                }
-                boolean keepProject = isCreating ? status == STATUS_COMMITTED : status == STATUS_ROLLED_BACK;
+                if (status == STATUS_UNKNOWN) return;
                 try {
-                    alignProjectDirectoryWithDatabase(processing, pending, isCreating, keepProject);
+                    finishProjectDeletion(projectDirectory, deletingDirectory, status == STATUS_ROLLED_BACK);
                 } catch (IOException ex) {
-                    log.error("项目目录收尾失败，将在下次启动时重试：{}", processing, ex);
+                    log.error("项目删除暂存目录处理失败，将在下次启动时重试：{}", deletingDirectory, ex);
                 }
             }
         });
     }
 
-    private void alignProjectDirectoryWithDatabase(Path processing, Path pending, boolean isCreating, boolean keepProject) throws IOException {
-        if (isCreating) {
-            if (keepProject) {
-                Files.createDirectories(processing);
-            } else {
-                FileSystemUtils.deleteRecursively(processing);
-            }
-            Files.delete(pending);
+    private void finishProjectDeletion(Path projectDirectory, Path deletingDirectory, boolean restoreProject) throws IOException {
+        if (restoreProject) {
+            Files.move(deletingDirectory, projectDirectory, ATOMIC_MOVE);
         } else {
-            if (keepProject) {
-                Files.move(pending, processing, ATOMIC_MOVE);
-            } else {
-                FileSystemUtils.deleteRecursively(pending);
-            }
+            FileSystemUtils.deleteRecursively(deletingDirectory);
         }
     }
 }

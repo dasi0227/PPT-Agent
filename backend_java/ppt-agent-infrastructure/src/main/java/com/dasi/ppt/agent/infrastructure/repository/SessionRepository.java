@@ -1,5 +1,6 @@
 package com.dasi.ppt.agent.infrastructure.repository;
 
+import com.dasi.ppt.agent.domain.agent.model.Plan;
 import com.dasi.ppt.agent.domain.agent.model.entity.Message;
 import com.dasi.ppt.agent.domain.agent.model.entity.Session;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.RunStatus;
@@ -7,7 +8,6 @@ import com.dasi.ppt.agent.domain.agent.repository.ISessionRepository;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.CheckpointMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.CommandMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.MessageMapper;
-import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.ReceiptMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.RunMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.SessionMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.database.po.SessionPo;
@@ -26,7 +26,6 @@ public class SessionRepository implements ISessionRepository {
     private final RunMapper runMapper;
     private final CommandMapper commandMapper;
     private final CheckpointMapper checkpointMapper;
-    private final ReceiptMapper receiptMapper;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -36,7 +35,7 @@ public class SessionRepository implements ISessionRepository {
 
     @Override
     public Session findSession(String sessionId) {
-        throw new UnsupportedOperationException();
+        return toEntity(sessionMapper.findSession(sessionId));
     }
 
     @Override
@@ -48,7 +47,7 @@ public class SessionRepository implements ISessionRepository {
     public List<Session> listProjectSessions(String projectId) {
         return sessionMapper.listProjectSessions(projectId)
                 .stream()
-                .map(SessionRepository::toEntity)
+                .map(this::toEntity)
                 .toList();
     }
 
@@ -66,10 +65,13 @@ public class SessionRepository implements ISessionRepository {
                 .build();
     }
 
-    private static Session toEntity(SessionPo po) {
+    private Session toEntity(SessionPo po) {
         if (po == null) return null;
         return Session.builder()
                 .id(po.getId())
+                .projectId(po.getProjectId())
+                .revision(po.getRevision())
+                .plan(po.getPlan() == null ? null : objectMapper.readValue(po.getPlan(), Plan.class))
                 .title(po.getTitle())
                 .updatedAt(po.getUpdatedAt())
                 .runStatus(po.getRunStatus() == null ? null : RunStatus.fromValue(po.getRunStatus()))

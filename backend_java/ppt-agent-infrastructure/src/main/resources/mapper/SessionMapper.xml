@@ -19,12 +19,20 @@
         SELECT id FROM sessions WHERE project_id = #{projectId}
     </select>
 
-    <select id="listProjectSessions" resultMap="sessionPo">
-        SELECT s.id, s.title, s.updated_at, r.status AS run_status,
+    <sql id="sessionActivity">
+               r.status AS run_status,
                EXISTS (SELECT 1 FROM commands c WHERE c.session_id = s.id
                        AND c.status IN ('pending', 'running', 'cancelling')) AS has_active_commands
         FROM sessions s LEFT JOIN runs r ON r.session_id = s.id
                 AND r.status IN ('pending', 'running', 'waiting', 'cancelling')
+    </sql>
+    <select id="findSession" resultMap="sessionPo">
+        SELECT s.id, s.project_id, s.revision, s.title, s.plan, s.updated_at, <include refid="sessionActivity"/>
+        WHERE s.id = #{sessionId}
+    </select>
+
+    <select id="listProjectSessions" resultMap="sessionPo">
+        SELECT s.id, s.title, s.updated_at, <include refid="sessionActivity"/>
         WHERE s.project_id = #{projectId}
         ORDER BY s.updated_at DESC, s.id ASC
     </select>
@@ -32,4 +40,7 @@
     <insert id="insertSession">
         INSERT INTO sessions (id, project_id, title, updated_at) VALUES (#{id}, #{projectId}, #{title}, #{updatedAt})
     </insert>
+    <update id="advanceSessionRevision">
+        UPDATE sessions SET revision = revision + 1 WHERE id = #{sessionId} AND revision = #{expectedRevision}
+    </update>
 </mapper>

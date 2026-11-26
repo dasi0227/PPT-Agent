@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.BiConsumer;
 
 @Builder
 @Data
@@ -49,11 +50,15 @@ public final class Outline {
 
     public Set<String> slideIds() {
         Set<String> ids = new LinkedHashSet<>();
-        slides.forEach(page -> ids.add(page.id));
-        for (Chapter chapter : chapters) {
-            chapter.slides.forEach(page -> ids.add(page.id));
-            chapter.sections.forEach(section -> section.slides.forEach(page -> ids.add(page.id)));
-        }
+        forEachPage((page, chapterTitle) -> ids.add(page.id));
         return ids;
+    }
+
+    public void forEachPage(BiConsumer<Page, String> consumer) {
+        slides.forEach(page -> consumer.accept(page, null));
+        for (Chapter chapter : chapters) {
+            chapter.slides.forEach(page -> consumer.accept(page, chapter.title));
+            chapter.sections.forEach(section -> section.slides.forEach(page -> consumer.accept(page, chapter.title)));
+        }
     }
 }

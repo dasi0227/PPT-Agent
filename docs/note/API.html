@@ -216,7 +216,7 @@
               </td>
               <td>
                 <ul class="fields">
-                  <li><code>响应体</code>：image/webp</li>
+                  <li><code>响应体</code>：当前页面与外观对应的 image/webp；支持 ETag 与 304。页面或 HTML 缺失时为 404，渲染服务不可用时为 503。</li>
                 </ul>
               </td>
             </tr>
@@ -809,61 +809,18 @@
           </tr></thead>
           <tbody>
             <tr>
-              <th scope="row">开始导出</th>
+              <th scope="row">导出项目</th>
               <td><code>POST /api/exports/create</code></td>
               <td>
                 <ul class="fields">
                   <li><code>project_id</code>：字符串，必填，项目 ID</li>
-                  <li><code>format</code>：字符串，必填，png / pdf / html</li>
-                  <li><code>request_id</code>：字符串，必填，前端生成；同一次网络重发复用，主动重新导出使用新值</li>
+                  <li><code>format</code>：字符串，必填，html / png / pdf</li>
                 </ul>
               </td>
               <td>
                 <ul class="fields">
-                  <li><code>id</code>：字符串，导出任务 ID</li>
-                </ul>
-              </td>
-            </tr>
-            <tr>
-              <th scope="row">读取导出进度</th>
-              <td><code>GET /api/exports/{export_id}</code></td>
-              <td>
-                <ul class="fields">
-                  <li><code>export_id</code>：字符串，必填，导出任务 ID</li>
-                </ul>
-              </td>
-              <td>
-                <ul class="fields">
-                  <li><code>status</code>：字符串，<code>snapshotting</code> 准备输入，<code>rendering</code> 渲染，<code>packaging</code> 生成成品，<code>ready</code> 可下载，<code>failed</code> 失败，<code>canceled</code> 已取消</li>
-                  <li><code>completed_slides</code>：非负整数，已处理幻灯片数，初始为 0</li>
-                  <li><code>total_slides</code>：正整数，本次导出的幻灯片总数，创建任务时确定</li>
-                  <li><code>filename</code>：字符串或 null；ready 时为导出文件名，其余状态为 null</li>
-                  <li><code>filesize</code>：非负整数或 null；ready 时为导出文件的字节数，其余状态为 null</li>
-                  <li><code>error_message</code>：字符串或 null；failed 时为失败原因，其余状态为 null</li>
-                </ul>
-              </td>
-            </tr>
-            <tr>
-              <th scope="row">取消导出</th>
-              <td><code>POST /api/exports/cancel</code></td>
-              <td>
-                <ul class="fields">
-                  <li><code>export_id</code>：字符串，必填，停止任务或清理已生成文件</li>
-                </ul>
-              </td>
-              <td>无</td>
-            </tr>
-            <tr>
-              <th scope="row">下载导出文件</th>
-              <td><code>GET /api/exports/{export_id}/download</code></td>
-              <td>
-                <ul class="fields">
-                  <li><code>export_id</code>：字符串，必填，导出任务 ID</li>
-                </ul>
-              </td>
-              <td>
-                <ul class="fields">
-                  <li><code>响应体</code>：文件附件；PDF 为 application/pdf，PNG 图片集为 application/zip，单个 HTML 演示文件为 text/html; charset=utf-8，文件名见 Content-Disposition</li>
+                  <li>同一响应返回文件。HTML 为 <code>text/html;charset=UTF-8</code>，PNG 图片集为 <code>application/zip</code>，PDF 为 <code>application/pdf</code>。</li>
+                  <li><code>Content-Disposition</code> 给出下载文件名，<code>Content-Length</code> 给出文件字节数。</li>
                 </ul>
               </td>
             </tr>

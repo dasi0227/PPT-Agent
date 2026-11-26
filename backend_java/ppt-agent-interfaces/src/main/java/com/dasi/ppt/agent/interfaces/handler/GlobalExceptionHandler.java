@@ -3,7 +3,9 @@ package com.dasi.ppt.agent.interfaces.handler;
 import com.dasi.ppt.agent.domain.shared.exception.BusinessException;
 import com.dasi.ppt.agent.domain.shared.exception.ErrorCode;
 import com.dasi.ppt.agent.domain.shared.exception.InvalidEnumValueException;
+import com.dasi.ppt.agent.domain.shared.exception.RenderUnavailableException;
 import com.dasi.ppt.agent.interfaces.controller.asset.AssetController;
+import com.dasi.ppt.agent.interfaces.controller.export.ExportController;
 import com.dasi.ppt.agent.interfaces.controller.file.FileController;
 import com.dasi.ppt.agent.interfaces.controller.project.ProjectController;
 import com.dasi.ppt.agent.interfaces.controller.session.SessionController;
@@ -11,6 +13,8 @@ import com.dasi.ppt.agent.interfaces.controller.setting.SettingController;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.tomcat.util.http.InvalidParameterException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.ServletRequestBindingException;
@@ -19,7 +23,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MultipartException;
 
 @Slf4j
-@RestControllerAdvice(assignableTypes = {AssetController.class, FileController.class, SettingController.class, ProjectController.class, SessionController.class})
+@RestControllerAdvice(assignableTypes = {AssetController.class, ExportController.class, FileController.class, SettingController.class, ProjectController.class, SessionController.class})
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
@@ -40,6 +44,13 @@ public class GlobalExceptionHandler {
     public ErrorResponse invalidRequest(Exception ex, HttpServletRequest request) {
         log.warn("请求解析失败：path={}，code={}，message={}", request.getRequestURI(), ErrorCode.INVALID_ARGUMENT.getValue(), ex.getMessage(), ex);
         return ErrorResponse.of(ErrorCode.INVALID_ARGUMENT);
+    }
+
+    @ExceptionHandler(RenderUnavailableException.class)
+    public ResponseEntity<ErrorResponse> renderUnavailable(RenderUnavailableException ex, HttpServletRequest request) {
+        log.warn("渲染服务失败：path={}", request.getRequestURI(), ex);
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ErrorResponse.of(ErrorCode.INTERNAL_ERROR, ex.getMessage()));
     }
 
     @ExceptionHandler(Exception.class)

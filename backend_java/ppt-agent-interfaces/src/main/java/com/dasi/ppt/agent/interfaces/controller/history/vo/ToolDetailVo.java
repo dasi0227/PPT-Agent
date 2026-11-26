@@ -6,7 +6,7 @@ import com.dasi.ppt.agent.domain.agent.model.enumeration.PreviewMismatch;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.PreviewStatus;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.ToolResultStatus;
 import com.dasi.ppt.agent.domain.asset.model.enumeration.AssetType;
-import com.dasi.ppt.agent.domain.project.model.enumeration.ChangePart;
+import com.dasi.ppt.agent.domain.project.model.enumeration.DeckFileType;
 import com.dasi.ppt.agent.domain.project.model.enumeration.ChangeStatus;
 import com.dasi.ppt.agent.interfaces.controller.interaction.vo.InteractionFormVo;
 import lombok.AllArgsConstructor;
@@ -46,7 +46,7 @@ public final class ToolDetailVo {
     @AllArgsConstructor
     @NoArgsConstructor
     public static final class ToolChangedTargetVo {
-        private ChangePart part;
+        private DeckFileType part;
         private String path;
         private String slideId;
         private ChangeStatus status;

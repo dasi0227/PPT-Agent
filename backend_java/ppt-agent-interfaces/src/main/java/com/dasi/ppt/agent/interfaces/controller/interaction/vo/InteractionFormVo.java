@@ -1,7 +1,7 @@
 package com.dasi.ppt.agent.interfaces.controller.interaction.vo;
 
 import com.dasi.ppt.agent.domain.agent.model.enumeration.InteractionType;
-import com.dasi.ppt.agent.domain.project.model.enumeration.ChangePart;
+import com.dasi.ppt.agent.domain.project.model.enumeration.DeckFileType;
 import com.dasi.ppt.agent.interfaces.controller.history.vo.ToolDetailVo;
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import lombok.AllArgsConstructor;
@@ -82,7 +82,7 @@ public final class InteractionFormVo {
         private PlanFormVo plan;
         private PermissionFormVo permission;
         private ScopeFormVo scope;
-        private ChangePart resource;
+        private DeckFileType resource;
         private JsonNode base;
         private JsonNode proposal;
     }

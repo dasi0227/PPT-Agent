@@ -1044,10 +1044,10 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <g id="tool-commit" class="node plain" transform="translate(330 1304)">
 <rect width="274" height="120" rx="10"/>
 <text class="node-tag" x="16" y="25">project/repository</text>
-<a class="class-link" href="#class-IDeckRepository" aria-label="查看 IDeckRepository 职责">
-<text class="node-name" x="16" y="50">IDeckRepository</text>
+<a class="class-link" href="#class-IProjectRepository" aria-label="查看 IProjectRepository 职责">
+<text class="node-name" x="16" y="50">IProjectRepository</text>
 </a>
-<text class="node-caption" x="16" y="76">协调文件提交、凭据与归属差异</text>
+<text class="node-caption" x="16" y="76">提交文件与所属工具结果</text>
 <text class="node-caption" x="16" y="96">实际提交使相关检查点失效</text>
 </g>
 <g id="tool-result" class="node plain" transform="translate(465 1474)">
@@ -1364,8 +1364,8 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <a class="class-link" href="#class-ICheckpointRepository" aria-label="查看 ICheckpointRepository 职责">
 <text class="node-name" x="16" y="25">ICheckpointRepository</text>
 </a>
-<a class="class-link" href="#class-IDeckRepository" aria-label="查看 IDeckRepository 职责">
-<text class="node-name" x="16" y="48">IDeckRepository</text>
+<a class="class-link" href="#class-IProjectRepository" aria-label="查看 IProjectRepository 职责">
+<text class="node-name" x="16" y="48">IProjectRepository</text>
 </a>
 <text class="node-caption" x="16" y="74">恢复会话和五类文稿文件</text>
 </g>
@@ -1411,8 +1411,8 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <a class="class-link" href="#class-DeckService" aria-label="查看 DeckService 职责">
 <text class="node-name" x="16" y="50">DeckService</text>
 </a>
-<text class="node-caption" x="16" y="76">按凭据或会话版本核对日志</text>
-<text class="node-caption" x="16" y="96">完成提交或回滚，清理临时记录</text>
+<text class="node-caption" x="16" y="76">按项目读取 file_undo</text>
+<text class="node-caption" x="16" y="96">还原旧文件后删除撤销记录</text>
 </g>
 <g id="support-interrupt" class="node plain" transform="translate(900 1342)">
 <rect width="316" height="118" rx="10"/>
@@ -1843,7 +1843,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>启动时遗留的活动 Run、命令与文件事务</td>
 <td>完成清理的文件状态；中断状态</td>
-<td>先核对遗留日志。文稿写入按提交凭据恢复，回退与返回按目标会话版本恢复。随后将无法继续的执行标记为 interrupted，保留已确认的工具与 Git 结果。旧 Loop 和结果未知的工具均不重放。</td>
+<td>先按 file_undo 还原项目文稿，整批成功后删除记录。随后将无法继续的执行标记为 interrupted，保留已确认的工具与 Git 结果。旧 Loop 和结果未知的工具均不重放。</td>
 </tr>
 </tbody>
 <tbody>
@@ -2472,14 +2472,14 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <td>检查点、恢复基准或恢复后的会话数据</td>
 <td>由 <code>infrastructure/repository/CheckpointRepository</code> 实现。归 agent/repository。负责普通及返回快照与分支清理，不保存周期性 Loop 运行快照。历史切换在同一事务中恢复业务记录、处理返回行并按预期版本推进会话版本。</td>
 </tr>
-<tr id="class-IDeckRepository">
+<tr id="class-IProjectRepository">
 <th scope="row">
-<code>IDeckRepository</code>
+<code>IProjectRepository</code>
 <span class="type">接口</span>
 </th>
-<td><code>DeckEditCandidate</code> 集合及本次提交的来源归属、提交标识或恢复请求</td>
-<td>文稿内容及各文件哈希，或已确认的文件提交结果及其归属</td>
-<td>由 <code>infrastructure/repository/DeckRepository</code> 实现。归 project/repository。在文稿文件改动前持久化日志。Agent 和人工写入的凭据与业务变更同事务提交，至少保留到日志收尾。普通写入按原凭据及请求摘要核对，历史切换按目标会话版本核对。确认结果后补齐或还原文件，无法确认时保留日志并阻止项目写入。</td>
+<td>项目 ID、文稿文件变更集合及本次提交的业务写入</td>
+<td>项目记录与状态、文稿文件内容或已提交的业务变更</td>
+<td>由 <code>infrastructure/repository/ProjectRepository</code> 实现。归 project/repository。在改文稿前独立提交整批旧内容，文件落盘后将业务变更与撤销记录的删除同事务提交。恢复失败时保留整批记录并暂停该项目写入。</td>
 </tr>
 </tbody>
 <tbody>
@@ -2518,9 +2518,9 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <code>IRenderGateway</code>
 <span class="type">接口</span>
 </th>
-<td>固定的完整渲染输入与取消信号</td>
-<td>截图及必要版面检查结果</td>
-<td>由 <code>infrastructure/gateway/RenderGateway</code> 实现。对接 render-worker；不负责主 Loop、批准或会话历史。</td>
+<td>单页渲染输入与取消信号，或整稿快照与导出格式</td>
+<td>单页截图与版面检查结果，或整稿成品文件流</td>
+<td>由 <code>infrastructure/gateway/RenderGateway</code> 实现，调用外部 render-worker。</td>
 </tr>
 <tr id="class-IGitGateway">
 <th scope="row">

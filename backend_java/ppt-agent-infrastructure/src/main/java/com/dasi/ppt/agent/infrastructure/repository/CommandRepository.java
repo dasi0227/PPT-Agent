@@ -5,7 +5,6 @@ import com.dasi.ppt.agent.domain.agent.repository.ICommandRepository;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.CheckpointMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.CommandMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.MessageMapper;
-import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.ReceiptMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.RunMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.SessionMapper;
 import lombok.RequiredArgsConstructor;
@@ -21,7 +20,6 @@ public class CommandRepository implements ICommandRepository {
     private final MessageMapper messageMapper;
     private final RunMapper runMapper;
     private final CheckpointMapper checkpointMapper;
-    private final ReceiptMapper receiptMapper;
     private final ObjectMapper objectMapper;
 
     @Override

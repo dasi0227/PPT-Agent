@@ -28,12 +28,9 @@ public enum ErrorCode {
     COMMAND_NOT_FOUND("COMMAND_NOT_FOUND", "命令记录不存在"),
     STALE_BASE("STALE_BASE", "修订基准已过期"),
     STALE_REVISION("STALE_REVISION", "版本已过期，请刷新后重试"),
-    REQUEST_CONFLICT("REQUEST_CONFLICT", "请求与已受理的请求冲突"),
     INTERACTION_CLOSED("INTERACTION_CLOSED", "交互事项已关闭或已答复"),
     STALE_INTERACTION("STALE_INTERACTION", "待答内容已更新，请刷新后重新提交"),
-    BRANCH_CONFIRMATION_REQUIRED("BRANCH_CONFIRMATION_REQUIRED", "请先确认分支操作"),
-    EXPORT_ACTIVE("EXPORT_ACTIVE", "已有导出任务正在生成或下载"),
-    EXPORT_GONE("EXPORT_GONE", "导出任务已失效");
+    BRANCH_CONFIRMATION_REQUIRED("BRANCH_CONFIRMATION_REQUIRED", "请先确认分支操作");
 
     @JsonValue
     private final String value;

@@ -6,7 +6,6 @@ import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.CheckpointM
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.CommandMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.MessageMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.ProjectMapper;
-import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.ReceiptMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.RunMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.SessionMapper;
 import lombok.RequiredArgsConstructor;
@@ -24,9 +23,13 @@ public class CheckpointRepository implements ICheckpointRepository {
     private final MessageMapper messageMapper;
     private final RunMapper runMapper;
     private final CommandMapper commandMapper;
-    private final ReceiptMapper receiptMapper;
     private final ProjectMapper projectMapper;
     private final ObjectMapper objectMapper;
+
+    @Override
+    public int advanceSessionRevision(String sessionId, long expectedRevision) {
+        return sessionMapper.advanceSessionRevision(sessionId, expectedRevision);
+    }
 
     @Override
     public List<Checkpoint> listCheckpoints(String sessionId) {

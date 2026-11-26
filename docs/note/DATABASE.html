@@ -808,27 +808,27 @@
               <td class="nullable">否</td>
               <td>无</td>
               <td>该检查点的完整恢复数据。</td>
-              <td class="decision">JSON 对象，含会话标题、计划、消息、Run、命令及 agent 凭据，以及五类项目文稿文件。普通检查点另含原始输入正文、引用、最初的模型名、模式及范围。文本文件用 JSON 字符串，二进制内容用 Base64。</td>
+              <td class="decision">JSON 对象，含会话标题、计划、消息、Run 和命令，以及五类项目文稿文件。普通检查点另含原始输入正文、引用、最初的模型名、模式及范围。文本文件用 JSON 字符串，二进制内容用 Base64。</td>
             </tr>
           </tbody>
         </table>
       </div>
     </article>
 
-    <article class="database-card" id="receipts" aria-labelledby="receipts-heading">
+    <article class="database-card" id="file_undo" aria-labelledby="file_undo-heading">
       <header class="card-header">
         <div>
           <div class="table-heading">
-            <h2 id="receipts-heading"><code>receipts</code></h2>
-            <span class="table-label">文稿文件提交凭据</span>
+            <h2 id="file_undo-heading"><code>file_undo</code></h2>
+            <span class="table-label">文稿文件撤销记录</span>
           </div>
-          <p class="table-purpose">一行记录一次已提交的文稿文件修改。</p>
+          <p class="table-purpose">每行保存本批修改中一个文稿文件的旧内容。</p>
         </div>
         <span class="status">已确定</span>
       </header>
 
-      <div class="table-scroll" role="region" aria-label="receipts 字段与约束" tabindex="0">
-        <table aria-label="receipts 字段设计与约束">
+      <div class="table-scroll" role="region" aria-label="file_undo 字段与约束" tabindex="0">
+        <table aria-label="file_undo 字段设计与约束">
           <colgroup>
             <col class="field-col"><col class="type-col"><col class="nullable-col">
             <col class="default-col"><col class="meaning-col"><col class="decision-col">
@@ -844,37 +844,29 @@
             </tr>
           </thead>
           <tbody>
-            <tr id="receipts-type">
-              <th scope="row"><code>type</code></th>
+            <tr id="file_undo-project_id">
+              <th scope="row"><code>project_id</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
               <td>无</td>
-              <td>文稿文件修改的来源。</td>
-              <td class="decision"><code>agent / manual</code>。</td>
+              <td>待恢复文件所属项目。</td>
+              <td class="decision">引用 projects.id，与 file_name 组成主键。存在记录时限制删除项目。</td>
             </tr>
-            <tr id="receipts-owner-id">
-              <th scope="row"><code>owner_id</code></th>
+            <tr id="file_undo-file_name">
+              <th scope="row"><code>file_name</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
               <td>无</td>
-              <td>本次文件提交所属的 Run 或项目。</td>
-              <td class="decision"><code>agent</code> 用 Run ID，<code>manual</code> 用项目 ID。</td>
+              <td>项目根目录内的文稿文件名。</td>
+              <td class="decision">限五类文稿，同一项目内唯一。</td>
             </tr>
-            <tr id="receipts-request-id">
-              <th scope="row"><code>request_id</code></th>
-              <td><code>TEXT</code></td>
-              <td class="nullable">否</td>
+            <tr id="file_undo-before_content">
+              <th scope="row"><code>before_content</code></th>
+              <td><code>BLOB</code></td>
+              <td class="nullable">是</td>
               <td>无</td>
-              <td>一次请求的稳定提交标识。</td>
-              <td class="decision"><code>agent</code> 用所属 Run 内的 <code>tool_call_id</code>，<code>manual</code> 用后端操作 ID。与 <code>type、owner_id</code> 组合唯一。</td>
-            </tr>
-            <tr id="receipts-request-hash">
-              <th scope="row"><code>request_hash</code></th>
-              <td><code>TEXT</code></td>
-              <td class="nullable">否</td>
-              <td>无</td>
-              <td>用于核对文件提交日志的摘要。</td>
-              <td class="decision">人工保存按序列化的文件变更列表计算，恢复时须与日志摘要一致。</td>
+              <td>改动前的完整字节。</td>
+              <td class="decision">NULL 表示原先缺失，零字节 BLOB 表示空文件。</td>
             </tr>
           </tbody>
         </table>

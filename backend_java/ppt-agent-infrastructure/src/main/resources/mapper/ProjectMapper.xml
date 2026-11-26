@@ -23,7 +23,7 @@
     </select>
 
     <select id="findProjectAppearance" resultMap="projectPo">
-        SELECT id, theme, logo IS NOT NULL AS has_logo, slide_pagination_position,
+        SELECT id, title, theme, logo IS NOT NULL AS has_logo, slide_pagination_position,
                deck_title_position, chapter_title_position, project_logo_position
         FROM projects WHERE id = #{projectId}
     </select>

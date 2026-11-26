@@ -28,7 +28,7 @@
 - 大纲保存提交整棵树，大纲与相关文件的修改一起生效。
 - 大纲根对象必须包含 `slides` 和 `chapters` 两个有序数组，最多一个非空。空大纲为 `{"slides":[],"chapters":[]}`。平铺文稿按根直属页的顺序排列，最多 200 页。分章文稿按章内顺序排列，每章可为空、只含直属页或只含节。
 - 保存时校验新大纲的层级。客户端创建节点时分配唯一 ID，改名、排序或移动时沿用原 ID，包括在根与章、节之间移动页面。读取逐页内容、保存规格和 HTML、清理孤立文件时，根直属页与章、节内的页面使用相同规则。
-- 校验通过后，用新大纲中所有页面 ID 核对项目根目录中的普通文件。文件名形如 `{slide_id}.json` 或 `{slide_id}.html`，其中 `slide_id` 匹配 `sli_[A-Za-z0-9_-]+`。删除所有未被新大纲引用的匹配文件，包括只剩规格或 HTML 的孤立文件。扫描限于根目录，跳过子目录与符号链接。
+- 校验通过后，用新大纲中所有页面 ID 核对项目根目录中的普通文件。文件名形如 `{slide_id}.json` 或 `{slide_id}.html`，其中 `slide_id` 匹配 `sli_[A-Za-z0-9_-]+`。删除所有未被新大纲引用的匹配文件，包括只剩规格或 HTML 的孤立文件。扫描限于根目录，跳过子目录与符号链接。空项目首次保存大纲时，尚未创建的项目目录按无页面文件处理。
 - 大纲字节相同也执行清理。实际删除文件时，原大纲哈希仍有效，更新项目修改时间并发送文稿变更通知。基准冲突或新大纲无效时保留现有文件。
 - `GET /api/projects/{project_id}/appearance` 返回 `theme_id`，值为 `null` 表示项目未选择主题。
 - `POST /api/projects/theme/save` 需提交 `project_id` 和 `theme_id`，只保存项目主题。每次保存都校验目标资产存在、类型为主题、已启用且正文非空白，同值保存也需通过校验。
@@ -114,26 +114,14 @@
 
 ## 导出
 
-- 创建要求大纲有效且至少有一页。
-- 返回任务 ID 时，本次导出的页序、内容、外观和 `total_slides` 已固定。
-- 导出和预览使用同一份 `runtime/base.css`，按基础样式、已选主题的 CSS、单页样式的顺序应用。未选主题时跳过资产查找和主题 CSS。
-- 幻灯片不能引用会话附件或用户本地文件。HTML 成品可保留外部资源引用。
-- 同一 `project_id + request_id` 和格式重发时返回现有任务 ID，改用其他格式返回 `REQUEST_CONFLICT`。
-- 每个项目同时只允许一个活动导出。若项目有非终态 Run、正在 Git 提交或切换历史，新建导出返回 `PROJECT_BUSY`。
-- 新请求通过创建校验后替换同项目尚未下载的 `ready` 任务。原任务仍在生成或下载时返回 `EXPORT_ACTIVE`。`failed`、`canceled` 均允许新建。
-- 进度通过状态接口读取。HTML 可从 `snapshotting` 直接进入 `packaging`，组装期间继续更新 `completed_slides`。
-- 生成超过 30 分钟时任务转为 `failed`。状态接口通过 `status=failed` 和 `error_message` 返回失败原因。
-- `ready` 成品没有等待下载时限。
-- 每个任务同时只接受一个下载请求。任务未就绪或正在下载时返回 HTTP 409，已失效返回 HTTP 410。
-- 下载期间任务仍为 `ready`，完整发送后失效。
-- 传输中断且成品完整时仍可下载，否则转为 `failed`。
-- 下载使用 `Cache-Control: no-store`，以 `Content-Type`、`Content-Length` 和 `Content-Disposition` 返回格式、长度和文件名。
-- HTML 是单文件，PNG 是 ZIP，PDF 是单个 PDF 文件。
-- 取消可重复，下载期间拒绝取消。
-- 项目删除或后端退出、重启后任务失效。状态接口查询已失效任务返回 HTTP 200 和业务错误 `EXPORT_GONE`。
+- `POST /api/exports/create` 接收 `project_id` 和 `format`。成功时，同一请求返回完整的单文件 HTML（`text/html;charset=UTF-8`）、PDF（`application/pdf`）或按页序打包的 PNG 图片集（`application/zip`）。
+- 项目不存在时返回 `PROJECT_NOT_FOUND`。项目有非终态 Run、正在 Git 提交或切换历史时返回 `PROJECT_BUSY`。大纲须有效且至少有一页，每页均须有 HTML。空文稿或页面缺少 HTML 返回 `INVALID_ARGUMENT`，缺页错误带页面标题。
+- 在项目写锁内固定本次导出的页序、页面内容、标题与外观。释放锁后交给 worker 生成成品，期间可继续编辑。导出与预览按基础样式、可选主题 CSS、单页样式的顺序应用，幻灯片不能引用会话附件或用户本地文件。HTML 成品可保留外部资源引用。
+- 文件响应使用 `Cache-Control: no-store`，以 `Content-Disposition` 和 `Content-Length` 给出下载文件名和字节数。worker 无法生成成品时返回 HTTP 503 和统一 JSON 错误。传输中断后，重新提交即可按当时的文稿再次导出。
 
 ## 附件
 
+- 上传使用 multipart 字段 `project_id` 和 `file`，仅接受不超过 10 MiB、4000 万像素的 PNG，成功返回 `{"id":"…"}`。显示名称由调用方保留。
 - 附件属于项目。图片引用须携带 `attachment_id` 和非空的显示名称 `original_name`。
 - 读取 `original` 返回上传的 PNG 原文，默认的 `thumbnail` 返回最长边为 512 像素的 WebP。
 - 工具截图按 `project_id + screenshot_id` 返回调用当时的 PNG。
@@ -249,7 +237,7 @@
 - 同一操作同时只允许一个活动执行。
 - 进度和取消均使用单次执行 ID。取消可重复，最终状态以命令详情为准。
 - 手动 `compact` 同一会话最多一个。
-- `commit` 要求项目内无非终态 Run，提交期间与新 Run、历史切换和导出创建互斥。
+- `commit` 要求项目内无非终态 Run，提交期间与新 Run、历史切换和导出快照采集互斥。
 - `rename` 的原标题已改变时，该次结果为 `cancelled`，保留当前标题。
 - `suggest` 的依据输入已过期或已有更新的建议命令时，该次结果为 `cancelled`，保留当前建议。
 
@@ -297,6 +285,6 @@
 
 - `GET /api/healthz` 在启动检查期间或公共数据库不可用时返回 HTTP 503。
 - 启动检查完成且公共数据库可用时返回 HTTP 200，两种状态的响应体均为空。
-- 单个项目有未解决的恢复日志时，该项目暂停写入，其他项目正常使用。
+- 单个项目有待恢复的文稿文件时，该项目暂停写入，其他项目正常使用。
 - `POST /api/files/open` 只接受本机同源调用，提交 `project_id` 和 `file_name`。允许的文件名为 `.meta.json`、`.constraint.json`、`.outline.json`、`{slide_id}.json`、`{slide_id}.html`，其中 `slide_id` 匹配 `sli_[A-Za-z0-9_-]+`。解析符号链接后的目标也须是该项目根目录下符合命名规则的普通文件。路径、其他文件名和不符合条件的目标返回 `INVALID_ARGUMENT`。
 - 打开 JSON 文稿使用 `json_open`，打开页面 HTML 使用 `html_open`。文件类型的配置为 `inherit` 时沿用 `default_open`，`system` 使用系统关联的应用。系统接受打开请求后返回空响应。文件缺失返回 `FILE_NOT_FOUND`，应用启动失败返回 `FILE_OPEN_FAILED`。

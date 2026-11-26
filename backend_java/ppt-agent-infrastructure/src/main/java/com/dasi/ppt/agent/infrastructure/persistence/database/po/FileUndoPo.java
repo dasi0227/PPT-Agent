@@ -11,10 +11,8 @@ import lombok.Setter;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class ReceiptPo {
-
-    private String type;
-    private String ownerId;
-    private String requestId;
-    private String requestHash;
+public class FileUndoPo {
+    private String projectId;
+    private String fileName;
+    private byte[] beforeContent;
 }

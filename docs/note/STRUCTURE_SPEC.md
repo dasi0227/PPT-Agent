@@ -22,13 +22,10 @@
 - 单独读取项目 Logo 时，Mapper 通过 SQLite JDBC 的 `getBytes()` 读取 BLOB 并返回 `byte[]`。
 - Mapper XML 位于 `ppt-agent-infrastructure/src/main/resources/mapper/`。
 - SQLite `TEXT` 列在 PO、Mapper 参数及结果映射中统一使用 `String`，包括状态、类型、模式和协议。
-- `infrastructure/persistence/database/ReceiptType` 定义数据库凭据类型 `agent / manual`，由仓储与 `ReceiptPo.type` 的字符串值相互转换。[凭据类型](DATABASE_SPEC.md#receipts)
 - JSON 存储列按 `String` 读写，仓储负责与领域对象转换。
-- `infrastructure/persistence/filesystem/FileStorer` 负责文件的读取、仅新建、原子替换、列举和删除，按数据库提交结果处理项目创建、删除标记。
-- `domain/shared/service/PathResolver` 统一定位五类文稿文件、文稿变更日志目录及文件、项目创建和删除标记。`DeckService` 直接调用 `PathResolver` 的 `metaPath`、`constraintPath`、`outlinePath`、`specPath`、`htmlPath`。前三个方法只需项目 ID，两个页面路径还需页面 ID。
-- 打开文稿时，`PlatformGateway` 使用 `PathResolver.filePathByFileName(projectId, fileName)` 定位文件，校验文件名和解析后的实际目标。文稿保存允许首次创建文件，文稿变更日志目录、日志文件、日志内的文稿和项目创建或删除标记均按项目 ID 定位。扫描目录时，`isProjectMarker(Path)` 根据目录项名称识别标记。
-- `infrastructure/persistence/filesystem/model/Mutation` 对应一次文稿写入或历史切换的恢复日志文件，记录核对提交所需的字段。`model/FileChange` 保存每个文件的相对路径及其 `before`、`after`。[日志字段](#项目目录)
-- `infrastructure/persistence/filesystem/model/MutationType` 定义文稿文件恢复日志的 `type`，取 `agent / manual / switch`。
+- `infrastructure/persistence/filesystem/FileStorer` 负责文件的读取、仅新建、原子替换、列举和删除，按数据库提交结果恢复或清除项目删除暂存目录。
+- `domain/shared/service/PathResolver` 统一定位五类文稿文件和项目删除暂存目录。`DeckService` 直接调用 `PathResolver` 的 `metaPath`、`constraintPath`、`outlinePath`、`specPath`、`htmlPath`。前三个方法只需项目 ID，两个页面路径还需页面 ID。
+- 打开文稿时，`PlatformGateway` 使用 `PathResolver.filePathByFileName(projectId, fileName)` 定位文件，校验文件名和解析后的实际目标。文稿保存允许首次创建文件。
 - `infrastructure` 模块将 `base.css`、`decorations.js` 和 `theme-bridge.js` 直接存放在 `resources/runtime/` 下。基础样式定义系统字体、颜色、字号和间距等默认值，预览和导出都先应用基础样式，再应用已选主题和单页样式。
 
 - `interfaces/controller/` 按功能分为 `project`、`asset`、`setting`、`export`、`file`、`session`、`history`、`execution`、`interaction`、`checkpoint` 和 `system`。
@@ -38,7 +35,7 @@
 - GET 的路径和查询参数由 Controller 直接接收。
 - 图片、下载和静态资源使用各自的 HTTP 响应类型。无响应体的接口直接返回空响应体。
 - `controller/system/SystemController.java` 提供健康检查和内置预览资源读取接口。
-- 项目文件打开接口归 `controller/file/`。
+- 项目文件打开、幻灯片缩略图和图片附件接口归 `controller/file/`。项目导出归 `controller/export/`。
 - 会话历史、Run 与命令详情、工具详情和会话订阅归 `controller/history/`。
 - Run 与旁路命令的受理及取消入口归 `controller/execution/`。
 - `interfaces/handler/` 存放 `GlobalExceptionHandler.java` 和 `ErrorResponse.java`。
@@ -68,7 +65,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - 标签列表项使用 `TagListVo.TagInfoVo`。
 - 资产列表项和详情共用 `AssetInfoVo`，列表中 `content` 为 `null`，详情中为正文。更新成功返回空响应体。
 - 选择本地应用使用 `PickApplicationVo` 返回 `path`，取消选择时该字段为 `null`。
-- 创建导出任务和上传新附件均使用 `IdVo` 返回资源 ID。
+- 上传新附件使用 `IdVo` 返回资源 ID。项目导出返回文件流。
 - `CreateSessionDto` 创建会话，`UpdateSessionDto` 修改会话标题。
 - `DeleteSessionPlanDto` 对应 `DeleteSessionPlanVo`，返回提交后的会话 `revision`。
 - `AppendRunDto` 对应 `AppendRunVo`，返回指令受理后所属的 `run_id`。
@@ -94,7 +91,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `project/model/entity/` 存放项目实体 `Project` 和页面实体 `Slide`。
 - `Slide` 以稳定的 `slide_id` 标识一页，关联该页的 `Spec` 和 HTML 源码。
 - `DeckService` 在初始化时加载资料、约束、大纲和页面规格的 JSON Schema。读取时从仓储取得文件字节，校验并解码正文，用同一份字节计算哈希，再组装 `Deck`。保存时校验并编码提交的 JSON 正文。
-- `project/model/Deck` 按所属项目聚合 `Meta`、`Constraint`、`Outline` 及按 `slide_id` 索引的 `Slide`。[项目读取契约](API.html#projects)
+- `project/model/Deck` 按所属项目聚合 `Meta`、`Constraint`、`Outline` 及按大纲页序排列的 `List<Slide>`。`DeckInfoVo` 按每页的 `slide_id` 组装响应中的 `slides` 和 `hashes.slides`。[项目读取契约](API.html#projects)
 - `project/model/Meta` 对应 `.meta.json`，保存文稿标题、语言、页数要求、受众和目标。
 - `project/model/Spec` 对应 `{slide_id}.json`，描述单页的用途、核心信息、内容元素和布局。
 - `project/model/enumeration/SlidePurpose` 对应 `Spec.purpose`，取 `cover / introduction / transition / content_explanation / content_comparison / content_example / content_guidance / content_other / conclusion / other`。
@@ -114,10 +111,10 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `project/model/enumeration/OutlineNodeType` 标识大纲差异行的节点，取 `chapter / section / slide`。
 - `project/model/enumeration/DiffRowType` 标识差异行，字段差异使用 `added / removed`，大纲和文本差异还可使用 `context`。[差异字段](API.html#history)
 - `project/model/enumeration/DecorationType` 标识装饰种类，取 `slide_pagination / deck_title / chapter_title / logo`，项目外观与 DOM 选区共用。每种装饰的位置由 `DecorationPosition` 表示。[项目外观](API.html#projects) · [DOM 引用](API.html#runs)
-- `project/model/entity/ExportSnapshot` 是 `ExportTask` 在内存中持有的不可变输入，保存项目管理名称、文稿标题、按页序排列的页面标题与 HTML、每页所属章的标题、可为空的主题 CSS、装饰位置和 Logo 字节。未选主题时，CSS 只取自内置基础样式与页面本身。[导出契约](API_SPEC.md#导出)
+- `project/model/entity/ExportSnapshot` 是在项目锁内采集的渲染输入，保存项目管理名称、文稿标题、按页序排列的页面标题与 HTML、每页所属章的标题、可为空的主题 CSS、装饰位置和 Logo 字节。`ExportFile` 携带 worker 返回的成品文件名、字节数和输入流。[导出契约](API_SPEC.md#导出)
 - `IProjectRepository` 负责项目查询与创建、改名、删除，文稿提交及恢复由文稿仓储负责。
-- `domain/gateway/IFileGateway` 供 `AttachmentService`、`SlidePreviewService` 和 `ExportService` 存取各自的项目运行文件。[项目文件布局](#项目目录)
-- `infrastructure/gateway/FileGateway` 实现 `IFileGateway`，通过 `PathResolver` 解析项目路径，通过 `FileStorer` 创建、读取、替换、列举和删除文件。
+- `domain/shared/gateway/IFileGateway` 供 `AttachmentService` 和 `ThumbnailService` 存取各自的项目运行文件。[项目文件布局](#项目目录)
+- `infrastructure/gateway/FileGateway` 实现 `IFileGateway`，通过 `PathResolver` 解析项目路径，通过 `FileStorer` 创建、读取、替换和删除文件。
 - `agent/model/entity/` 下的持久化实体有 `Session`、`Run`、`Message`、`Command` 和 `Checkpoint`。
 - `agent/model/entity/PendingInteraction` 是由 `InteractionService` 管理的内存实体，以 `run_id + tool_call_id` 标识一项待答交互，持有 `InteractionType`、当前表单及其 `version`。[待答与答复](API_SPEC.md#人工)
 - `agent/model/` 存放会话的 `Plan` 和 `PlanStep`。
@@ -129,7 +126,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `agent/model/InstructionReference` 表示一条引用。指令按输入顺序保存引用，供提示词拼装和回退回填使用。
 - `agent/model/DomSelection` 是 DOM 引用的选区内容，保存页面与选区标识、标注序号、提交时的 HTML、源码哈希、注释及元素或装饰定位。[选区字段](API.html#runs)
 - `agent/model/enumeration/InstructionReferenceType` 对应 `references[].type`，取 `skill / component / slide / image / dom`。追加输入只接受 `image` 和 `dom`。[引用字段](API.html#runs)
-- `agent/model/CheckpointSnapshot` 是 `Checkpoint` 的恢复内容，包括目标会话记录、`agent` 凭据和五类文稿文件。普通检查点另含用于回填的原始输入。[快照范围](DATABASE_SPEC.md#checkpoints)
+- `agent/model/CheckpointSnapshot` 是 `Checkpoint` 的恢复内容，包括目标会话记录和五类文稿文件。普通检查点另含用于回填的原始输入。[快照范围](DATABASE_SPEC.md#checkpoints)
 - `asset/model/` 存放资产、标签及其类型。
 - `IAssetRepository` 负责资产、标签及关联的持久化。
 - `setting/model/` 存放模型配置和各组全局设置。
@@ -180,34 +177,31 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 
 ## 项目目录
 
-- 每个项目使用独立的 `{project_id}/` 根目录，由同一工作目录下的单个后端进程管理。
+- 创建项目只写 SQLite。首次写入文稿或附件时创建独立的 `{project_id}/` 目录，由同一工作目录下的单个后端进程管理。
+- 删除带文件的项目时，在事务内将项目目录原子改名为同级的 `.deleting-{project_id}/`。事务提交后清除暂存目录，回滚时恢复原名。若进程中断或事务结果未知，启动时按 SQLite 中项目记录是否存在决定恢复或清除。
 - 项目级文稿存于根目录的 `.meta.json`、`.constraint.json`、`.outline.json`。
 - 单页规格和源码按幻灯片 ID 存为根目录的 `{slide_id}.json` 和 `{slide_id}.html`。
 - 文稿回退和返回只处理上述五类文件，其他项目文件保留原状。
 - 项目主题正文和 Logo 存在数据库中，项目目录不另存永久副本。
 - `.git/` 存放项目 Git 仓库，`.runtime/` 存放项目运行文件。
-- 人工保存、Agent 写入和历史切换统一使用 `PathResolver.mutationPath(projectId, operationId)` 定位项目内的 `.runtime/mutations/{operationId}.json`。后端为每次文件操作生成一个 ID，写入和收尾复用该 ID。人工保存同时以该 ID 作为凭据的 `request_id`。
-- `type=agent` 和 `type=manual` 的日志保存原凭据键 `(type, owner_id, request_id)` 及 `request_hash`。
-- `type=switch` 的日志保存目标 `session_id` 和切换前的 `base_revision`（十进制字符串）。回退和返回最新共用此格式。
-- `files` 每项记录唯一的项目相对路径 `path` 及其 `before`、`after`，路径限于本次实际改动的五类文稿文件。
-- 文件状态用 Base64 字符串保存完整字节，`""` 表示空文件，`null` 表示路径不存在。
-- 完整日志在第一个文稿文件改动前原子落盘。
-- 文稿文件与数据库核对一致后，持久移除日志。
-- 恢复时无法判定应保留哪一版，或文件恢复失败时，保留日志并暂停该项目写入。其他项目独立完成启动恢复。[启动恢复](WORKFLOW_SPEC.md#启动恢复)
+- 人工保存由 `DeckService` 受理，Agent 已获批的候选文件由 `ToolExecutor.commitApprovedFiles` 提交，历史文件由 `CheckpointService.restoreCheckpointFiles` 恢复。三者共用 `IProjectRepository.commitFiles`。项目锁覆盖基准校验、记录旧内容、修改文件和业务事务。内存中的 `project/model/entity/FileChange` 包含文件名和前后字节，用于落盘及计算实际差异。
+- `ProjectRepository` 通过 `FileUndoMapper` 把整批旧内容写入 SQLite 的 `file_undo`，然后由 `FileStorer` 原子替换或删除文稿。业务结果与删除该项目撤销记录在同一事务提交。
+- 启动时按 `file_undo.project_id` 查找待恢复项目，在项目写锁内还原整批文件。恢复失败的项目保留记录并暂停写入，其他项目可继续使用。[撤销表](DATABASE_SPEC.md#file_undo) · [启动恢复](WORKFLOW_SPEC.md#启动恢复)
 - `.runtime/attachments/{attachment_id}.png` 保存附件原图，同名 `.webp` 保存附件缩略图。
 - `.runtime/screenshots/{screenshot_id}.png` 保存调用当时的截图，截图 ID 全局唯一，已有文件不覆盖。
 - 附件原图、附件缩略图和历史截图保留至项目删除，已上传但未发送的附件适用同一规则。
 - `.runtime/render-slides.json` 按 `slide_id` 保存最新的 `{screenshot_id, hash}`，无记录的页面省略该键。
 - 渲染哈希覆盖 HTML、主题、装饰、Logo 及影响画面的内置资源。
-- 渲染索引按项目串行更新，以原子替换发布新文件。
+- 渲染索引按项目串行更新，以原子替换发布新文件。缩略图缺失但对应截图仍在时，从已保存的 PNG 重建 WebP。同页渲染串行，调用 worker 期间释放项目锁，发布前复核当前页面的渲染哈希。
 - `.runtime/thumbnails/{slide_id}.webp` 只保存该页当前缩略图，从与当前渲染哈希匹配的截图生成。
 - 同一页的缩略图生成与索引切换串行执行，缩略图文件采用原子替换。
 - 切换最新截图前先删除旧缩略图，删除失败时保留原索引。
 - 截图评分及复用所需的基准存入数据库的工具结果，评估中的临时状态仅保留在内存。
-- `.runtime/exports/{export_id}/` 的根目录只存一个最终成品，文件名为 `{filename}.pdf`、`{filename}.zip` 或 `{filename}.html`。
-- 导出使用创建时固定的完整输入，`ExportSnapshot` 只在任务内存保留。预览和导出都用 `Meta.title` 填充 `deck_title`。章内页面的 `chapter_title` 取所属章的标题，根直属页省略该装饰。
-- PNG 和 PDF 导出的逐页图片存入任务的 `work/{序号}-{标题}.png`，序号补零，标题规范化。
-- HTML 导出直接生成单文件，内嵌播放器、样式、脚本和 Logo。文本按主题指定的系统字体族排版，项目内不创建播放目录。
-- 导出成品写完并关闭后清理 `work/`，保留待下载成品。
-- 导出失败或取消时，工作停止后清理临时文件和不完整成品。
-- 完整发送下载文件后清理整个导出任务目录，启动恢复时清理遗留导出目录。
+
+### 渲染与导出
+
+- `ThumbnailService` 通过 `IRenderGateway.renderHash` 取得渲染哈希。`RenderGateway` 为缩略图和整稿导出组装相同的页面 HTML、基础及主题 CSS 和装饰参数。文稿装饰标题取 `Meta.title`，章标题取该页所属章，根直属页省略章标题。
+- `RenderGateway` 调用外部 Node worker。开发时在 `backend_go/render-worker/` 执行 `pnpm install --frozen-lockfile`，从 `backend_java/` 启动 Java，默认脚本为 `../backend_go/render-worker/worker.mjs`。`PPT_RENDER_WORKER` 和 `PPT_RENDER_NODE` 可指定脚本和可执行文件。
+- 单页截图使用 `--job <请求文件>`，worker 按给定的页面输入写入 PNG 并返回版面检查结果。
+- 项目导出使用 `--export`。Java 向标准输入一次写入格式、项目名称、按序排列的页面及共用外观。worker 生成完整文件后向标准输出依次写入四字节大端长度、该长度的 UTF-8 JSON（`filename`、`size`）和原始文件字节。Java 将文件流直接写入本次 HTTP 响应。
+- HTML 由 worker 将页面和装饰嵌入同目录的 `export-player.html`，可直接播放。PNG 和 PDF 复用一次 Chromium 实例逐页截图，依序打包为 ZIP 或合成为 PDF。所需临时文件由 worker 在系统临时目录中创建并在本次调用结束时删除。

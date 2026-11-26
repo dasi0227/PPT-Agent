@@ -66,6 +66,7 @@
 7. 参数无效时使用 `invalid()`，资源缺失时使用 `notFound(code)`，状态或版本冲突时使用 `conflict(code)`，按需传入 `message` 覆盖 `defaultMessage`。
 8. 按 ID 局部更新允许只传 ID 时，若所有 `SET` 项都是可选字段，Mapper 统一用 `id = id` 保证 SQL 有效；Service 按需根据影响行数判断资源是否存在。
 9. 禁止用 `var`。
+10. 方法、方法参数、局部变量的命名需要尽可能符合语义，类对象命名可以采用类的首字母小写的方式。
 
 
 

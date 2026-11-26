@@ -14,8 +14,12 @@ public final class IdUtil {
     private static final String ID_CHARACTERS = "abcdefghijklmnopqrstuvwxyz0123456789";
     private static final int ID_LENGTH = 8;
 
-    public static String genOperationId() {
-        return genUuid();
+    public final static String genAttachmentId() {
+        return genUuid("att_");
+    }
+
+    public final static String genScreenshotId() {
+        return genUuid("scr_");
     }
 
     public static String genSessionId() {

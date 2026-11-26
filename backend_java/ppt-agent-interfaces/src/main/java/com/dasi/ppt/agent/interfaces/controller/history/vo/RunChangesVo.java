@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.interfaces.controller.history.vo;
 
-import com.dasi.ppt.agent.domain.project.model.enumeration.ChangePart;
+import com.dasi.ppt.agent.domain.project.model.enumeration.DeckFileType;
 import com.dasi.ppt.agent.domain.project.model.enumeration.ChangeStatus;
 import com.dasi.ppt.agent.domain.project.model.enumeration.DiffRowType;
 import com.dasi.ppt.agent.domain.project.model.enumeration.DiffType;
@@ -25,7 +25,7 @@ public final class RunChangesVo {
     @AllArgsConstructor
     @NoArgsConstructor
     public static final class ChangeTargetVo {
-        private ChangePart part;
+        private DeckFileType part;
         private String slideId;
         private String path;
     }

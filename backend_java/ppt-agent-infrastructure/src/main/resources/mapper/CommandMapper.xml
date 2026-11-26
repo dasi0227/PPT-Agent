@@ -9,7 +9,7 @@
         <result column="seq" property="seq"/>
         <result column="type" property="type"/>
         <result column="status" property="status"/>
-        <result column="input" property="input"/>
+        <result column="renderMaterial" property="renderMaterial"/>
         <result column="result" property="result"/>
         <result column="error" property="error"/>
         <result column="created_at" property="createdAt"/>

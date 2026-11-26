@@ -1,8 +1,12 @@
 import { measureSlideContent } from './render-metrics.mjs';
 import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import { extname, normalize, relative, resolve, sep } from 'node:path';
+import { createReadStream, createWriteStream, promises as fs } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { extname, join, normalize, relative, resolve, sep } from 'node:path';
+import { Readable } from 'node:stream';
+import { json as readJson } from 'node:stream/consumers';
+import { pipeline } from 'node:stream/promises';
 import process from 'node:process';
 import readline from 'node:readline';
 import { chromium } from 'playwright-core';
@@ -138,20 +142,21 @@ function blockServiceWorkerRegistration() {
 
 async function render(input, browser, handles = new Map()) {
   const started = Date.now();
-  if (!input || typeof input.html !== 'string' || typeof input.project_dir !== 'string' ||
-      typeof input.slide_id !== 'string' || typeof input.screenshot_path !== 'string' ||
-      typeof input.base_css !== 'string' || typeof input.theme_id !== 'string' ||
-      typeof input.theme_css !== 'string' || typeof input.runtime_assets_dir !== 'string') {
+  const snapshot = input?.type === 'snapshot';
+  if (!input || typeof input.html !== 'string' || typeof input.screenshot_path !== 'string' ||
+      (!snapshot && (typeof input.project_dir !== 'string' || typeof input.slide_id !== 'string' ||
+        typeof input.base_css !== 'string' || typeof input.theme_id !== 'string' ||
+        typeof input.theme_css !== 'string' || typeof input.runtime_assets_dir !== 'string'))) {
     throw new Error('invalid render request');
   }
-  if (!input.frame?.canvas || input.viewport_width !== input.frame.canvas.width ||
-      input.viewport_height !== input.frame.canvas.height) {
+  if (!input.frame?.canvas || (!snapshot && (input.viewport_width !== input.frame.canvas.width ||
+      input.viewport_height !== input.frame.canvas.height))) {
     throw new Error('render viewport must match the runtime canvas');
   }
   const width = input.frame.canvas.width;
   const height = input.frame.canvas.height;
   const timeout = Math.min(Math.max(Number(input.timeout_ms) || 15000, 1000), 20000);
-  const slidePath = `/${encodeURIComponent(input.slide_id)}.html`;
+  const slidePath = `/${encodeURIComponent(snapshot ? input.frame.slide_id : input.slide_id)}.html`;
   const failedResources = [];
   const resourceHashes = {};
   let runtimeAssetFailure;
@@ -182,6 +187,17 @@ async function render(input, browser, handles = new Map()) {
           'cache-control': 'no-store',
         });
         response.end(input.html);
+        return;
+      }
+      if (snapshot) {
+        // A Java snapshot contains all local inputs. No project files are served.
+        if (path === '/api/v1/runtime/fonts.css' || path === '/api/v1/runtime/decorations.js') {
+          response.writeHead(200, { 'content-type': mime(path) });
+          response.end(path.endsWith('.css') ? input.styles : input.decorations_js);
+        } else {
+          response.writeHead(404);
+          response.end();
+        }
         return;
       }
       if (path === '/api/v1/runtime/base.css') {
@@ -368,6 +384,74 @@ async function assemblePDF(input, browser, handles = new Map()) {
   }
 }
 
+function exportName(title) {
+  const cleaned = title.trim().replace(/[\\/:*?"<>|\x00-\x1f\x7f]/g, '_');
+  const name = Array.from(cleaned).slice(0, 60).join('').replace(/[. ]+$/, '') || '幻灯片';
+  return /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(name) ? '_' + name : name;
+}
+
+async function sendExport(filename, size, content) {
+  const metadata = Buffer.from(JSON.stringify({ filename, size }));
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(metadata.length);
+  process.stdout.write(Buffer.concat([length, metadata]));
+  await pipeline(content, process.stdout);
+}
+
+async function exportDeck(deck) {
+  const name = exportName(deck.title);
+  if (deck.format === 'html') {
+    const template = await fs.readFile(new URL('./export-player.html', import.meta.url), 'utf8');
+    const replacements = {
+      title: deck.title.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;'),
+      styles: deck.styles,
+      decorations: deck.decorations_js,
+      presentation: JSON.stringify({ frame: deck.frame, pages: deck.pages }).replaceAll('<', '\\u003c'),
+    };
+    const html = Buffer.from(template.replace(/{{(\w+)}}/g, (_, field) => replacements[field]));
+    await sendExport(name + '.html', html.length, Readable.from([html]));
+    return;
+  }
+
+  const directory = await fs.mkdtemp(join(tmpdir(), 'ppt-export-'));
+  try {
+    const browser = await launchBrowser();
+    const pages = [];
+    const suffix = deck.format === 'pdf' ? 'pdf' : 'zip';
+    const artifact = join(directory, 'export.' + suffix);
+    try {
+      for (const [index, page] of deck.pages.entries()) {
+        const ordinal = index + 1;
+        const filename = String(ordinal).padStart(3, '0') + '-' + exportName(page.title) + '.png';
+        const path = join(directory, filename);
+        const frame = { ...deck.frame, slide_id: page.id, ordinal, chapter: page.chapter === null ? null : { title: page.chapter } };
+        await render({ type: 'snapshot', html: page.html, frame, styles: deck.styles,
+          decorations_js: deck.decorations_js, screenshot_path: path }, browser);
+        pages.push({ filename, path });
+      }
+      if (deck.format === 'pdf') {
+        await assemblePDF({ png_paths: pages.map(page => page.path), output_path: artifact }, browser);
+      }
+    } finally {
+      await browser.close();
+    }
+
+    if (deck.format === 'png') {
+      const { ZipFile } = await import('yazl');
+      const zip = new ZipFile();
+      zip.on('error', error => zip.outputStream.destroy(error));
+      for (const page of pages) zip.addFile(page.path, page.filename, { compress: false });
+      const finished = pipeline(zip.outputStream, createWriteStream(artifact));
+      zip.end();
+      await finished;
+    }
+    const { size } = await fs.stat(artifact);
+    await sendExport(name + '.' + suffix, size, createReadStream(artifact));
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+}
+
 async function readInput() {
   const chunks = [];
   let size = 0;
@@ -435,8 +519,19 @@ async function serve() {
 }
 
 try {
-  if (process.argv.includes('--health')) {
+  if (process.argv[2] === '--export') {
+    await exportDeck(await readJson(process.stdin));
+  } else if (process.argv.includes('--health')) {
     process.stdout.write(JSON.stringify(await health()));
+  } else if (process.argv[2] === '--job') {
+    const job = JSON.parse(await fs.readFile(process.argv[3], 'utf8'));
+    const browser = await launchBrowser();
+    try {
+      const diagnostics = await render(job, browser);
+      process.stdout.write(JSON.stringify({ ok: true, diagnostics }));
+    } finally {
+      await browser.close();
+    }
   } else if (process.argv.includes('--serve')) {
     await serve();
   } else {
@@ -449,6 +544,10 @@ try {
     }
   }
 } catch (error) {
-  process.stdout.write(JSON.stringify({ ok: false, error: String(error?.message ?? error) }));
+  if (process.argv[2] === '--export') {
+    process.stderr.write(String(error?.message ?? error) + '\n');
+  } else {
+    process.stdout.write(JSON.stringify({ ok: false, error: String(error?.message ?? error) }));
+  }
   process.exitCode = 1;
 }
