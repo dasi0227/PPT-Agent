@@ -92,12 +92,12 @@ Create 中的 `update_plan` 直接替换生效计划的步骤。非空数组使�
 1. **记录调用。** `ToolExecutor` 通过 `IRunRepository` 在 SQLite 事务中写入原始 `messages.type=tool_call`，递增所属会话版本。提交后即能查询这次尝试。
 2. **准备候选。** `DeckService` 为每个待修改的文稿文件准备一份 `DeckEditCandidate`。`run_command` 的候选来自 `IBashGateway` 返回的沙箱修改。需要审批时，`InteractionService` 在等待期间保留候选。资料审批若提交完整 `draft`，以该定稿替换候选内容，沿用原读取基准。Chat、Ask、Plan 中只读。Create 执行阶段仅能提交授权范围内的项目资料（`.meta.json`、`.constraint.json`、`.outline.json`）和页面规格／源码（`{slide_id}.json`、`{slide_id}.html`）。辅助文件留在沙箱，`.git/`、`.runtime/` 受保护。
 3. **持锁复核。** 拿到项目写锁后，复查取消状态、当前授权、获批候选及文件基准。基准冲突时保留当前文件，按工具失败处理。人工保存在同一提交边界校验项目占用和 `base_hash`。项目有非终态 Run、正在 Git 提交或历史切换时返回 `PROJECT_BUSY`。导出采集快照时只短暂持锁，锁释放后即可保存。
-4. **先写日志。** `DeckRepository` 将原凭据键、请求摘要及文件修改前后的状态组装为 `MutationLog`。由 `PathResolver` 定位 `.runtime/mutations/{operation_hash}.json`，通过 `FileStorer` 原子写入完整日志。确认日志落盘后才改动项目文件。
+4. **先写日志。** `DeckRepository` 将原凭据键、请求摘要及文件修改前后的状态组装为 `Mutation`。人工保存和 Agent 写入均使用本次操作的日志路径 `.runtime/mutations/{operationId}.json`。通过 `FileStorer` 原子写入完整日志，确认落盘后才改动项目文件。
 5. **应用文件。** `DeckRepository` 持锁通过 `FileStorer` 新建、替换或删除候选文件，记录本次来源及实际差异。资源编辑使用完整候选文档。
 6. **提交数据库。** 同一 SQLite 事务写入 `agent` 凭据、配对的 `tool_result` 及实际差异，使受影响的检查点失效，每个受影响会话的 `revision` 递增一次。人工写入在同一事务记录 `manual` 凭据并更新项目修改时间。两种文件凭据的 `receipts.result` 都为 SQL `NULL`。[凭据字段](DATABASE.html#receipts) · [事务约束](DATABASE_SPEC.md#receipts)
 7. **收尾与通知。** 数据库提交成功后清理日志、释放锁。`ToolExecutor` 从已保存的结果生成配对的模型 observation。结果可读后发送变化通知。只读结果和确定的受阻或失败结果由 `ToolExecutor` 保存。
 
-`agent` 的凭据键是 `(agent, run_id, tool_call_id)`，`manual` 的凭据键是 `(manual, project_id, 后端操作 ID)`。若文件已替换而进程在第 6 步前后退出，重启时用原凭据键核对摘要。凭据匹配则补齐新版，确认无凭据则还原旧版，读取失败或摘要不符则保留日志、阻止该项目后续写入。日志收尾前保留凭据。
+`agent` 的凭据键是 `(agent, run_id, tool_call_id)`，`manual` 的凭据键是 `(manual, project_id, 后端操作 ID)`。若文件已替换而进程在第 6 步前后退出，重启时用原凭据键核对摘要。对于人工保存，还要核对日志所属项目及文件名中的操作 ID。恢复流程在写回第一个文稿文件前检查日志里的全部目标文件名，只允许三类项目文稿名和合法页面规格或 HTML 文件名。任一名称无效时保留日志和现有文件。凭据匹配则补齐新版，确认无凭据则还原旧版，读取失败或摘要不符则保留日志、阻止该项目后续写入。日志收尾前保留凭据。
 
 资料编辑成功后，模型收到的 `content` 和工具详情的 `result.content` 均取实际定稿。基本信息与约束返回对象，大纲返回含正式节点 ID 的 JSON 源码字符串。历史保留原 `request.proposal` 和审批决定，受阻或失败时省略 `content`。[工具结果契约](API_SPEC.md#消息)
 
@@ -167,7 +167,7 @@ JEV 的 Intent、Prune、Rechristen、Preview 分别由 `IntentHook`、`ToolPrun
 
 1. **核对预览。** 客户端用相应预览的 `revision` 提交 `expected_revision`。`CheckpointService` 在项目写锁下复核目标和会话版本。项目有非终态 Run、目标会话有非终态命令或项目处于互斥操作时拒绝切换。
 2. **准备恢复材料。** 从目标快照取得五类文稿文件，以及目标会话的标题、计划、消息、Run、命令和 `agent` 凭据。首次回退另从当前状态采集返回快照，连续回退沿用原返回行。目标快照决定文稿文件的内容和存在状态，即使磁盘经过外部编辑也按快照覆盖。项目主题、装饰位置和 Logo 沿用当前值。附件、历史截图和其他会话的业务历史保留。
-3. **先写日志，再改文稿。** 有文件变化时，在 `.runtime/mutations/{operation_hash}.json` 记录 `type=switch`、目标 `session_id`、锁内核对的 `base_revision` 及各变更路径的前后字节或缺失状态。完整日志原子替换并同步到磁盘后才增、改、删文稿文件。文件及目录项全部落盘后再提交数据库。仅涉及数据库的切换直接进入第 4 步。[日志字段](STRUCTURE_SPEC.md#项目目录)
+3. **先写日志，再改文稿。** 有文件变化时，在 `.runtime/mutations/{operationId}.json` 记录 `type=switch`、目标 `session_id`、锁内核对的 `base_revision` 及各变更路径的前后字节或缺失状态。完整日志原子替换并同步到磁盘后才增、改、删文稿文件。文件及目录项全部落盘后再提交数据库。仅涉及数据库的切换直接进入第 4 步。[日志字段](STRUCTURE_SPEC.md#项目目录)
 4. **提交 SQLite。** 同一事务恢复目标快照内的会话业务记录，并按 `session_id` 和 `revision = base_revision` 更新目标会话，恰好命中一行并将版本加一。首次回退在此事务插入 `run_id IS NULL` 的返回行，返回最新时删除该行。只有共享文稿文件实际变化时，才清除同项目其他会话的检查点及返回行，并将实际失去恢复点的会话版本各加一。会话建议从恢复后的输入和命令读取。[检查点事务](DATABASE_SPEC.md#checkpoints)
 5. **收尾并通知。** 确认数据库提交且文件与目标一致后，持久移除日志，释放项目写锁，再按第 5 节通知。回退成功响应带可回填的原始输入。回退与返回都不续跑历史 Run。提交失败或结果未知时，按下表核对文件后才能开放后续写入。[检查点接口](API_SPEC.md#检查点)
 
@@ -175,18 +175,18 @@ JEV 的 Intent、Prune、Rechristen、Preview 分别由 `IntentHook`、`ToolPrun
 
 历史位置新开 Run、发起非 `polish` 命令或修订 `handoff`，须在受理事务中核对 `branch_revision` 并清理返回行及脱离当前历史的检查点。`polish` 保留返回入口。手动改名和删除计划使用 `expected_revision`。实际改名或删除计划成功后放弃返回入口，同名或失败时保留。人工保存共享文稿时，各会话保留原有检查点、返回行和版本，提交后仅通知项目文稿变更。历史切换保留原有的 `create_run`、`create_command` 受理凭据。[检查点事务](DATABASE_SPEC.md#checkpoints)
 
-新建导出同样需要采集一致的项目数据。项目内有非终态 Run、正在 Git 提交或切换历史时，创建返回 `PROJECT_BUSY`。`ExportService` 在项目写锁内读取文稿，并从同一数据库读事务取得外观和项目标题，组装不可变的 `ExportSnapshot`。快照含项目管理名称、页序、逐页标题与 HTML、装饰位置及 Logo 字节。已选主题时同时读取并固定主题 CSS。与预览相同，`deck_title` 取 `Meta.title`，每页的 `chapter_title` 取所属章标题，两者都在锁内固定。后台渲染和打包在释放锁后使用这份快照，按基础样式、可选主题 CSS、单页样式的顺序应用。[导出接口](API_SPEC.md#导出) · [项目读取约束](DATABASE_SPEC.md#projects)
+新建导出同样需要采集一致的项目数据。项目内有非终态 Run、正在 Git 提交或切换历史时，创建返回 `PROJECT_BUSY`。`ExportService` 在项目写锁内读取文稿，并从同一数据库读事务取得外观和项目标题，组装不可变的 `ExportSnapshot`。快照含项目管理名称、页序、逐页标题与 HTML、装饰位置及 Logo 字节。已选主题时同时读取并固定主题 CSS。与预览相同，`deck_title` 取 `Meta.title`，章内页面的 `chapter_title` 取所属章标题，根直属页省略该装饰，两者都在锁内固定。后台渲染和打包在释放锁后使用这份快照，按基础样式、可选主题 CSS、单页样式的顺序应用。[导出接口](API_SPEC.md#导出) · [项目读取约束](DATABASE_SPEC.md#projects)
 
 ### 启动恢复
 
 桌面客户端的每个工作目录由单个后端进程管理。启动时检查公共 SQLite 数据库，再逐项目恢复。
 
-1. `RunRecoveryService` 协调 `DeckService` 在项目写锁下恢复文稿。`DeckRepository` 读取遗留的 `MutationLog`，按下表核对普通写入的 `receipts` 或历史切换的 `sessions.revision`。确定版本后，通过 `FileStorer` 恢复文件，确认落盘后再持久移除日志。重复恢复只校正文稿文件，会话版本保持 SQLite 已提交的值。
+1. `RunRecoveryService` 协调 `DeckService` 在项目写锁下恢复文稿。`DeckRepository` 读取遗留的 `Mutation`，按下表核对普通写入的 `receipts` 或历史切换的 `sessions.revision`。确定版本后，通过 `FileStorer` 恢复文件，确认落盘后再持久移除日志。重复恢复只校正文稿文件，会话版本保持 SQLite 已提交的值。
 2. 将遗留非终态 Run 和命令标为 `interrupted`，保留已确认的工具结果、文稿修改、用量和 Git 提交。不恢复旧循环，也不重放结果未知的工具或 Git 操作。
 3. 通过 `ExportService` 和 `IFileGateway` 清理遗留导出任务目录。原导出输入只存在于任务内存，重启后原任务失效。
 4. 所有项目都已检查、可恢复项目完成上述步骤后，后端报告就绪。仅有未解决日志的项目继续暂停写入。公共数据库不可用时，整个后端保持未就绪。[启动恢复图](WORKFLOW.html#support-flow) · [项目文件布局](STRUCTURE.html#project-heading)
 
-| 日志类型（`MutationLogType`） | 从 SQLite 读到的结果 | 文件处理 |
+| 日志类型（`MutationType`） | 从 SQLite 读到的结果 | 文件处理 |
 |---|---|---|
 | `agent` / `manual` | 原凭据存在，且请求摘要匹配 | 将各路径恢复到 `after`。 |
 | `agent` / `manual` | 查询成功，原凭据不存在 | 将各路径恢复到 `before`。 |

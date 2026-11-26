@@ -13,6 +13,6 @@ import lombok.NoArgsConstructor;
 public final class OpenProjectFileDto {
     @NotBlank(message = "需指定项目 ID")
     private String projectId;
-    @NotBlank(message = "需指定项目内的文件路径")
-    private String path;
+    @NotBlank(message = "需指定文稿文件名")
+    private String fileName;
 }

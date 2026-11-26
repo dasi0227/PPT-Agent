@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 import java.security.SecureRandom;
 import java.util.UUID;
 
+@SuppressWarnings("unused")
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class IdUtil {
 
@@ -13,11 +14,11 @@ public final class IdUtil {
     private static final String ID_CHARACTERS = "abcdefghijklmnopqrstuvwxyz0123456789";
     private static final int ID_LENGTH = 8;
 
-    public final static String genOperationId() {
+    public static String genOperationId() {
         return genUuid();
     }
 
-    public final static String genSessionId() {
+    public static String genSessionId() {
         return genRandomId();
     }
 

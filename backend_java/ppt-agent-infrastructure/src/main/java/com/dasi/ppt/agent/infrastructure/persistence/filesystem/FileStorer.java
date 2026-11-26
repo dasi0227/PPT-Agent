@@ -1,5 +1,6 @@
 package com.dasi.ppt.agent.infrastructure.persistence.filesystem;
 
+import com.dasi.ppt.agent.domain.shared.service.PathResolver;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.ProjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,8 +21,8 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
+import java.util.stream.Stream;
 
-import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.illegal;
 import static java.nio.file.LinkOption.NOFOLLOW_LINKS;
 import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
@@ -30,10 +31,6 @@ import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 @Component
 @RequiredArgsConstructor
 public class FileStorer {
-
-    private static final String CREATING = ".creating-";
-    private static final String DELETING = ".deleting-";
-    private static final String MUTATING = ".runtime/mutations";
 
     private final PathResolver pathResolver;
     private final ProjectMapper projectMapper;
@@ -48,8 +45,8 @@ public class FileStorer {
         }
     }
 
-    public List<Path> listMutationLogs(Path directory) {
-        try (var entries = Files.list(directory.resolve(MUTATING))) {
+    public List<Path> listMutationLogs(String projectId) {
+        try (Stream<Path> entries = Files.list(pathResolver.mutationDirectory(projectId))) {
             return entries.filter(path -> path.getFileName().toString().endsWith(".json"))
                     .sorted()
                     .toList();
@@ -58,10 +55,6 @@ public class FileStorer {
         } catch (IOException ex) {
             throw new UncheckedIOException(ex);
         }
-    }
-
-    public Path mutationLogPath(Path directory, String operationHash) {
-        return directory.resolve(MUTATING).resolve(operationHash + ".json");
     }
 
     public void writeMutationLog(Path path, byte[] log) {
@@ -108,13 +101,13 @@ public class FileStorer {
         }
     }
 
-    public boolean hasPendingFileOperation(Path directory) {
-        Path creatingTag = directory.resolveSibling(CREATING + directory.getFileName());
-        Path deletingTag = directory.resolveSibling(DELETING + directory.getFileName());
+    public boolean hasPendingFileOperation(String projectId) {
+        Path creatingTag = pathResolver.creatingMarker(projectId);
+        Path deletingTag = pathResolver.deletingMarker(projectId);
         if (Files.exists(creatingTag, NOFOLLOW_LINKS) || Files.exists(deletingTag, NOFOLLOW_LINKS)) {
             return true;
         }
-        try (DirectoryStream<Path> logs = Files.newDirectoryStream(directory.resolve(MUTATING), "*.json")) {
+        try (DirectoryStream<Path> logs = Files.newDirectoryStream(pathResolver.mutationDirectory(projectId), "*.json")) {
             return logs.iterator().hasNext();
         } catch (NoSuchFileException ignored) {
             return false;
@@ -128,15 +121,11 @@ public class FileStorer {
         if (Files.notExists(projectsRoot)) {
             return;
         }
-        try (DirectoryStream<Path> entries = Files.newDirectoryStream(projectsRoot, ".{creating,deleting}-*")) {
+        try (DirectoryStream<Path> entries = Files.newDirectoryStream(projectsRoot, pathResolver::isProjectMarker)) {
             for (Path pending : entries) {
-                String name = pending.getFileName().toString();
-                boolean isCreating = name.startsWith(CREATING);
-                String projectId = name.substring((isCreating ? CREATING : DELETING).length());
-                Path directory = pathResolver.projectDirectory(projectId);
-                if (!projectsRoot.equals(directory.getParent())) {
-                    throw illegal("项目恢复标记无效：" + pending);
-                }
+                Path directory = pathResolver.projectDirectoryFromMarker(pending);
+                String projectId = directory.getFileName().toString();
+                boolean isCreating = pending.equals(pathResolver.creatingMarker(projectId));
                 alignProjectDirectoryWithDatabase(directory, pending, isCreating, projectMapper.existsProject(projectId));
             }
         } catch (IOException ex) {
@@ -144,8 +133,9 @@ public class FileStorer {
         }
     }
 
-    public void createProjectDirectory(Path projectDirectory) {
-        Path creatingTag = projectDirectory.resolveSibling(CREATING + projectDirectory.getFileName());
+    public void createProjectDirectory(String projectId) {
+        Path projectDirectory = pathResolver.projectDirectory(projectId);
+        Path creatingTag = pathResolver.creatingMarker(projectId);
         try {
             Files.createDirectories(projectDirectory.getParent());
             if (Files.exists(projectDirectory, NOFOLLOW_LINKS)) {
@@ -164,8 +154,9 @@ public class FileStorer {
         }
     }
 
-    public void stageProjectDeletion(Path directory) {
-        Path deletingTag = directory.resolveSibling(DELETING + directory.getFileName());
+    public void stageProjectDeletion(String projectId) {
+        Path directory = pathResolver.projectDirectory(projectId);
+        Path deletingTag = pathResolver.deletingMarker(projectId);
         try {
             if (Files.notExists(directory, NOFOLLOW_LINKS)) {
                 return;

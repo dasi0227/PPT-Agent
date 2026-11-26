@@ -22,6 +22,6 @@ public class FileController {
 
     @PostMapping("/open")
     public void open(@Valid @RequestBody OpenProjectFileDto request) {
-        projectService.openFile(request.getProjectId(), request.getPath());
+        projectService.openFile(request.getProjectId(), request.getFileName());
     }
 }

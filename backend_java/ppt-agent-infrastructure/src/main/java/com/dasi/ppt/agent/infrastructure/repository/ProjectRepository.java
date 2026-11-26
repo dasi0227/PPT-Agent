@@ -8,7 +8,6 @@ import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.ReceiptMapp
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.SessionMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.database.po.ProjectPo;
 import com.dasi.ppt.agent.infrastructure.persistence.filesystem.FileStorer;
-import com.dasi.ppt.agent.infrastructure.persistence.filesystem.PathResolver;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
@@ -23,7 +22,6 @@ public class ProjectRepository implements IProjectRepository {
     private final SessionMapper sessionMapper;
     private final ReceiptMapper receiptMapper;
     private final FileStorer fileStorer;
-    private final PathResolver pathResolver;
 
     @PostConstruct
     void recoverDirectories() {
@@ -41,7 +39,7 @@ public class ProjectRepository implements IProjectRepository {
     @Override
     public void insertProject(Project project) {
         projectMapper.insertProject(toPo(project));
-        fileStorer.createProjectDirectory(pathResolver.projectDirectory(project.getId()));
+        fileStorer.createProjectDirectory(project.getId());
     }
 
     @Override
@@ -59,14 +57,14 @@ public class ProjectRepository implements IProjectRepository {
         receiptMapper.deleteByProject(projectId);
         int deleted = projectMapper.deleteProject(projectId);
         if (deleted > 0) {
-            fileStorer.stageProjectDeletion(pathResolver.projectDirectory(projectId));
+            fileStorer.stageProjectDeletion(projectId);
         }
         return deleted;
     }
 
     @Override
     public boolean hasPendingFileOperation(String projectId) {
-        return fileStorer.hasPendingFileOperation(pathResolver.projectDirectory(projectId));
+        return fileStorer.hasPendingFileOperation(projectId);
     }
 
     @Override

@@ -1,19 +1,18 @@
 package com.dasi.ppt.agent.domain.project.repository;
 
-import com.dasi.ppt.agent.domain.project.model.entity.Deck;
-
+import java.nio.file.Path;
+import java.util.Map;
 import java.util.Set;
 
 public interface IDeckRepository {
 
-    Deck readDeck(String projectId);
+    byte[] readFile(Path path);
 
-    byte[] readFile(String projectId, String path);
+    Map<String, byte[]> readOrphanSlideFiles(String projectId, Set<String> slideIds);
 
     boolean isProjectBusy(String projectId);
 
-    void saveManualFiles(String projectId, String operationId, String path, byte[] before,
-                         byte[] after, Set<String> removedSlides, long updatedAt);
+    void saveManualFiles(String projectId, String operationId, Path path, byte[] before, byte[] after, Map<String, byte[]> orphanFiles, long updatedAt);
 
     void finishManualSave(String projectId, String operationId, boolean committed);
 }

@@ -4,33 +4,44 @@ import com.dasi.ppt.agent.domain.project.model.entity.Constraint;
 import com.dasi.ppt.agent.domain.project.model.entity.Deck;
 import com.dasi.ppt.agent.domain.project.model.entity.Meta;
 import com.dasi.ppt.agent.domain.project.model.entity.Outline;
+import com.dasi.ppt.agent.domain.project.model.entity.Slide;
 import com.dasi.ppt.agent.domain.project.model.entity.Spec;
 import com.dasi.ppt.agent.domain.project.model.enumeration.ChangePart;
 import com.dasi.ppt.agent.domain.project.repository.IDeckRepository;
 import com.dasi.ppt.agent.domain.project.repository.IProjectRepository;
+import com.dasi.ppt.agent.domain.shared.service.PathResolver;
 import com.dasi.ppt.agent.domain.shared.exception.ErrorCode;
 import com.dasi.ppt.agent.domain.shared.sse.EventPublisher;
 import com.dasi.ppt.agent.domain.shared.sse.ProjectChangeArea;
 import com.dasi.ppt.agent.domain.shared.sse.SseEvent;
 import com.dasi.ppt.agent.domain.shared.util.HashUtil;
 import com.dasi.ppt.agent.domain.shared.util.IdUtil;
+import com.networknt.schema.Error;
+import com.networknt.schema.Schema;
+import com.networknt.schema.SchemaRegistry;
+import com.networknt.schema.SpecificationVersion;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
-import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.CONSTRAINT_FILE_NAME;
-import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.META_FILE_NAME;
-import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.OUTLINE_FILE_NAME;
 import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.conflict;
+import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.illegal;
 import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.invalid;
 import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.notFound;
 
@@ -39,21 +50,55 @@ import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.notFo
 public class DeckService {
 
     private final TransactionTemplate transactionTemplate;
-    private final DeckDocuments deckDocuments;
+    private final ObjectMapper objectMapper;
     private final IProjectRepository projectRepository;
     private final IDeckRepository deckRepository;
+    private final PathResolver pathResolver;
     private final ProjectWriteLock projectWriteLock;
     private final EventPublisher eventPublisher;
+
+    private final Map<ChangePart, Schema> schemas = loadSchemas();
 
     public Deck readDeck(String projectId) {
         if (!projectRepository.existsProject(projectId)) {
             throw notFound(ErrorCode.PROJECT_NOT_FOUND);
         }
-        return deckRepository.readDeck(projectId);
+        byte[] metaBytes = deckRepository.readFile(pathResolver.metaPath(projectId));
+        byte[] constraintBytes = deckRepository.readFile(pathResolver.constraintPath(projectId));
+        byte[] outlineBytes = deckRepository.readFile(pathResolver.outlinePath(projectId));
+
+        Meta meta = decode(ChangePart.META, metaBytes, Meta.class);
+        Constraint constraint = decode(ChangePart.CONSTRAINT, constraintBytes, Constraint.class);
+        Outline outline = decode(ChangePart.OUTLINE, outlineBytes, Outline.class);
+
+        Map<String, Slide> slides = new LinkedHashMap<>();
+        if (outline != null) {
+            for (String slideId : outline.slideIds()) {
+                byte[] spec = deckRepository.readFile(pathResolver.specPath(projectId, slideId));
+                byte[] html = deckRepository.readFile(pathResolver.htmlPath(projectId, slideId));
+                Slide slide = Slide.builder()
+                        .slideId(slideId)
+                        .spec(decode(ChangePart.SPEC, spec, Spec.class))
+                        .html(html == null ? null : new String(html, StandardCharsets.UTF_8))
+                        .specHash(HashUtil.contentHash(spec))
+                        .htmlHash(HashUtil.contentHash(html))
+                        .build();
+                slides.put(slideId, slide);
+            }
+        }
+
+        return Deck.builder()
+                .meta(meta)
+                .constraint(constraint)
+                .outline(outline)
+                .metaHash(HashUtil.contentHash(metaBytes))
+                .constraintHash(HashUtil.contentHash(constraintBytes))
+                .outlineHash(HashUtil.contentHash(outlineBytes))
+                .slides(slides)
+                .build();
     }
 
     public String saveMeta(String projectId, String baseHash, Meta meta) {
-        String fileName = META_FILE_NAME;
         synchronized (projectWriteLock.lockFor(projectId)) {
             if (!projectRepository.existsProject(projectId)) {
                 throw notFound(ErrorCode.PROJECT_NOT_FOUND);
@@ -61,14 +106,14 @@ public class DeckService {
             if (projectRepository.hasPendingFileOperation(projectId) || deckRepository.isProjectBusy(projectId)) {
                 throw conflict(ErrorCode.PROJECT_BUSY);
             }
-            byte[] before = readSaveBase(projectId, fileName, baseHash);
-            byte[] after = deckDocuments.encode(ChangePart.META, meta);
-            return saveDocument(projectId, fileName, before, after, Set.of());
+            Path path = pathResolver.metaPath(projectId);
+            byte[] before = readBase(path, baseHash);
+            byte[] after = encode(ChangePart.META, meta);
+            return saveDocument(projectId, path, before, after, Map.of());
         }
     }
 
     public String saveOutline(String projectId, String baseHash, Outline outline) {
-        String filePath = OUTLINE_FILE_NAME;
         synchronized (projectWriteLock.lockFor(projectId)) {
             if (!projectRepository.existsProject(projectId)) {
                 throw notFound(ErrorCode.PROJECT_NOT_FOUND);
@@ -76,16 +121,16 @@ public class DeckService {
             if (projectRepository.hasPendingFileOperation(projectId) || deckRepository.isProjectBusy(projectId)) {
                 throw conflict(ErrorCode.PROJECT_BUSY);
             }
-            byte[] before = readSaveBase(projectId, filePath, baseHash);
-            byte[] after = deckDocuments.encode(ChangePart.OUTLINE, outline);
-            Outline previous = deckDocuments.decode(ChangePart.OUTLINE, before, Outline.class);
-            Set<String> removedSlides = getRemovedSlides(previous, outline);
-            return saveDocument(projectId, filePath, before, after, removedSlides);
+            Path path = pathResolver.outlinePath(projectId);
+            byte[] before = readBase(path, baseHash);
+            byte[] after = encode(ChangePart.OUTLINE, outline);
+            validateOutline(outline);
+            Map<String, byte[]> orphanFiles = deckRepository.readOrphanSlideFiles(projectId, outline.slideIds());
+            return saveDocument(projectId, path, before, after, orphanFiles);
         }
     }
 
     public String saveConstraint(String projectId, String baseHash, Constraint constraint) {
-        String filePath = CONSTRAINT_FILE_NAME;
         synchronized (projectWriteLock.lockFor(projectId)) {
             if (!projectRepository.existsProject(projectId)) {
                 throw notFound(ErrorCode.PROJECT_NOT_FOUND);
@@ -93,14 +138,14 @@ public class DeckService {
             if (projectRepository.hasPendingFileOperation(projectId) || deckRepository.isProjectBusy(projectId)) {
                 throw conflict(ErrorCode.PROJECT_BUSY);
             }
-            byte[] before = readSaveBase(projectId, filePath, baseHash);
-            byte[] after = deckDocuments.encode(ChangePart.CONSTRAINT, constraint);
-            return saveDocument(projectId, filePath, before, after, Set.of());
+            Path path = pathResolver.constraintPath(projectId);
+            byte[] before = readBase(path, baseHash);
+            byte[] after = encode(ChangePart.CONSTRAINT, constraint);
+            return saveDocument(projectId, path, before, after, Map.of());
         }
     }
 
     public String saveSlideSpec(String projectId, String slideId, String baseHash, Spec spec) {
-        String filePath = slideId + ".json";
         synchronized (projectWriteLock.lockFor(projectId)) {
             if (!projectRepository.existsProject(projectId)) {
                 throw notFound(ErrorCode.PROJECT_NOT_FOUND);
@@ -108,15 +153,15 @@ public class DeckService {
             if (projectRepository.hasPendingFileOperation(projectId) || deckRepository.isProjectBusy(projectId)) {
                 throw conflict(ErrorCode.PROJECT_BUSY);
             }
-            byte[] before = readSaveBase(projectId, filePath, baseHash);
-            byte[] after = deckDocuments.encode(ChangePart.SPEC, spec);
+            Path path = pathResolver.specPath(projectId, slideId);
+            byte[] before = readBase(path, baseHash);
+            byte[] after = encode(ChangePart.SPEC, spec);
             requireSlideInOutline(projectId, slideId);
-            return saveDocument(projectId, filePath, before, after, Set.of());
+            return saveDocument(projectId, path, before, after, Map.of());
         }
     }
 
     public String saveSlideHtml(String projectId, String slideId, String baseHash, String html) {
-        String filePath = slideId + ".html";
         synchronized (projectWriteLock.lockFor(projectId)) {
             if (!projectRepository.existsProject(projectId)) {
                 throw notFound(ErrorCode.PROJECT_NOT_FOUND);
@@ -124,84 +169,55 @@ public class DeckService {
             if (projectRepository.hasPendingFileOperation(projectId) || deckRepository.isProjectBusy(projectId)) {
                 throw conflict(ErrorCode.PROJECT_BUSY);
             }
-            byte[] before = readSaveBase(projectId, filePath, baseHash);
+            Path path = pathResolver.htmlPath(projectId, slideId);
+            byte[] before = readBase(path, baseHash);
             byte[] after = html.getBytes(StandardCharsets.UTF_8);
             requireSlideInOutline(projectId, slideId);
-            return saveDocument(projectId, filePath, before, after, Set.of());
+            return saveDocument(projectId, path, before, after, Map.of());
         }
     }
 
+    // 需要让所有 slideId 都出现在 outline 里面
     private void requireSlideInOutline(String projectId, String slideId) {
-        byte[] outlineBytes = deckRepository.readFile(projectId, OUTLINE_FILE_NAME);
-        Outline outline = deckDocuments.decode(ChangePart.OUTLINE, outlineBytes, Outline.class);
+        byte[] outlineBytes = deckRepository.readFile(pathResolver.outlinePath(projectId));
+        Outline outline = decode(ChangePart.OUTLINE, outlineBytes, Outline.class);
         if (outline == null || !outline.slideIds().contains(slideId)) {
             throw invalid("幻灯片不在当前大纲中");
         }
     }
 
-    private byte[] readSaveBase(String projectId, String filePath, String baseHash) {
-        byte[] before = deckRepository.readFile(projectId, filePath);
+    private byte[] readBase(Path path, String baseHash) {
+        byte[] before = deckRepository.readFile(path);
         if (!Objects.equals(baseHash, HashUtil.contentHash(before))) {
             throw conflict(ErrorCode.CONTENT_CONFLICT);
         }
         return before;
     }
 
-    private Set<String> getRemovedSlides(Outline previous, Outline current) {
-        Map<String, Outline.Chapter> chapters = new HashMap<>();
-        Set<String> sectionIds = new HashSet<>();
-        Set<String> ids = new HashSet<>();
-        for (Outline.Chapter chapter : current.getChapters()) {
-            addNode(ids, chapter.getId());
-            chapters.put(chapter.getId(), chapter);
+    // 专属于 outline 的业务逻辑
+    private void validateOutline(Outline outline) {
+        if (!outline.getSlides().isEmpty() && !outline.getChapters().isEmpty()) {
+            throw invalid("大纲根节点不能同时包含直属幻灯片和章");
+        }
+        for (Outline.Chapter chapter : outline.getChapters()) {
             if (!chapter.getSlides().isEmpty() && !chapter.getSections().isEmpty()) {
                 throw invalid("章不能同时包含直属幻灯片和节");
             }
-            chapter.getSlides().forEach(page -> addNode(ids, page.getId()));
-            for (Outline.Section section : chapter.getSections()) {
-                addNode(ids, section.getId());
-                sectionIds.add(section.getId());
-                section.getSlides().forEach(page -> addNode(ids, page.getId()));
-            }
-        }
-        if (previous == null) return Set.of();
-        for (Outline.Chapter chapter : previous.getChapters()) {
-            Outline.Chapter next = chapters.get(chapter.getId());
-            if (next == null && (!chapter.getSlides().isEmpty() || !chapter.getSections().isEmpty())) {
-                throw invalid("不能删除非空章");
-            }
-            for (Outline.Section section : chapter.getSections()) {
-                if (section.getSlides().isEmpty() || sectionIds.contains(section.getId())) continue;
-                Set<String> direct = new HashSet<>();
-                next.getSlides().forEach(page -> direct.add(page.getId()));
-                if (chapter.getSections().size() != 1 || !section.getSlides().stream().allMatch(page -> direct.contains(page.getId()))) {
-                    throw invalid("删除非空节时须将唯一节的全部幻灯片保留在原章下");
-                }
-            }
-        }
-        Set<String> removed = previous.slideIds();
-        removed.removeAll(ids);
-        return removed;
-    }
-
-    private static void addNode(Set<String> ids, String id) {
-        if (!ids.add(id)) {
-            throw invalid("大纲节点 ID 重复：" + id);
         }
     }
 
-    private String saveDocument(String projectId, String fileName, byte[] before, byte[] after, Set<String> removedSlides) {
-        // 判断哈希值是否一致
+    private String saveDocument(String projectId, Path path, byte[] before, byte[] after, Map<String, byte[]> orphanFiles) {
         String hash = HashUtil.contentHash(after);
-        if (Arrays.equals(before, after)) return hash;
+        if (orphanFiles.isEmpty() && Arrays.equals(before, after)) return hash;
         String operationId = IdUtil.genOperationId();
         try {
-            transactionTemplate.executeWithoutResult(status -> deckRepository.saveManualFiles(projectId, operationId, fileName, before, after, removedSlides, System.currentTimeMillis()));
+            transactionTemplate.executeWithoutResult(status -> deckRepository.saveManualFiles(projectId, operationId, path, before, after, orphanFiles, System.currentTimeMillis()));
         } catch (RuntimeException ex) {
+            // 回滚
             deckRepository.finishManualSave(projectId, operationId, false);
             throw ex;
         }
-        // 确保提交
+        // 提交
         deckRepository.finishManualSave(projectId, operationId, true);
         // 发送内容变更通知到会话
         SseEvent.ProjectChanged event = SseEvent.ProjectChanged.builder()
@@ -209,5 +225,42 @@ public class DeckService {
                 .build();
         projectRepository.listProjectSessionIds(projectId).forEach(id -> eventPublisher.publish(id, event));
         return hash;
+    }
+
+    // 启动时加载 meta、constraint、outline、spec 这四份 JSON Schema
+    private static Map<ChangePart, Schema> loadSchemas() {
+        Map<ChangePart, Schema> schemas = new EnumMap<>(ChangePart.class);
+        SchemaRegistry registry = SchemaRegistry.withDefaultDialect(SpecificationVersion.DRAFT_2020_12);
+        for (ChangePart part : List.of(ChangePart.META, ChangePart.CONSTRAINT, ChangePart.OUTLINE, ChangePart.SPEC)) {
+            String path = "schemas/" + part.getValue() + ".schema.json";
+            try (InputStream input = new ClassPathResource(path).getInputStream()) {
+                schemas.put(part, registry.getSchema(input));
+            } catch (IOException ex) {
+                throw new UncheckedIOException(ex);
+            }
+        }
+        return schemas;
+    }
+
+    private byte[] encode(ChangePart part, Object document) {
+        JsonNode json = objectMapper.valueToTree(document);
+        List<Error> errors = schemas.get(part).validate(json);
+        if (!errors.isEmpty()) {
+            throw invalid(errors.get(0).toString());
+        }
+        return objectMapper.writeValueAsBytes(json);
+    }
+
+    private <T> T decode(ChangePart part, byte[] bytes, Class<T> type) {
+        if (bytes == null) return null;
+        try {
+            JsonNode json = objectMapper.readTree(bytes);
+            if (!schemas.get(part).validate(json).isEmpty()) {
+                throw illegal("文稿文件格式无效：" + part.getValue());
+            }
+            return objectMapper.treeToValue(json, type);
+        } catch (JacksonException ex) {
+            throw illegal("文稿文件格式无效：" + part.getValue());
+        }
     }
 }

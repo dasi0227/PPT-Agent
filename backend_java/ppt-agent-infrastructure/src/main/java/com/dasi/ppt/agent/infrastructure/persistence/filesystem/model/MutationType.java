@@ -1,4 +1,4 @@
-package com.dasi.ppt.agent.infrastructure.persistence.filesystem;
+package com.dasi.ppt.agent.infrastructure.persistence.filesystem.model;
 
 import com.dasi.ppt.agent.domain.shared.exception.InvalidEnumValueException;
 import com.fasterxml.jackson.annotation.JsonCreator;
@@ -8,7 +8,7 @@ import lombok.Getter;
 
 @Getter
 @AllArgsConstructor
-public enum MutationLogType {
+public enum MutationType {
     AGENT("agent"),
     MANUAL("manual"),
     SWITCH("switch");
@@ -17,12 +17,12 @@ public enum MutationLogType {
     private final String value;
 
     @JsonCreator
-    public static MutationLogType fromValue(String value) {
-        for (MutationLogType candidate : values()) {
+    public static MutationType fromValue(String value) {
+        for (MutationType candidate : values()) {
             if (candidate.value.equals(value)) {
                 return candidate;
             }
         }
-        throw new InvalidEnumValueException(MutationLogType.class, value);
+        throw new InvalidEnumValueException(MutationType.class, value);
     }
 }

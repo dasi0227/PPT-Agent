@@ -23,12 +23,13 @@
 - 文件缺失时正文与哈希均为 `null`。
 - 项目内有非终态 Run、正在 Git 提交或历史切换时，人工保存文稿返回 `PROJECT_BUSY`。
 - 导出采集快照时，人工保存等候项目锁。快照固定后即可编辑。
-- 每次保存提交完整正文。保存成功返回文件原始字节的 `hash`（`sha256:` 加小写十六进制摘要），基准不符返回 `CONTENT_CONFLICT` 并保留当前内容。基准匹配后，比较待写入字节和文件原始字节。字节相同时直接返回原哈希，保留检查点与项目更新时间；字节不同时写回文件。
+- 每次保存提交完整正文。保存成功返回文件原始字节的 `hash`（SHA-256 摘要，编码为 64 个小写十六进制字符）。下次保存将该值原样作为 `base_hash` 提交。基准不符返回 `CONTENT_CONFLICT` 并保留当前内容。基准匹配后，比较待写入字节和文件原始字节。字节不同时写回文件。正文相同且没有待清理的页面文件时，直接返回原哈希并保留项目更新时间。
 - 规格和 HTML 分别使用 `hashes.slides[id].spec` 和 `.html` 作为 `base_hash`。`base_hash=null` 仅在文件尚不存在时匹配。
 - 大纲保存提交整棵树，大纲与相关文件的修改一起生效。
-- 新节点由客户端分配唯一 ID，已有节点改名、排序或移动时沿用原 ID。
-- 从整棵大纲移除幻灯片时，同时删除其规格和 HTML。大纲中仍有该 ID 时，保留对应文件。
-- 非空章不能直接删除。删除含幻灯片的节，仅允许移除章内唯一的节，并将其全部幻灯片保留为章直属节点。
+- 大纲根对象必须包含 `slides` 和 `chapters` 两个有序数组，最多一个非空。空大纲为 `{"slides":[],"chapters":[]}`。平铺文稿按根直属页的顺序排列，最多 200 页。分章文稿按章内顺序排列，每章可为空、只含直属页或只含节。
+- 保存时校验新大纲的层级。客户端创建节点时分配唯一 ID，改名、排序或移动时沿用原 ID，包括在根与章、节之间移动页面。读取逐页内容、保存规格和 HTML、清理孤立文件时，根直属页与章、节内的页面使用相同规则。
+- 校验通过后，用新大纲中所有页面 ID 核对项目根目录中的普通文件。文件名形如 `{slide_id}.json` 或 `{slide_id}.html`，其中 `slide_id` 匹配 `sli_[A-Za-z0-9_-]+`。删除所有未被新大纲引用的匹配文件，包括只剩规格或 HTML 的孤立文件。扫描限于根目录，跳过子目录与符号链接。
+- 大纲字节相同也执行清理。实际删除文件时，原大纲哈希仍有效，更新项目修改时间并发送文稿变更通知。基准冲突或新大纲无效时保留现有文件。
 - `GET /api/projects/{project_id}/appearance` 返回 `theme_id`，值为 `null` 表示项目未选择主题。
 - `POST /api/projects/theme/save` 需提交 `project_id` 和 `theme_id`，只保存项目主题。每次保存都校验目标资产存在、类型为主题、已启用且正文非空白，同值保存也需通过校验。
 - `POST /api/projects/positions/save` 需在请求顶层提交 `project_id`、`slide_pagination`、`deck_title`、`chapter_title` 和 `logo`，只保存四项装饰位置。四项位置一并生效，允许在一次保存中交换。显示位置不可重叠，`none` 表示隐藏，可在多项中使用。
@@ -191,7 +192,7 @@
 - 整份清单未知为 `null`，确认无变化为 `[]`，单个目标无法展示时为 `type=unavailable` 并附 `reason`。
 - 工具详情使用 `tool_call` 消息的 `id` 查询。同次调用与结果按 `run_id + tool_call_id` 配对。
 - `arguments` 无公开参数时为 `{}`，`result=null` 表示尚无已记录结果。
-- 文件修改成功后，结果中的 `targets` 给出实际差异，`path` 可直接用于打开项目文件。
+- 文件修改成功后，结果中的 `targets` 给出实际差异。打开根目录文稿时，将目标文件名作为 `file_name` 提交。
 - 工具详情的 `interaction.request` 保留当时的表单内容，省略 `type` 和 `version`。
 - 资料审批保留原 `request.proposal`，`answer` 仅含决定及可选的拒绝反馈。
 - 资料编辑工具成功时，`result.content` 返回实际保存的完整定稿。受阻或失败时省略 `content`。
@@ -209,7 +210,7 @@
 | `plan`、`suggestions`、`context` | 会话状态。 |
 | `checkpoints` | 本会话检查点列表。 |
 
-- 共享文稿、外观或项目会话列表实际改变后，向同项目所有已连接会话（含发起方）发送 `project_changed`。文稿写入或历史切换造成的文件变化使用 `content`，外观变化使用 `appearance`，会话列表变化使用 `sessions`。接收方只重读通知所列区域。同值保存或失败时不发送项目变更事件。
+- 共享文稿、外观或项目会话列表实际改变后，向同项目所有已连接会话（含发起方）发送 `project_changed`。文稿写入或历史切换造成的文件变化使用 `content`，外观变化使用 `appearance`，会话列表变化使用 `sessions`。接收方只重读通知所列区域。保存没有产生文件或数据变化，或操作失败时，不发送项目变更事件。
 - `history`、`plan`、`checkpoints` 只通知各自数据发生变化的会话。
 - 仅增加工具过程消息时通知 `run`。最终回复、变更概况或 Run 终态改变时同时通知 `history` 和 `run`。
 - 命令修订和结果影响历史分组时同时通知 `commands` 和 `history`。
@@ -300,5 +301,5 @@
 - `GET /api/healthz` 在启动检查期间或公共数据库不可用时返回 HTTP 503。
 - 启动检查完成且公共数据库可用时返回 HTTP 200，两种状态的响应体均为空。
 - 单个项目有未解决的恢复日志时，该项目暂停写入，其他项目正常使用。
-- `POST /api/files/open` 只接受本机同源调用，提交 `project_id` 和项目内相对路径 `path`。目标需为普通文件，解析符号链接后仍需位于该项目内。允许任意扩展名或无扩展名的文件。
-- 打开 JSON 使用 `json_open`，HTML/HTM 使用 `html_open`，其他文件使用 `default_open`。文件类型的配置为 `inherit` 时沿用 `default_open`，`system` 使用系统关联的应用。系统接受打开请求后返回空响应。文件缺失返回 `FILE_NOT_FOUND`，应用启动失败返回 `FILE_OPEN_FAILED`。
+- `POST /api/files/open` 只接受本机同源调用，提交 `project_id` 和 `file_name`。允许的文件名为 `.meta.json`、`.constraint.json`、`.outline.json`、`{slide_id}.json`、`{slide_id}.html`，其中 `slide_id` 匹配 `sli_[A-Za-z0-9_-]+`。解析符号链接后的目标也须是该项目根目录下符合命名规则的普通文件。路径、其他文件名和不符合条件的目标返回 `INVALID_ARGUMENT`。
+- 打开 JSON 文稿使用 `json_open`，打开页面 HTML 使用 `html_open`。文件类型的配置为 `inherit` 时沿用 `default_open`，`system` 使用系统关联的应用。系统接受打开请求后返回空响应。文件缺失返回 `FILE_NOT_FOUND`，应用启动失败返回 `FILE_OPEN_FAILED`。

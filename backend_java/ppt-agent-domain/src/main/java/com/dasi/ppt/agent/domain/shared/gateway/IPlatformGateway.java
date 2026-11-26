@@ -6,5 +6,5 @@ public interface IPlatformGateway {
 
     Path pickApplication();
 
-    void openFile(String projectId, String relativePath, Path application);
+    void openFile(String projectId, String fileName, Path application);
 }

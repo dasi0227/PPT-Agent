@@ -65,6 +65,7 @@
 6. 仅 Builder 构建链和 Stream 流水线要求逐步换行，同层调用的 `.` 对齐。若参数本身也是 Builder 构建链或 Stream 流水线，首个表达式紧跟左括号，后续调用再缩进一级，内层链结束后恢复外层缩进。简单字符串处理可写在一行，如 `name.trim().isEmpty()`。
 7. 参数无效时使用 `invalid()`，资源缺失时使用 `notFound(code)`，状态或版本冲突时使用 `conflict(code)`，按需传入 `message` 覆盖 `defaultMessage`。
 8. 按 ID 局部更新允许只传 ID 时，若所有 `SET` 项都是可选字段，Mapper 统一用 `id = id` 保证 SQL 有效；Service 按需根据影响行数判断资源是否存在。
+9. 禁止用 `var`。
 
 
 

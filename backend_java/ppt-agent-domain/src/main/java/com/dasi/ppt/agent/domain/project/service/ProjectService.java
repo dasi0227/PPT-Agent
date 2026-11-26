@@ -22,7 +22,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.nio.file.Path;
 import java.util.EnumSet;
 import java.util.List;
-import java.util.Locale;
 
 import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.SYSTEM_OPEN;
 import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.INHERIT_OPEN;
@@ -185,19 +184,16 @@ public class ProjectService {
         sessionIds.forEach(sessionId -> eventPublisher.publish(sessionId, event));
     }
 
-    public void openFile(String projectId, String relativePath) {
-        FileOpenSettings settings = settingService.getFileOpenSettings();
-        String filename = relativePath.toLowerCase(Locale.ROOT);
-        String choice = settings.getDefaultOpen();
-        if (filename.endsWith(".json")) {
-            choice = settings.getJsonOpen();
-        } else if (filename.endsWith(".html")) {
-            choice = settings.getHtmlOpen();
+    public void openFile(String projectId, String fileName) {
+        if (!projectRepository.existsProject(projectId)) {
+            throw notFound(ErrorCode.FILE_NOT_FOUND);
         }
+        FileOpenSettings settings = settingService.getFileOpenSettings();
+        String choice = fileName.endsWith(".json") ? settings.getJsonOpen() : settings.getHtmlOpen();
         if (INHERIT_OPEN.equals(choice)) {
             choice = settings.getDefaultOpen();
         }
         Path application = SYSTEM_OPEN.equals(choice) ? null : Path.of(choice);
-        platformGateway.openFile(projectId, relativePath, application);
+        platformGateway.openFile(projectId, fileName, application);
     }
 }

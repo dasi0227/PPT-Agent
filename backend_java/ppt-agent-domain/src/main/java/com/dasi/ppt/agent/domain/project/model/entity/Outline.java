@@ -14,6 +14,7 @@ import java.util.Set;
 @AllArgsConstructor
 @NoArgsConstructor
 public final class Outline {
+    private List<Page> slides;
     private List<Chapter> chapters;
 
     @Builder
@@ -48,6 +49,7 @@ public final class Outline {
 
     public Set<String> slideIds() {
         Set<String> ids = new LinkedHashSet<>();
+        slides.forEach(page -> ids.add(page.id));
         for (Chapter chapter : chapters) {
             chapter.slides.forEach(page -> ids.add(page.id));
             chapter.sections.forEach(section -> section.slides.forEach(page -> ids.add(page.id)));

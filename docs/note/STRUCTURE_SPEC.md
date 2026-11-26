@@ -24,11 +24,11 @@
 - SQLite `TEXT` 列在 PO、Mapper 参数及结果映射中统一使用 `String`，包括状态、类型、模式和协议。
 - `infrastructure/persistence/database/ReceiptType` 定义数据库凭据类型 `create_run / create_command / agent / manual`，由仓储与 `ReceiptPo.type` 的字符串值相互转换。[凭据类型](DATABASE_SPEC.md#receipts)
 - JSON 存储列按 `String` 读写，仓储负责与领域对象转换。
-- `infrastructure/persistence/filesystem/FileStorer` 负责文件的读取、仅新建、原子替换、列举和删除。
-- `infrastructure/persistence/filesystem/PathResolver` 生成项目文稿和运行文件的路径。
-- `PathResolver` 校验传入的相对路径，确保解析结果仍位于指定项目根目录内。
-- `infrastructure/persistence/filesystem/MutationLog` 对应一次文稿写入或历史切换的恢复日志文件，记录核对提交所需的字段及每个文件的 `before` 和 `after`。[日志字段](#项目目录)
-- `infrastructure/persistence/filesystem/MutationLogType` 定义文稿文件恢复日志的 `type`，取 `agent / manual / switch`。
+- `infrastructure/persistence/filesystem/FileStorer` 负责文件的读取、仅新建、原子替换、列举和删除，按数据库提交结果处理项目创建、删除标记。
+- `domain/shared/service/PathResolver` 统一定位五类文稿文件、文稿变更日志目录及文件、项目创建和删除标记。`DeckService` 直接调用 `PathResolver` 的 `metaPath`、`constraintPath`、`outlinePath`、`specPath`、`htmlPath`。前三个方法只需项目 ID，两个页面路径还需页面 ID。
+- 打开文稿时，`PlatformGateway` 使用 `PathResolver.filePathByFileName(projectId, fileName)` 定位文件，校验文件名和解析后的实际目标。文稿保存允许首次创建文件，文稿变更日志目录、日志文件、日志内的文稿和项目创建或删除标记均按项目 ID 定位。扫描目录时，`isProjectMarker(Path)` 根据目录项名称识别标记。
+- `infrastructure/persistence/filesystem/model/Mutation` 对应一次文稿写入或历史切换的恢复日志文件，记录核对提交所需的字段。`model/FileChange` 保存每个文件的相对路径及其 `before`、`after`。[日志字段](#项目目录)
+- `infrastructure/persistence/filesystem/model/MutationType` 定义文稿文件恢复日志的 `type`，取 `agent / manual / switch`。
 - `infrastructure` 模块将 `base.css`、`decorations.js` 和 `theme-bridge.js` 直接存放在 `resources/runtime/` 下。基础样式定义系统字体、颜色、字号和间距等默认值，预览和导出都先应用基础样式，再应用已选主题和单页样式。
 
 - `interfaces/controller/` 按功能分为 `project`、`asset`、`setting`、`export`、`file`、`session`、`history`、`execution`、`interaction`、`checkpoint` 和 `system`。
@@ -93,13 +93,14 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - 领域仓储接口位于各自的 `repository/`，外部能力接口位于各自的 `gateway/`。
 - `project/model/entity/` 存放项目实体 `Project` 和页面实体 `Slide`。
 - `Slide` 以稳定的 `slide_id` 标识一页，关联该页的 `Spec` 和 HTML 源码。
+- `DeckService` 在初始化时加载资料、约束、大纲和页面规格的 JSON Schema。读取时从仓储取得文件字节，校验并解码正文，用同一份字节计算哈希，再组装 `Deck`。保存时校验并编码提交的 JSON 正文。
 - `project/model/Deck` 按所属项目聚合 `Meta`、`Constraint`、`Outline` 及按 `slide_id` 索引的 `Slide`。[项目读取契约](API.html#projects)
 - `project/model/Meta` 对应 `.meta.json`，保存文稿标题、语言、页数要求、受众和目标。
 - `project/model/Spec` 对应 `{slide_id}.json`，描述单页的用途、核心信息、内容元素和布局。
 - `project/model/enumeration/SlidePurpose` 对应 `Spec.purpose`，取 `cover / introduction / transition / content_explanation / content_comparison / content_example / content_guidance / content_other / conclusion / other`。
 - `project/model/enumeration/SlideElementType` 对应 `Spec.elements[].type`，取 `text / list / metric / quote / table / chart / diagram / code / asset`。
-- `project/model/Outline` 对应 `.outline.json`，维护章、节与页面的层级、顺序、标题和稳定 ID。
-- `Outline.java` 在 `Outline` 内声明 `Chapter` 和 `Section` 两个内部类。
+- `project/model/Outline` 对应 `.outline.json`。根维护有序的直属页和章列表，最多一个列表非空。`slideIds()` 按大纲顺序收集根、章、节中的页面 ID。
+- `Outline.java` 在 `Outline` 内声明 `Chapter`、`Section` 和 `Page`。
 - `Outline.Chapter` 保存章 ID、标题、有序的直属页面和有序的节。[大纲字段](API.html#projects)
 - `Outline.Section` 保存节 ID、标题和有序页面。章和节均以页面 ID 和标题引用页面。[大纲字段](API.html#projects)
 - `project/model/Constraint` 对应 `.constraint.json`，分别保存内容约束和视觉约束的要求与禁用项。
@@ -134,7 +135,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `setting/model/` 存放模型配置和各组全局设置。
 - `ISettingRepository` 负责分组设置的持久化。
 - `domain/gateway/IPlatformGateway` 提供本地应用选择与项目文件打开能力，由 `infrastructure/gateway/PlatformGateway` 实现。
-- `ProjectService.openFile` 从 `SettingService` 读取偏好，按文件后缀和继承规则确定打开方式，向 `PlatformGateway` 传入应用路径或用 `null` 指定系统默认应用。网关使用 `PathResolver` 校验项目文件的真实路径后调用桌面应用。设置页通过 `SettingService.pickApplication` 调用同一网关选择应用。[文件打开契约](API_SPEC.md#其它)
+- `ProjectService.openFile` 从 `SettingService` 读取偏好，按文件后缀和继承规则确定打开方式，向 `PlatformGateway` 传入应用路径或用 `null` 指定系统默认应用。网关确认实际目标是该项目根目录下的普通文稿文件后调用桌面应用。设置页通过 `SettingService.pickApplication` 调用同一网关选择应用。[文件打开契约](API_SPEC.md#其它)
 - `domain/gateway/IBashGateway` 由 `infrastructure/gateway/BashGateway` 实现。
 - `agent/model/enumeration/` 存放工具与 Harness 的专属错误码。
 - `agent/model/enumeration/InstructionDecision` 表示输入判定结果。有效结果为 `task / gossip / disclosure / bypass / irrelevant`，未判定或检测失败时字段为空。[指令判定字段](DATABASE.html#messages-instruction-decision)
@@ -185,10 +186,9 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - 文稿回退和返回只处理上述五类文件，其他项目文件保留原状。
 - 项目主题正文和 Logo 存在数据库中，项目目录不另存永久副本。
 - `.git/` 存放项目 Git 仓库，`.runtime/` 存放项目运行文件。
-- `.runtime/mutations/{operation_hash}.json` 保存一次涉及文稿文件的操作日志。
+- 人工保存、Agent 写入和历史切换统一使用 `PathResolver.mutationPath(projectId, operationId)` 定位项目内的 `.runtime/mutations/{operationId}.json`。后端为每次文件操作生成一个 ID，写入和收尾复用该 ID。人工保存同时以该 ID 作为凭据的 `request_id`。
 - `type=agent` 和 `type=manual` 的日志保存原凭据键 `(type, owner_id, request_id)` 及 `request_hash`。
 - `type=switch` 的日志保存目标 `session_id` 和切换前的 `base_revision`（十进制字符串）。回退和返回最新共用此格式。
-- 文件名中的 `operation_hash` 取自操作的唯一键。文稿写入使用原凭据键，历史切换使用 `(switch, session_id, base_revision)`。
 - `files` 每项记录唯一的项目相对路径 `path` 及其 `before`、`after`，路径限于本次实际改动的五类文稿文件。
 - 文件状态用 Base64 字符串保存完整字节，`""` 表示空文件，`null` 表示路径不存在。
 - 完整日志在第一个文稿文件改动前原子落盘。
@@ -205,7 +205,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - 切换最新截图前先删除旧缩略图，删除失败时保留原索引。
 - 截图评分及复用所需的基准存入数据库的工具结果，评估中的临时状态仅保留在内存。
 - `.runtime/exports/{export_id}/` 的根目录只存一个最终成品，文件名为 `{filename}.pdf`、`{filename}.zip` 或 `{filename}.html`。
-- 导出使用创建时固定的完整输入，`ExportSnapshot` 只在任务内存保留。预览和导出都用 `Meta.title` 填充 `deck_title`，用页面所属 `Outline.Chapter.title` 填充 `chapter_title`。
+- 导出使用创建时固定的完整输入，`ExportSnapshot` 只在任务内存保留。预览和导出都用 `Meta.title` 填充 `deck_title`。章内页面的 `chapter_title` 取所属章的标题，根直属页省略该装饰。
 - PNG 和 PDF 导出的逐页图片存入任务的 `work/{序号}-{标题}.png`，序号补零，标题规范化。
 - HTML 导出直接生成单文件，内嵌播放器、样式、脚本和 Logo。文本按主题指定的系统字体族排版，项目内不创建播放目录。
 - 导出成品写完并关闭后清理 `work/`，保留待下载成品。

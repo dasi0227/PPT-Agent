@@ -180,10 +180,10 @@
                 <ul class="fields">
                   <li><code>meta</code>：基本信息对象，含 title、language、count、audience、goal 五个字符串；未建立为 null</li>
                   <li><code>constraint</code>：约束对象，content 与 visual 各含 requirements、prohibitions 字符串数组；未建立为 null</li>
-                  <li><code>outline</code>：大纲对象，未建立为 null。<code>chapters</code> 为有序章数组，章含 <code>id、title、slides、sections</code>，节含 <code>id、title、slides</code>，幻灯片含 <code>id、title</code>。空列表为 <code>[]</code></li>
+                  <li><code>outline</code>：大纲对象，未建立为 null。根含有序直属页数组 <code>slides</code> 和有序章数组 <code>chapters</code>，最多一个非空。章含 <code>id、title、slides、sections</code>，其直属页与节最多一项非空。节含 <code>id、title、slides</code>，页含 <code>id、title</code>。空列表为 <code>[]</code></li>
 
                   <li><code>slides</code>：按 <code>slide_id</code> 索引，每项包含 <code>spec</code> 与 <code>html</code>。<code>spec</code> 沿用 <code>{slide_id}.json</code>，含 <code>purpose、core、elements、layout</code>。文稿 JSON 文件格式错误时，整次读取返回 <code>ILLEGAL_STATE</code>。<code>html</code> 为源码字符串，已存在的空 HTML 返回空串。文件缺失时对应值为 null，没有幻灯片时为 <code>{}</code></li>
-                  <li><code>hashes</code>：含 <code>meta、constraint、outline</code> 的哈希及 <code>hashes.slides</code>，其中页键与 <code>slides</code> 相同。缺失文件的哈希为 null</li>
+                  <li><code>hashes</code>：含 <code>meta、constraint、outline</code> 的哈希及 <code>hashes.slides</code>，其中页键与 <code>slides</code> 相同。内容哈希为 64 个小写十六进制字符的 SHA-256 摘要，缺失文件的哈希为 null</li>
 
                 </ul>
               </td>
@@ -333,7 +333,7 @@
                 <ul class="fields">
                   <li><code>project_id</code>：项目 ID</li>
                   <li><code>base_hash</code>：打开编辑器时的内容哈希，可为 null，仅在预期文件尚不存在时创建</li>
-                  <li><code>outline</code>：大纲对象，含 chapters 有序章数组；空大纲为 {"chapters":[]}</li>
+                  <li><code>outline</code>：完整大纲，必填 <code>slides</code> 和 <code>chapters</code>，最多一个数组非空。空大纲为 <code>{"slides":[],"chapters":[]}</code>。保存时保留根、章、节中引用的页面文件，清理项目根目录中其余页面规格和 HTML，大纲内容相同也会清理</li>
                 </ul>
               </td>
               <td>
@@ -1624,7 +1624,7 @@
               <td>
                 <ul class="fields">
                   <li><code>project_id</code>：项目 ID</li>
-                  <li><code>path</code>：相对于项目根目录的路径，解析符号链接后需指向项目内的普通文件，不限制扩展名</li>
+                  <li><code>file_name</code>：项目根目录下的文稿文件名，允许 <code>.meta.json</code>、<code>.constraint.json</code>、<code>.outline.json</code>、<code>{slide_id}.json</code>、<code>{slide_id}.html</code></li>
                 </ul>
               </td>
               <td>无</td>

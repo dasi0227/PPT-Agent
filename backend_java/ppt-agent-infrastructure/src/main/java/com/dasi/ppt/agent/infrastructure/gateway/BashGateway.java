@@ -1,7 +1,7 @@
 package com.dasi.ppt.agent.infrastructure.gateway;
 
 import com.dasi.ppt.agent.domain.shared.gateway.IBashGateway;
-import com.dasi.ppt.agent.infrastructure.persistence.filesystem.PathResolver;
+import com.dasi.ppt.agent.domain.shared.service.PathResolver;
 import com.dasi.ppt.agent.infrastructure.properties.SandboxProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
