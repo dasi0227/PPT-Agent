@@ -9,6 +9,8 @@ export type OutlineCommand =
   | { type: 'remove'; id: string; promote?: boolean };
 
 export function findOutlineNode(outline: Outline, id: string) {
+  const rootSlide = outline.slides.find(slide => slide.id === id);
+  if (rootSlide) return { node: rootSlide, kind: 'slide' as const, parent: undefined, siblings: outline.slides as OutlineNode[] };
   for (const chapter of outline.chapters) {
     if (chapter.id === id) return { node: chapter, kind: 'chapter' as const, parent: undefined, siblings: outline.chapters as OutlineNode[] };
     for (const slide of chapter.slides) {
@@ -73,8 +75,13 @@ export function applyOutlineCommand(outline: Outline, command: OutlineCommand): 
   }
   const parent = command.position.parent_id ? findOutlineNode(next, command.position.parent_id) : undefined;
   let siblings: OutlineNode[];
-  if (kind === 'chapter') siblings = next.chapters;
-  else if (kind === 'section' && parent?.kind === 'chapter') {
+  if (kind === 'chapter') {
+    if (next.slides.length) {
+      (node as OutlineChapter).slides = next.slides;
+      next.slides = [];
+    }
+    siblings = next.chapters;
+  } else if (kind === 'section' && parent?.kind === 'chapter') {
     const chapter = parent.node as OutlineChapter;
     if (chapter.slides.length) {
       if (command.type !== 'insert') throw new Error('不能移动小节到含有直接页面的章节');
@@ -82,6 +89,8 @@ export function applyOutlineCommand(outline: Outline, command: OutlineCommand): 
       chapter.slides = [];
     }
     siblings = chapter.sections;
+  } else if (kind === 'slide' && !command.position.parent_id && !next.chapters.length) {
+    siblings = next.slides;
   } else if (kind === 'slide' && parent && 'slides' in parent.node && !('sections' in parent.node && parent.node.sections.length)) {
     siblings = parent.node.slides;
   } else throw new Error('移动位置无效');

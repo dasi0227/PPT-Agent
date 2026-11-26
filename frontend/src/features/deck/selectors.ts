@@ -1,10 +1,10 @@
 import type { Outline, OutlineChapter, OutlineSlideNode, OutlineSection, ProjectContentSnapshot, Slide } from '../../api/types';
 
-export interface FlatOutlineSlide { node: OutlineSlideNode; chapter: OutlineChapter; section?: OutlineSection; ordinal: number }
+export interface FlatOutlineSlide { node: OutlineSlideNode; chapter?: OutlineChapter; section?: OutlineSection; ordinal: number }
 
 export function flattenOutline(outline?: Outline): FlatOutlineSlide[] {
   if (!outline) return [];
-  const result: FlatOutlineSlide[] = [];
+  const result: FlatOutlineSlide[] = outline.slides.map((node, index) => ({ node, ordinal: index + 1 }));
   outline.chapters.forEach((chapter) => {
     chapter.slides.forEach((node) => result.push({ node, chapter, ordinal: result.length + 1 }));
     chapter.sections.forEach((section) => section.slides.forEach((node) => result.push({ node, chapter, section, ordinal: result.length + 1 })));
@@ -12,7 +12,7 @@ export function flattenOutline(outline?: Outline): FlatOutlineSlide[] {
   return result;
 }
 
-export function slideSpecPath(slideId: string): string { return `.${slideId}.json`; }
+export function slideSpecPath(slideId: string): string { return `${slideId}.json`; }
 
 export function orderedSlides(snapshot?: ProjectContentSnapshot): Slide[] {
   if (!snapshot) return [];
@@ -23,8 +23,8 @@ export function orderedSlides(snapshot?: ProjectContentSnapshot): Slide[] {
       id: node.id, project_id: snapshot.project_id,
       title: node.title, purpose: spec?.purpose,
       layout: spec?.layout ?? '', html_path: content?.html_hash ? `${node.id}.html` : '',
-      spec_path: spec || content?.spec_state === 'invalid' ? slideSpecPath(node.id) : '', html_hash: content?.html_hash ?? '',
-      chapterId: chapter.id, sectionId: section?.id, spec,
+      spec_path: spec ? slideSpecPath(node.id) : '', html_hash: content?.html_hash ?? '',
+      chapterId: chapter?.id, sectionId: section?.id, spec,
       html_state: content?.html_state ?? 'missing',
     };
   });

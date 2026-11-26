@@ -19,7 +19,7 @@ function advance(requests: Map<string, number>, id: string) {
 
 type Appearance = Pick<ProjectContentSnapshot, 'theme' | 'decorations' | 'logo' | 'appearance'>;
 export const defaultPositions: Decorations = {
-  slide_pagination: 'bottom-right', deck_title: 'none', chapter_title: 'none', logo: 'none',
+  slide_pagination: 'bottom-right', deck_title: 'none', chapter_title: 'top-left', logo: 'none',
 };
 const defaultAppearance: Appearance = { theme: null, decorations: defaultPositions, logo: null, appearance: null };
 
@@ -35,7 +35,7 @@ function asSnapshot(project: Project, files: ProjectFiles, appearance: Appearanc
     if (html !== null) hashes['html:' + id] = html;
     return [id, {
       spec: slide.spec,
-      spec_state: slide.spec !== null ? 'ready' : spec !== null ? 'invalid' : 'pending',
+      spec_state: slide.spec !== null ? 'ready' : 'pending',
       html: slide.html,
       html_state: slide.html !== null ? 'available' : 'missing',
       html_hash: html ?? '',
@@ -47,7 +47,7 @@ function asSnapshot(project: Project, files: ProjectFiles, appearance: Appearanc
     ...appearance,
     meta: files.meta,
     constraint: files.constraint,
-    outline: files.outline ?? { chapters: [] },
+    outline: files.outline ?? { slides: [], chapters: [] },
     hashes,
     slides_by_id: Object.fromEntries(slides),
   };

@@ -86,13 +86,13 @@
 }
 
 .global-toast-error {
-  --toast-border: rgb(var(--ui-danger));
-  --toast-background: rgb(var(--ui-danger-solid));
-  --toast-color: rgb(var(--ui-on-solid));
-  --toast-tone: var(--ui-on-solid);
-  --toast-close: rgb(var(--ui-on-solid) / 85%);
-  --toast-control-hover-background: var(--ui-on-solid-hover);
-  --toast-control-hover-color: rgb(var(--ui-on-solid));
+  --toast-border: rgb(var(--ui-danger) / 30%);
+  --toast-background: rgb(var(--ui-danger-soft));
+  --toast-color: rgb(var(--ui-danger-hover));
+  --toast-tone: var(--ui-danger);
+  --toast-close: var(--toast-color);
+  --toast-control-hover-background: rgb(var(--ui-danger) / 10%);
+  --toast-control-hover-color: var(--toast-color);
 }
 
 .global-toast-with-action {

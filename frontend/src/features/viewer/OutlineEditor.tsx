@@ -10,6 +10,7 @@ import { showGlobalSuccess } from '../../stores/toastStore';
 import { DocumentCanvas } from './DocumentCanvas';
 import { JSONPreview } from './JSONPreview';
 import { applyOutlineCommand, findOutlineNode, newOutlineNode, outlineDestinations, type OutlineCommand, type OutlineKind, type OutlineNode } from './outlineEditing';
+import { flattenOutline } from '../deck/selectors';
 import './outline.css';
 
 type Edit = { id: string; title: string; version: string; base: Outline; addition?: Extract<OutlineCommand, { type: 'insert' }> };
@@ -43,8 +44,8 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
   const unavailable = blocked ?? (stale ? '目录已更新，请取消后重新编辑。' : undefined);
   const locked = Boolean(blocked) || busy || Boolean(edit);
   const displayed = edit ? edit.addition ? applyOutlineCommand(edit.base, edit.addition) : edit.base : value;
-  const empty = displayed.chapters.length === 0;
-  const pages = displayed.chapters.flatMap(chapter => [...chapter.slides, ...chapter.sections.flatMap(sub => sub.slides)]);
+  const pages = flattenOutline(displayed);
+  const empty = displayed.chapters.length === 0 && pages.length === 0;
 
   useEffect(() => {
     useDeckStore.getState().setSourceBlocked(isEditing || busy);
@@ -225,8 +226,8 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
       </div>
     </div>;
   }
-  function slideRows(slides: OutlineSlideNode[], parentId: string) {
-    return slides.length ? slides.map(slide => <div key={slide.id}>{row(slide, 'slide', pages.findIndex(page => page.id === slide.id) + 1)}</div>)
+  function slideRows(slides: OutlineSlideNode[], parentId?: string) {
+    return slides.length ? slides.map(slide => <div key={slide.id}>{row(slide, 'slide', pages.find(page => page.node.id === slide.id)?.ordinal ?? 0)}</div>)
       : <Button variant="ghost" className="outline-add-page" disabled={locked} onClick={() => add('slide', parentId)}><Plus />新增页面</Button>;
   }
   const allFolded = displayed.chapters.length > 0 && displayed.chapters.every(chapter => collapsed.has(chapter.id));
@@ -246,6 +247,10 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
       {!draftMode && status}
       <div ref={root} className="outline-tree" data-empty={empty || undefined}>
         {empty && <IllustratedEmptyState illustration="outline" />}
+        {!displayed.chapters.length && <>
+          {displayed.slides.length > 0 && slideRows(displayed.slides)}
+          <Button variant="ghost" className="outline-add-page" disabled={locked || displayed.slides.length >= 200} onClick={() => add('slide')}><Plus />新增页面</Button>
+        </>}
         {displayed.chapters.map((chapter, chapterIndex) => <section className="outline-chapter" key={chapter.id}>
           {row(chapter, 'chapter', chapterIndex + 1)}
           {!collapsed.has(chapter.id) && <div className="outline-chapter-children">

@@ -41,6 +41,7 @@ export const ThreadTabs: React.FC = () => {
           ) : (
             threads.map(th => {
               const isActive = th.id === activeId;
+              const status = th.run_status === 'running' || th.run_status === 'waiting' ? th.run_status : sessions[th.id]?.status;
               return (
                 <div
                   key={th.id}
@@ -53,7 +54,7 @@ export const ThreadTabs: React.FC = () => {
                     isActive ? "ui-selected" : "text-text-600 ui-interactive"
                   )}
                 >
-                  {sessions[th.id] && <RunStatusDot status={sessions[th.id].status} />}
+                  {status && <RunStatusDot status={status} />}
                   <HoverScrollText className="flex-1">{th.title || '新会话'}</HoverScrollText>
 
                   <ThreadMenu projectId={activeProjectId} thread={th}>

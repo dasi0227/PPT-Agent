@@ -4,11 +4,11 @@ import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, us
 import { Paperclip, Send, StopCircle, X } from 'lucide-react';
 import { attachmentsApi } from '../../api/attachments';
 import { ImagePreview } from '../../components/ui/ImagePreview';
-import { llmApi } from '../../api/llm';
+import { settingsApi, type ModelConfig } from '../../api/settings';
 import { polishCommand } from '../../stores/textCommandStore';
 import { showGlobalError, showGlobalSuccess, showGlobalWarning } from '../../stores/toastStore';
-import { skillsApi } from '../../api/skills';
-import type { CreateRunRequest, CreateRunScopeInput, LLMProfile, Skill } from '../../api/types';
+import { assetsApi, type AssetInfo } from '../../api/assets';
+import type { CreateRunRequest, CreateRunScopeInput } from '../../api/types';
 import { MAX_MESSAGE_ATTACHMENTS, MAX_SELECTED_SKILLS, type ComposerAttachment, useComposerStore } from '../../stores/composerStore';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
@@ -96,10 +96,10 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
   const [text, setText] = useState('');
 	const [uploadingCount, setUploadingCount] = useState(0);
   const [isComposing, setIsComposing] = useState(false);
-  const [profiles, setProfiles] = useState<LLMProfile[]>([]);
+  const [profiles, setProfiles] = useState<ModelConfig[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(true);
   const [profilesError, setProfilesError] = useState('');
-  const [skills, setSkills] = useState<Skill[]>([]);
+  const [skills, setSkills] = useState<AssetInfo[]>([]);
   const [skillsLoading, setSkillsLoading] = useState(true);
   const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
   const [composerFocused, setComposerFocused] = useState(false);
@@ -145,11 +145,6 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
 	const activeDOMSelections = activeReferences.flatMap((item) => item.kind === 'dom' ? [item.selection] : []);
 	const hasAttachments = activeAttachments.length > 0;
 	const selectedProfile = profiles.find((profile) => profile.name === composer.modelProfileName);
-	const activeRunProfile = profiles.find((profile) => profile.name === activeSession.activeRunModel);
-	const attachmentModelSupported = !hasAttachments || Boolean((steering ? activeRunProfile : selectedProfile)?.capabilities.vision);
-	const attachmentModelReason = steering
-		? '当前运行模型不支持图片，无法追加图片'
-		: '当前模型不支持图片，请更换模型后发送';
 	const hasDOMSelections = activeDOMSelections.length > 0;
 	const hasDOMIntent = activeDOMSelections.some((selection) => selection.comment.trim() !== '');
 	const hasSendableContent = text.trim() !== '' || (hasDOMSelections ? hasDOMIntent : hasAttachments);
@@ -242,7 +237,6 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
     : steering
       ? '追加对当前任务的要求'
       : '输入你的想法与目标';
-	const requiresVision = (!steering && hasAttachments) || composer.mode === 'create';
 
   const activeSnapshot = activeProjectId ? contentByProjectId[activeProjectId] : undefined;
   const slides = useMemo(() => orderedSlides(activeSnapshot), [activeSnapshot]);
@@ -310,8 +304,7 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
     description: profile.model,
     provider: profile.provider,
     selected: profile.name === composer.modelProfileName,
-    disabled: requiresVision && !profile.capabilities.vision,
-  })), [composer.modelProfileName, profiles, requiresVision]);
+  })), [composer.modelProfileName, profiles]);
   const targetOptions = useMemo<SlashMenuOption[]>(() => [
     { id: 'current_page', label: '当前页', selected: composer.scopeSelection === 'current_page', disabled: isEmptyProject },
     { id: 'all_pages', label: '全部页', selected: composer.scopeSelection === 'all_pages' },
@@ -389,11 +382,12 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
     const loadModels = () => {
       const id = ++request;
       setProfilesLoading(true); setProfilesError('');
-      void llmApi.profiles().then((response) => {
+      void settingsApi.get().then(({ models, routes }) => {
         if (!current || id !== request) return;
         failureNotified = false;
-        setProfiles(response.profiles);
-        useComposerStore.getState().reconcileModels(response.profiles.map((profile) => profile.name), response.default);
+        setProfiles(models);
+        const defaultModel = models.find((model) => model.id === routes.main_default);
+        useComposerStore.getState().reconcileModels(models.map((model) => model.name), defaultModel?.name ?? '');
       }).catch(() => {
         if (!current || id !== request) return;
         const message = '模型列表加载失败，请刷新后重试';
@@ -411,17 +405,17 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
   useEffect(() => {
     let current = true;
     setSkillsLoading(true);
-    void skillsApi.list()
+    void assetsApi.list('skill', '')
       .then((response) => {
         if (!current) return;
-        const enabledSkills = response.skills.filter((skill) => !skill.disabled && skill.content_state === 'ready');
+        const enabledSkills = response.items.filter((skill) => skill.enabled);
         setSkills(enabledSkills);
         useComposerStore.getState().reconcileSkills(enabledSkills.map((skill) => skill.id));
       })
       .catch(() => {
         if (!current) return;
         setSkills([]);
-        showGlobalWarning('技能列表加载失败');
+        showGlobalError('技能列表加载失败，请刷新后重试');
         useComposerStore.getState().reconcileSkills([]);
       })
       .finally(() => {
@@ -435,16 +429,16 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
 		if (!activeProjectId || disabled || files.length === 0) return;
 		const unsupported = files.find((file) => !supportedImageFile(file));
 		if (unsupported) {
-			showGlobalError('仅支持 PNG 和 JPG 图片');
+			showGlobalWarning('仅支持 PNG 和 JPG 图片，请重新选择');
 			return;
 		}
 		const oversized = files.find((file) => file.size > 10 * 1024 * 1024);
 		if (oversized) {
-			showGlobalError('图片超过 10 MiB，请压缩后重试');
+			showGlobalWarning('图片超过 10 MiB，请压缩后重试');
 			return;
 		}
 		if (activeAttachments.length + uploadingCount + files.length > MAX_MESSAGE_ATTACHMENTS) {
-			showGlobalError('每条消息最多添加 8 张图片');
+			showGlobalWarning('每条消息最多添加 8 张图片，请减少图片后重试');
 			return;
 		}
 		let threadId: string;
@@ -500,7 +494,7 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
     const mentionedSlideIds = editor?.getMentionedSlideIds() ?? [];
     const currentSlides = activeProjectId ? orderedSlides(contentByProjectId[activeProjectId]) : [];
     if (mentionedSlideIds.some((id) => !currentSlides.some((slide) => slide.id === id)) || activeDOMSelections.some((selection) => !currentSlides.some((slide) => slide.id === selection.slide_id))) {
-      showGlobalError('引用的页面已删除，请移除失效引用后重新发送'); return;
+      showGlobalWarning('引用的页面已删除，请移除失效引用后重新发送'); return;
     }
 	const apiDOMSelections = activeDOMSelections.map(({ dedupe_key: _dedupeKey, ...selection }) => selection);
 	for (const kind of ['rename', 'suggest'] as const) {
@@ -508,7 +502,7 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
 		if (commandText !== trigger && !commandText.startsWith(`${trigger} `)) continue;
 		if (!activeProjectId) return;
 		if (commandText !== trigger) {
-			showGlobalError(kind === 'rename' ? `${trigger} 不支持参数，请直接使用 ${trigger} 打开命名面板` : `${trigger} 不支持参数，请直接使用 ${trigger} 打开建议面板`);
+			showGlobalWarning(kind === 'rename' ? `${trigger} 不支持参数，请直接使用 ${trigger} 打开命名面板` : `${trigger} 不支持参数，请直接使用 ${trigger} 打开建议面板`);
 			return;
 		}
 		if (await openActiveCommandPanel(kind)) { setComposerText(''); editorRef.current?.setPlainText(''); }
@@ -524,10 +518,6 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
       return;
     }
     if (steering && activeRunId) {
-		if (!attachmentModelSupported) {
-			showGlobalError(attachmentModelReason);
-			return;
-		}
 		const accepted = await steerRun(threadId, activeRunId, raw, newClientIdentity('msg'), activeAttachments.map((attachment) => attachment.attachmentId), apiDOMSelections, activeReferences.map((item) => ({ kind: item.kind, ref_id: item.kind === 'image' ? item.attachment.attachmentId : item.selection.selection_id })));
       if (accepted) {
         setText('');
@@ -538,13 +528,14 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
       return;
     }
     if (profilesError || profilesLoading || !composer.modelProfileName) {
-      showGlobalError(profilesError || '模型列表仍在加载，请稍候');
+      if (profilesError) showGlobalError(profilesError);
+      else showGlobalWarning('模型列表仍在加载，请稍候重试');
       return;
     }
     const restored = composer.restoredInputs[threadId];
     const scope = restored?.scope !== undefined ? restored.scope : composerScopeInput(composer, currentSlide?.id);
     if (scope === undefined) {
-      showGlobalError('请选择有效的页面范围；空项目请选择全部页');
+      showGlobalWarning('请选择有效的页面范围；空项目请选择全部页');
       return;
     }
     const request: CreateRunRequest = {
@@ -562,13 +553,8 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
       ...((mentionedSlideIds.length > 0 || restored?.mentioned_slide_ids?.length) ? { mentioned_slide_ids: [...new Set([...(restored?.mentioned_slide_ids ?? []), ...mentionedSlideIds])] } : {}),
     };
     // Default routing omits request.model; validate the effective composer selection.
-    const requiresVision = hasAttachments || (request.mode === 'create');
     if (!selectedProfile) {
-      showGlobalError('所选模型已不可用，请重新选择');
-      return;
-    }
-    if (requiresVision && !selectedProfile.capabilities.vision) {
-      showGlobalError('当前任务需要页面图片观察，请选择支持页面观察的模型');
+      showGlobalWarning('所选模型已不可用，请重新选择');
       return;
     }
 
@@ -576,7 +562,7 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
       if (runStatus === 'paused' && activeRunId) {
         const ended = await cancelRun(threadId, activeRunId, 'superseded');
         if (!ended) {
-          showGlobalError('此前任务未能结束，暂时无法发送新消息');
+          showGlobalError('此前任务未能结束，暂时无法发送新消息，请稍后重试');
           return;
         }
       }
@@ -871,7 +857,6 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
             <ModelSelector
               profiles={profiles}
               value={composer.modelProfileName}
-              requiresVision={requiresVision}
               loading={profilesLoading}
               disabled={disabled}
               onChange={composer.setModelProfileName}
@@ -891,10 +876,10 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
               <button
                 type="button"
                 onClick={() => void submit()}
-				disabled={!hasSendableContent || hasPendingTemplateFields || hasPendingUploads || !attachmentModelSupported || disabled || commitActive || polishing || briefingActive || (!steering && (scopeSelectionEmpty || profilesLoading || Boolean(profilesError)))}
+				disabled={!hasSendableContent || hasPendingTemplateFields || hasPendingUploads || disabled || commitActive || polishing || briefingActive || (!steering && (scopeSelectionEmpty || profilesLoading || Boolean(profilesError)))}
                 className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border-0 bg-transparent text-selected-foreground transition-colors ui-interactive disabled:text-text-400 disabled:opacity-40"
-				aria-label={scopeSelectionEmpty && !steering ? '请选择有效的页面范围' : !attachmentModelSupported ? attachmentModelReason : '发送'}
-				title={scopeSelectionEmpty && !steering ? '请选择有效的页面范围' : !attachmentModelSupported ? attachmentModelReason : '发送'}
+				aria-label={scopeSelectionEmpty && !steering ? '请选择有效的页面范围' : '发送'}
+				title={scopeSelectionEmpty && !steering ? '请选择有效的页面范围' : '发送'}
               >
                 <Send className="h-[18px] w-[18px]" />
               </button>

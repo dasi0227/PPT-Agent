@@ -44,7 +44,7 @@ const snapshot: ProjectContentSnapshot = {
   appearance: null,
   hashes: {},
   meta: { title: 'Demo', goal: '', audience: '', language: 'zh-CN', count: '待明确' },
-  outline: { chapters: [{
+  outline: { slides: [], chapters: [{
     id: 'chapter-1', title: '', sections: [],
     slides: [
       { id: 'sli_one', title: '开场' },

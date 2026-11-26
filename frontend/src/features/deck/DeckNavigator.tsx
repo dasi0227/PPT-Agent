@@ -302,7 +302,7 @@ export function DeckNavigator() {
     }
   };
 
-  const positionForSibling = (parentId: string, siblings: string[], index: number): MutationPosition =>
+  const positionForSibling = (parentId: string | undefined, siblings: string[], index: number): MutationPosition =>
     index < siblings.length ? { parent_id: parentId, before_id: siblings[index] } : { parent_id: parentId };
 
   const insertPage = (parentId: string) => mutate({
@@ -310,7 +310,7 @@ export function DeckNavigator() {
     position: { parent_id: parentId },
   });
 
-  const moveSlide = (slideId: string, parentId: string, siblings: OutlineSlideNode[], targetIndex: number) => {
+  const moveSlide = (slideId: string, parentId: string | undefined, siblings: OutlineSlideNode[], targetIndex: number) => {
     const without = siblings.filter((item) => item.id !== slideId).map((item) => item.id);
     const clamped = Math.max(0, Math.min(targetIndex, without.length));
     void mutate({
@@ -352,6 +352,30 @@ export function DeckNavigator() {
     );
   }
 
+  const renderPages = (pages: OutlineSlideNode[], parentId?: string) => pages.map((node, index) => {
+    const slide = slideById[node.id];
+    if (!slide) return null;
+    return <SlideRow
+      key={node.id}
+      node={node}
+      slide={slide}
+      snapshot={snapshot}
+      ordinal={ordinalById[node.id] ?? index + 1}
+      siblingIndex={index}
+      siblingCount={pages.length}
+      selected={!activeDocument && currentSlideId === node.id}
+      locked={locked}
+      pending={!snapshot.slides_by_id[node.id]?.spec}
+      view={globalView}
+      onSelect={() => setCurrentSlideId(node.id)}
+      onRename={() => setEditTarget({ kind: 'page', id: node.id, value: node.title, hash: outlineHash, scene: snapshot.scene_revision })}
+      onRemove={() => setDeleteTarget({ hash: outlineHash, scene: snapshot.scene_revision, kind: 'page', id: node.id, title: node.title })}
+      onMove={delta => moveSlide(node.id, parentId, pages, index + delta)}
+      onDrag={() => setDraggedSlideId(node.id)}
+      onDrop={() => draggedSlideId && moveSlide(draggedSlideId, parentId, pages, index)}
+    />;
+  });
+
   return (
     <>
       <aside className="flex h-full min-h-0 flex-col bg-panel" aria-label="演示文稿">
@@ -364,7 +388,7 @@ export function DeckNavigator() {
           data-testid="deck-navigator-scroll"
           className="deck-navigator-scroll scrollbar-none flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-8 pt-2"
         >
-          {snapshot.outline.chapters.length === 0 ? (
+          {snapshot.outline.chapters.length === 0 && snapshot.outline.slides.length === 0 ? (
             <div
               data-testid="deck-navigator-empty"
               className="flex min-h-32 flex-1 items-center justify-center text-center text-xs text-text-400"
@@ -373,6 +397,7 @@ export function DeckNavigator() {
             </div>
           ) : (
             <>
+              {renderPages(snapshot.outline.slides)}
               {snapshot.outline.chapters.map((chapter, chapterIndex) => {
                 const chapterCollapsed = collapsed[chapter.id];
                 const isEmpty = chapter.slides.length === 0 && chapter.sections.length === 0;
@@ -449,31 +474,7 @@ export function DeckNavigator() {
 
                 {!chapterCollapsed && (
                   <div className="overflow-hidden">
-                    {chapter.slides.map((node, index) => {
-                      const slide = slideById[node.id];
-                      if (!slide) return null;
-                      return (
-                        <SlideRow
-                          key={node.id}
-                          node={node}
-                          slide={slide}
-                          snapshot={snapshot}
-                          ordinal={ordinalById[node.id] ?? index + 1}
-                          siblingIndex={index}
-                          siblingCount={chapter.slides.length}
-                          selected={!activeDocument && currentSlideId === node.id}
-                          locked={locked}
-                          pending={!snapshot.slides_by_id[node.id]?.spec}
-                          view={globalView}
-                          onSelect={() => setCurrentSlideId(node.id)}
-                          onRename={() => setEditTarget({ kind: 'page', id: node.id, value: node.title, hash: outlineHash, scene: snapshot?.scene_revision })}
-                          onRemove={() => setDeleteTarget({ hash: outlineHash, scene: snapshot?.scene_revision, kind: 'page', id: node.id, title: node.title })}
-                          onMove={(delta) => moveSlide(node.id, chapter.id, chapter.slides, index + delta)}
-                          onDrag={() => setDraggedSlideId(node.id)}
-                          onDrop={() => draggedSlideId && moveSlide(draggedSlideId, chapter.id, chapter.slides, index)}
-                        />
-                      );
-                    })}
+                    {renderPages(chapter.slides, chapter.id)}
 
                     {chapter.sections.map((section, sectionIndex) => (
                       <div key={section.id}>
@@ -512,31 +513,7 @@ export function DeckNavigator() {
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>
-                        {section.slides.map((node, index) => {
-                          const slide = slideById[node.id];
-                          if (!slide) return null;
-                          return (
-                            <SlideRow
-                              key={node.id}
-                              node={node}
-                              slide={slide}
-                              snapshot={snapshot}
-                              ordinal={ordinalById[node.id] ?? index + 1}
-                              siblingIndex={index}
-                              siblingCount={section.slides.length}
-                              selected={!activeDocument && currentSlideId === node.id}
-                              locked={locked}
-                              pending={!snapshot.slides_by_id[node.id]?.spec}
-                              view={globalView}
-                              onSelect={() => setCurrentSlideId(node.id)}
-                              onRename={() => setEditTarget({ kind: 'page', id: node.id, value: node.title, hash: outlineHash, scene: snapshot?.scene_revision })}
-                              onRemove={() => setDeleteTarget({ hash: outlineHash, scene: snapshot?.scene_revision, kind: 'page', id: node.id, title: node.title })}
-                              onMove={(delta) => moveSlide(node.id, section.id, section.slides, index + delta)}
-                              onDrag={() => setDraggedSlideId(node.id)}
-                              onDrop={() => draggedSlideId && moveSlide(draggedSlideId, section.id, section.slides, index)}
-                            />
-                          );
-                        })}
+                        {renderPages(section.slides, section.id)}
                       </div>
                     ))}
                   </div>

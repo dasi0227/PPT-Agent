@@ -24,21 +24,21 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
     public ErrorResponse businessError(BusinessException ex, HttpServletRequest request) {
-        log.warn("业务请求失败：path={}，code={}，message={}", request.getRequestURI(), ex.getCode().getValue(), ex.getMessage());
+        log.warn("业务请求失败：path={}，code={}，message={}", request.getRequestURI(), ex.getCode().getValue(), ex.getMessage(), ex);
         return ErrorResponse.of(ex.getCode(), ex.getMessage());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ErrorResponse validationError(MethodArgumentNotValidException ex, HttpServletRequest request) {
         String message = ex.getBindingResult().getAllErrors().get(0).getDefaultMessage();
-        log.warn("参数校验失败：path={}，code={}，message={}", request.getRequestURI(), ErrorCode.INVALID_ARGUMENT.getValue(), message);
+        log.warn("参数校验失败：path={}，code={}，message={}", request.getRequestURI(), ErrorCode.INVALID_ARGUMENT.getValue(), message, ex);
         return ErrorResponse.of(ErrorCode.INVALID_ARGUMENT, message);
     }
 
     @ExceptionHandler({HttpMessageNotReadableException.class, ServletRequestBindingException.class, InvalidEnumValueException.class,
             MultipartException.class, InvalidParameterException.class})
     public ErrorResponse invalidRequest(Exception ex, HttpServletRequest request) {
-        log.warn("请求解析失败：path={}，code={}，message={}", request.getRequestURI(), ErrorCode.INVALID_ARGUMENT.getValue(), ex.getMessage());
+        log.warn("请求解析失败：path={}，code={}，message={}", request.getRequestURI(), ErrorCode.INVALID_ARGUMENT.getValue(), ex.getMessage(), ex);
         return ErrorResponse.of(ErrorCode.INVALID_ARGUMENT);
     }
 

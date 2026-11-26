@@ -1,21 +1,16 @@
 import { create } from 'zustand';
-import { snippetsApi } from '../api/snippets';
-import type { Snippet, SnippetWriteRequest } from '../api/types';
+import { assetsApi, type AssetDetail } from '../api/assets';
 
 interface SnippetState {
-  snippets: Snippet[];
+  snippets: AssetDetail[];
   loading: boolean;
   loaded: boolean;
   error: string;
   version: number;
-  load: (force?: boolean) => Promise<Snippet[]>;
-  create: (request: SnippetWriteRequest) => Promise<Snippet>;
-  update: (id: string, request: Pick<SnippetWriteRequest, 'name' | 'description' | 'tags'>) => Promise<Snippet>;
-  setDisabled: (id: string, disabled: boolean) => Promise<Snippet>;
-  delete: (id: string) => Promise<void>;
+  load: (force?: boolean) => Promise<AssetDetail[]>;
 }
 
-let loadPromise: Promise<Snippet[]> | null = null;
+let loadPromise: Promise<AssetDetail[]> | null = null;
 
 export const useSnippetStore = create<SnippetState>((set, get) => ({
   snippets: [],
@@ -27,16 +22,25 @@ export const useSnippetStore = create<SnippetState>((set, get) => ({
     if (!force && get().loaded) return get().snippets;
     if (loadPromise) return loadPromise;
     set({ loading: true, error: '' });
-    loadPromise = snippetsApi.list()
-      .then((response) => {
+    loadPromise = assetsApi.list('snippet', '')
+      .then(({ items }) => {
+        const previous = new Map(get().snippets.map(snippet => [snippet.id, snippet]));
+        return Promise.all(items.filter(item => item.enabled).map(item => {
+          const cached = previous.get(item.id);
+          return cached?.updated_at === item.updated_at
+            ? { ...item, content: cached.content }
+            : assetsApi.detail(item.id);
+        }));
+      })
+      .then(snippets => {
         set((state) => ({
-          snippets: response.snippets,
+          snippets,
           loading: false,
           loaded: true,
           error: '',
           version: state.version + 1,
         }));
-        return response.snippets;
+        return snippets;
       })
       .catch((cause: unknown) => {
         const message = cause instanceof Error ? cause.message : '短语加载失败';
@@ -47,40 +51,5 @@ export const useSnippetStore = create<SnippetState>((set, get) => ({
         loadPromise = null;
       });
     return loadPromise;
-  },
-  create: async (request) => {
-    const snippet = await snippetsApi.create(request);
-    set((state) => ({
-      snippets: [snippet, ...state.snippets],
-      loaded: true,
-      error: '',
-      version: state.version + 1,
-    }));
-    return snippet;
-  },
-  update: async (id, request) => {
-    const snippet = await snippetsApi.update(id, request);
-    set((state) => ({
-      snippets: [snippet, ...state.snippets.filter((value) => value.id !== id)],
-      error: '',
-      version: state.version + 1,
-    }));
-    return snippet;
-  },
-  setDisabled: async (id, disabled) => {
-    const snippet = await snippetsApi.setDisabled(id, disabled);
-    set((state) => ({
-      snippets: state.snippets.map((value) => value.id === id ? snippet : value),
-      error: '',
-      version: state.version + 1,
-    }));
-    return snippet;
-  },
-  delete: async (id) => {
-    await snippetsApi.delete(id);
-    set((state) => ({
-      snippets: state.snippets.filter((snippet) => snippet.id !== id),
-      version: state.version + 1,
-    }));
   },
 }));

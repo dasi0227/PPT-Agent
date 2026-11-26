@@ -38,7 +38,7 @@ export async function retryRecordedCommand(
     threadsByProjectId: {
       ...state.threadsByProjectId,
       [projectId]: (state.threadsByProjectId[projectId] ?? []).map((thread) =>
-        thread.id === updated.id && (!thread.naming_revision || compareRevision(updated.naming_revision, thread.naming_revision) >= 0) ? updated : thread),
+        thread.id === updated.id && (!thread.naming_revision || compareRevision(updated.naming_revision, thread.naming_revision) >= 0) ? { ...thread, ...updated } : thread),
     },
   }));
   if (record.method === 'auto') return generateNameCommand(threadId, apply, id);

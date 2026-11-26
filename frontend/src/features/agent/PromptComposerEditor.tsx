@@ -49,7 +49,7 @@ import {
   Sun,
   type LucideIcon,
 } from 'lucide-react';
-import type { ComponentReference, Snippet } from '../../api/types';
+import type { AssetDetail, AssetInfo } from '../../api/assets';
 import { ModelProviderIcon } from '../../components/ui/ModelProviderIcon';
 import { useComponentStore } from '../../stores/componentStore';
 import { useSnippetStore } from '../../stores/snippetStore';
@@ -388,10 +388,10 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     const hasConfiguredCandidates = trigger?.kind === 'command'
       ? commandLevel === 'root' || commandOptions.length > 0
       : trigger?.kind === 'component'
-      ? components.some((component) => !component.disabled && component.content_state === 'ready')
+      ? components.some((component) => component.enabled)
       : trigger?.kind === 'page'
         ? pages.length > 0
-        : snippets.some((snippet) => !snippet.disabled && snippet.content_state === 'ready');
+        : snippets.some((snippet) => snippet.enabled);
 
     const updateTrigger = useCallback(() => {
       const editor = editorRef.current;
@@ -590,7 +590,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       onChange(plainText);
     };
 
-    const applySnippet = (snippet: Snippet) => {
+    const applySnippet = (snippet: AssetDetail) => {
       const editor = editorRef.current;
       if (!editor || !trigger) return;
       const start = pointAtOffset(editor, trigger.start);
@@ -619,7 +619,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       editor.focus();
     };
 
-    const applyComponent = (component: ComponentReference) => {
+    const applyComponent = (component: AssetInfo) => {
       const editor = editorRef.current;
       if (!editor || !trigger || (trigger.kind !== 'component' && trigger.kind !== 'summary')) return;
       const start = pointAtOffset(editor, trigger.start);
@@ -742,8 +742,8 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       if (row < 0) return; // 空列：Enter 无效
       const kind = SUMMARY_COLUMNS[summaryCol].kind;
       if (kind === 'page') applyPage(column[row] as PageMentionCandidate);
-      else if (kind === 'component') applyComponent(column[row] as ComponentReference);
-      else applySnippet(column[row] as Snippet);
+      else if (kind === 'component') applyComponent(column[row] as AssetInfo);
+      else applySnippet(column[row] as AssetDetail);
     };
 
     const handleInput = (_event: FormEvent<HTMLDivElement>) => {
@@ -857,9 +857,9 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
             return;
           }
           event.preventDefault();
-          if (trigger.kind === 'component') applyComponent(candidate as ComponentReference);
+          if (trigger.kind === 'component') applyComponent(candidate as AssetInfo);
           else if (trigger.kind === 'page') applyPage(candidate as PageMentionCandidate);
-          else applySnippet(candidate as Snippet);
+          else applySnippet(candidate as AssetDetail);
           return;
         }
         if (event.key === 'Escape') {
@@ -884,27 +884,27 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       requestAnimationFrame(updateTrigger);
     };
 
-    const summaryCellData = (colIndex: number, item: PageMentionCandidate | ComponentReference | Snippet) => {
+    const summaryCellData = (colIndex: number, item: PageMentionCandidate | AssetInfo | AssetDetail) => {
       const kind = SUMMARY_COLUMNS[colIndex].kind;
       if (kind === 'page') {
         const page = item as PageMentionCandidate;
         return { key: page.slideId, name: pageDisplayName(page), desc: page.keyMessage.trim() };
       }
       if (kind === 'component') {
-        const component = item as ComponentReference;
+        const component = item as AssetInfo;
         return { key: component.id, name: component.name, desc: component.description };
       }
-      const snippet = item as Snippet;
+      const snippet = item as AssetDetail;
       return { key: snippet.id, name: snippet.name, desc: snippet.description };
     };
 
     const summaryColumnEmptyText = (colIndex: number) => {
       const kind = SUMMARY_COLUMNS[colIndex].kind;
       const configured = kind === 'component'
-        ? components.some((component) => !component.disabled && component.content_state === 'ready')
+        ? components.some((component) => component.enabled)
         : kind === 'page'
           ? pages.length > 0
-          : snippets.some((snippet) => !snippet.disabled && snippet.content_state === 'ready');
+          : snippets.some((snippet) => snippet.enabled);
       if (!configured) return '暂无配置';
       return kind === 'component' ? '没有匹配的组件' : kind === 'page' ? '没有匹配的页面' : '没有匹配的短语';
     };
@@ -990,8 +990,8 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                           onMouseDown={(event) => {
                             event.preventDefault();
                             if (column.kind === 'page') applyPage(item as PageMentionCandidate);
-                            else if (column.kind === 'component') applyComponent(item as ComponentReference);
-                            else applySnippet(item as Snippet);
+                            else if (column.kind === 'component') applyComponent(item as AssetInfo);
+                            else applySnippet(item as AssetDetail);
                           }}
                           className={`grid w-full grid-cols-[20px_minmax(0,1fr)] items-center gap-2 rounded-md px-2 py-1.5 text-left ${
                             isActiveCell ? 'ui-highlighted' : ''
@@ -1292,8 +1292,8 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
           spellCheck={false}
           onFocus={() => {
 				onFocusChange?.(true);
-            void loadSnippets().catch(() => undefined);
-            void loadComponents().catch(() => undefined);
+            void loadSnippets(true).catch(() => undefined);
+            void loadComponents(true).catch(() => undefined);
             updateTrigger();
           }}
 			onBlur={() => {

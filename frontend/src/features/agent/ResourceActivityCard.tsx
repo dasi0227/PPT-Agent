@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from 'react';
-import { repositoriesApi } from '../../api/repositories';
+import { assetsApi } from '../../api/assets';
 import { ComponentPreview } from '../repository/ComponentPreview';
 import { LongContent } from './LongContent';
 import { MarkdownMessage } from './MarkdownMessage';
@@ -30,24 +30,8 @@ export function ResourceActivityCard({ resource }: { resource: Resource }) {
     let canceled = false;
     setResult(undefined);
     const load = async (): Promise<ResourceContent> => {
-      if (kind === 'skill') {
-        const document = await repositoriesApi.getSkill(id);
-        return {
-          identity,
-          description: document.description,
-          content: document.content_state === 'ready' ? document.content : undefined,
-          error: document.content_state !== 'ready' || document.content === undefined
-            ? document.content_error || '技能内容不可用。' : undefined,
-        };
-      }
-      const document = await repositoriesApi.getComponent(id);
-      return {
-        identity,
-        description: document.description,
-        content: document.content_state === 'ready' ? document.html : undefined,
-        error: document.content_state !== 'ready' || document.html === undefined
-          ? document.content_error || '组件内容不可用。' : undefined,
-      };
+      const asset = await assetsApi.detail(id);
+      return { identity, description: asset.description, content: asset.content };
     };
     void load().then(value => {
       if (!canceled) setResult(value);
@@ -55,7 +39,7 @@ export function ResourceActivityCard({ resource }: { resource: Resource }) {
       if (!canceled) setResult({ identity, description: '', error: cause instanceof Error ? cause.message : '资源加载失败。' });
     });
     return () => { canceled = true; };
-  }, [identity, kind, id, attempt]);
+  }, [identity, id, attempt]);
 
   const current = result?.identity === identity ? result : undefined;
   // Skill metadata belongs to the card header; render only its Markdown body.

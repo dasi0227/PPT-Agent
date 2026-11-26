@@ -21,7 +21,7 @@ import { hasRenderedHTML, orderedSlides } from '../deck/selectors';
 import { useComposerStore } from '../../stores/composerStore';
 import { useThreadStore } from '../../stores/threadStore';
 import { useActiveSession, useActiveThreadId } from '../agent/useActiveSession';
-import { showGlobalWarning } from '../../stores/toastStore';
+import { showGlobalError, showGlobalWarning } from '../../stores/toastStore';
 import type { DOMSelection } from '../../api/types';
 import { ExportProgressDialog } from '../export/ExportProgressDialog';
 import { useExportStore } from '../../stores/exportStore';
@@ -252,7 +252,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
         : currentHasHTML ? currentSlide.html_path : undefined
       : undefined;
   const externalOpenUrl = projectId && snapshot?.project_id === projectId && previewFilename
-    ? '/api/files/open?' + new URLSearchParams({ project_id: projectId, path: previewFilename })
+    ? '/api/files/open?' + new URLSearchParams({ project_id: projectId, file_name: previewFilename })
     : undefined;
   const runtimeSlides = useMemo<RuntimeSlide[]>(() => {
     return slides.slice(Math.max(0, safePage - 2), safePage + 3).flatMap((slide) => {
@@ -297,7 +297,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
     let threadId = activeThreadId;
     if (!threadId) {
       try { threadId = await ensureActiveThread(projectId); } catch {
-        showGlobalWarning('无法创建会话，请重试。');
+        showGlobalError('无法创建会话，请重试。');
         const retry = selectionMode; setSelectionMode('none'); window.setTimeout(() => setSelectionMode(retry), 0);
         return;
       }
@@ -313,7 +313,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
       return;
     }
     if (selections.length >= 8) {
-      showGlobalWarning('每条消息最多添加 8 个 DOM 标记。');
+      showGlobalWarning('每条消息最多添加 8 个 DOM 标记，请减少标记后重试。');
       const retry = selectionMode; setSelectionMode('none'); window.setTimeout(() => setSelectionMode(retry), 0);
       return;
     }

@@ -2,7 +2,7 @@ import { compareRevision } from '../api/session';
 import { generateNameCommand } from './textCommandStore';
 import { create } from 'zustand';
 import { Thread, ThreadNamingAction } from '../api/types';
-import { threadsApi } from '../api/threads';
+import { threadsApi, type ProjectSession } from '../api/threads';
 import { useRunStore } from './runStore';
 import { newClientIdentity } from '../lib/clientIdentity';
 import { isProjectDeleted, isThreadDeleted, markThreadDeleted, restoreThread } from './deletedTargets';
@@ -12,7 +12,7 @@ import { rememberDeletion, recoverDeletionNotices } from './deletionStore';
 
 interface RenamePanelTarget { projectId: string; threadId: string }
 
-type ListedThread = Pick<Thread, 'id' | 'title' | 'updated_at'> & Partial<Thread>;
+type ListedThread = ProjectSession & Partial<Thread>;
 const threadListVersions = new Map<string, number>();
 
 interface ThreadState {
@@ -94,20 +94,14 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
   },
 
   createThread: async (projectId, title) => {
-    const thread = await threadsApi.create(projectId, title);
-    if (isProjectDeleted(projectId)) { markThreadDeleted(thread.id); return thread.id; }
-    set((state) => ({
-      threadsByProjectId: {
-        ...state.threadsByProjectId,
-        [projectId]: [...(state.threadsByProjectId[projectId] || []), thread],
-      },
-      openThreadIdsByProjectId: {
-        ...state.openThreadIdsByProjectId,
-        [projectId]: withOpen(state.openThreadIdsByProjectId[projectId] || [], thread.id),
-      },
-      activeThreadIdByProjectId: { ...state.activeThreadIdByProjectId, [projectId]: thread.id },
-    }));
-    return thread.id;
+    const { id } = await threadsApi.create(projectId, title);
+    if (isProjectDeleted(projectId)) {
+      markThreadDeleted(id);
+      return id;
+    }
+    get().setActiveThread(projectId, id);
+    await get().loadThreads(projectId);
+    return id;
   },
 
 	openRenamePanel: (projectId, threadId) => set({ renamePanelTarget: { projectId, threadId }, suggestPanelTarget: null }),
@@ -118,7 +112,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
 		const updated = await threadsApi.setAutoSuggest(threadId, enabled);
 		set(state => ({ threadsByProjectId: { ...state.threadsByProjectId,
 			[projectId]: (state.threadsByProjectId[projectId] ?? []).map(thread =>
-				thread.id === threadId && (!thread.naming_revision || compareRevision(updated.naming_revision, thread.naming_revision) >= 0) ? updated : thread),
+				thread.id === threadId && (!thread.naming_revision || compareRevision(updated.naming_revision, thread.naming_revision) >= 0) ? { ...thread, ...updated } : thread),
 		} }));
 	},
 
@@ -127,7 +121,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
       threadsByProjectId: {
         ...state.threadsByProjectId,
         [projectId]: (state.threadsByProjectId[projectId] ?? []).map(thread =>
-          thread.id === threadId && (!thread.naming_revision || compareRevision(updated.naming_revision, thread.naming_revision) >= 0) ? updated : thread),
+          thread.id === threadId && (!thread.naming_revision || compareRevision(updated.naming_revision, thread.naming_revision) >= 0) ? { ...thread, ...updated } : thread),
       },
     }));
     if (action === 'generate') {
@@ -214,7 +208,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
       get().setActiveThread(projectId, threads[0].id);
       return threads[0].id;
     }
-    return await get().createThread(projectId, ''); // title empty will be defaulted by backend
+    return get().createThread(projectId);
   },
 
   getActiveThreadId: (projectId) => get().activeThreadIdByProjectId[projectId] ?? null,

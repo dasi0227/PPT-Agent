@@ -1,7 +1,7 @@
 import React from 'react';
 import { Check, Cpu } from 'lucide-react';
 import { ModelProviderIcon } from '../../components/ui/ModelProviderIcon';
-import type { LLMProfile } from '../../api/types';
+import type { ModelConfig } from '../../api/settings';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,9 +11,8 @@ import {
 } from '../../components/ui/dropdown-menu';
 
 interface ModelSelectorProps {
-  profiles: LLMProfile[];
+  profiles: ModelConfig[];
   value: string | null;
-  requiresVision: boolean;
   loading: boolean;
   disabled?: boolean;
   onChange: (name: string) => void;
@@ -22,7 +21,6 @@ interface ModelSelectorProps {
 export const ModelSelector: React.FC<ModelSelectorProps> = ({
   profiles,
   value,
-  requiresVision,
   loading,
   disabled = false,
   onChange,
@@ -36,7 +34,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         ? '暂无可用模型'
         : '选择模型';
   const title = selected
-      ? `${selected.name} · ${selected.model}${selected.capabilities.vision ? ' · 支持页面观察' : ''}`
+      ? `${selected.name} · ${selected.model}`
       : '选择本次任务使用的模型';
 
   return (
@@ -56,20 +54,17 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         <DropdownMenuContent side="top" align="end" className="max-h-64 w-[196px] overflow-y-auto p-1">
           <DropdownMenuLabel className="px-2 pb-2 text-[11px] font-normal text-text-600">模型选择</DropdownMenuLabel>
           {profiles.map((profile) => {
-            const optionDisabled = requiresVision && !profile.capabilities.vision;
             const active = profile.name === value;
             return (
               <DropdownMenuItem
-                key={profile.name}
+                key={profile.id}
                 role="menuitemradio"
                 aria-checked={active}
                 aria-label={`模型：${profile.name}`}
-                disabled={optionDisabled}
                 onSelect={() => onChange(profile.name)}
                 className={[
                   'flex items-center gap-2 rounded-sm px-2 py-1.5 text-xs',
                   active ? 'ui-selected' : 'text-text-600',
-                  optionDisabled ? 'cursor-not-allowed opacity-45' : '',
                 ].join(' ')}
               >
                 <ModelProviderIcon provider={profile.provider} className="h-4 w-4 shrink-0 object-contain" />

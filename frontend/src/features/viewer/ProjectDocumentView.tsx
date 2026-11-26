@@ -42,7 +42,7 @@ function MissingDocument({ snapshot, document, blocked, notice }: { snapshot: Pr
           },
         });
       } else {
-        await store.saveProjectFile(snapshot.project_id, null, { part: 'outline', content: { chapters: [] } });
+        await store.saveProjectFile(snapshot.project_id, null, { part: 'outline', content: { slides: [], chapters: [] } });
       }
     } catch (error) {
       await useProjectStore.getState().loadProjectContent(snapshot.project_id);

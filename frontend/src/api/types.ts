@@ -27,6 +27,7 @@ export type SlidePurpose =
   | 'other';
 
 export interface Outline {
+  slides: OutlineSlideNode[];
   chapters: OutlineChapter[];
 }
 
@@ -372,7 +373,7 @@ export interface ProjectContentSnapshot {
   outline: Outline;
   constraint: Constraint | null;
   slides_by_id: Record<string, {
-    spec_state: 'pending' | 'ready' | 'invalid'; spec: SlideSpec | null; html_state: HTMLState;
+    spec_state: 'pending' | 'ready'; spec: SlideSpec | null; html_state: HTMLState;
     html_hash: string; html: string | null;
   }>;
 }

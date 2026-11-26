@@ -51,7 +51,7 @@ async function settings(page) {
   assert.deepEqual(Object.keys(created.body), ['id']);
   const model = await get(page, '/settings/models/' + created.body.id);
   assert.equal(model.provider, 'gpt');
-  assert.equal(model.base_url, 'https://example.invalid/v1');
+  assert.equal(model.base_url, 'https://example.invalid/v1///');
   assert.ok(!('key' in model));
   await settingsLink(page, '模型分配').click();
   const routed = await action(page, '/settings/routes/save', () => choice(page, '主路备用模型', name));

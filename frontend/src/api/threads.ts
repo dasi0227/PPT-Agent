@@ -1,10 +1,10 @@
-import { fetchClient } from './client';
+import { fetchClient, postJson } from './client';
 import type { DeletionResponse } from './deletions';
 import { parseCommitReceipt } from './session';
 import { runCommand } from './commands';
 import { CompactContextResponse, ContextWindowSnapshot, Thread, ThreadNamingAction } from './types';
 
-interface ProjectSession {
+export interface ProjectSession {
   id: string;
   title: string;
   updated_at: number;
@@ -24,10 +24,7 @@ export const threadsApi = {
   list: (projectId: string) => fetchClient<{ items: ProjectSession[] }>(
     `/projects/${encodeURIComponent(projectId)}/sessions`, { reportError: false, cache: 'no-store' },
   ).then(response => response.items),
-  create: (projectId: string, title?: string) => fetchClient<Thread>(`/projects/${projectId}/threads`, {
-    method: 'POST',
-    body: JSON.stringify({ title: title || '' })
-  }),
+  create: (project_id: string, title?: string) => postJson<{ id: string }>('/sessions/create', { project_id, title }),
   clearPlan: (id: string, sceneRevision: string, planRevision: string) => fetchClient<import('./session').CommitReceipt>(`/threads/${id}/plan`, { method: 'DELETE', body: JSON.stringify({ scene_revision: sceneRevision, plan_revision: planRevision, request_key: crypto.randomUUID() }) }).then(parseCommitReceipt),
   contextWindow: (threadId: string, modelProfileName: string, sceneRevision: string, signal?: AbortSignal) =>
     fetchClient<ContextWindowSnapshot>(

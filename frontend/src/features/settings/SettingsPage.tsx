@@ -206,7 +206,7 @@ export function SettingsPage() {
       name: edit.name,
       protocol: edit.protocol,
       provider: edit.provider,
-      base_url: row.saved && edit.base_url === row.base_url ? row.base_url : edit.base_url.replace(/([^/])\/+$/u, '$1'),
+      base_url: edit.base_url,
       model: edit.model,
     };
     await persist(async () => {

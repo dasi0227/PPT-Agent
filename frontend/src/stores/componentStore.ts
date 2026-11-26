@@ -1,17 +1,16 @@
 import { create } from 'zustand';
-import { repositoriesApi } from '../api/repositories';
-import type { ComponentReference } from '../api/types';
+import { assetsApi, type AssetInfo } from '../api/assets';
 
 interface ComponentState {
-  components: ComponentReference[];
+  components: AssetInfo[];
   loading: boolean;
   loaded: boolean;
   error: string;
   version: number;
-  load: (force?: boolean) => Promise<ComponentReference[]>;
+  load: (force?: boolean) => Promise<AssetInfo[]>;
 }
 
-let loadPromise: Promise<ComponentReference[]> | null = null;
+let loadPromise: Promise<AssetInfo[]> | null = null;
 
 export const useComponentStore = create<ComponentState>((set, get) => ({
   components: [],
@@ -23,9 +22,9 @@ export const useComponentStore = create<ComponentState>((set, get) => ({
     if (!force && get().loaded) return get().components;
     if (loadPromise) return loadPromise;
     set({ loading: true, error: '' });
-    loadPromise = repositoriesApi.listComponents()
+    loadPromise = assetsApi.list('component', '')
       .then((response) => {
-        const components = response.components.filter((component) => !component.disabled && component.content_state === 'ready');
+        const components = response.items.filter(component => component.enabled);
         set((state) => ({
           components,
           loading: false,

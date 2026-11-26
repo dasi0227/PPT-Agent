@@ -11,8 +11,8 @@ export function applicationName(path: string) {
 }
 export function fileActionLabel(value: FileSettings | null, url: string) {
   if (!value) return '打开文件';
-  const path = new URL(url, window.location.origin).searchParams.get('path') ?? '';
-  let method = /\.json$/i.test(path) ? value.json_open : /\.html?$/i.test(path) ? value.html_open : value.default_open;
+  const fileName = new URL(url, window.location.origin).searchParams.get('file_name') ?? '';
+  let method = /\.json$/i.test(fileName) ? value.json_open : /\.html$/i.test(fileName) ? value.html_open : value.default_open;
   if (method === 'inherit') method = value.default_open;
   return `使用${method === 'system' ? '系统默认应用' : applicationName(method)}打开`;
 }
@@ -23,6 +23,6 @@ export const filesApi = {
   open: (url: string) => {
     const link = new URL(url, location.origin);
     if (link.origin !== location.origin || link.pathname !== '/api/files/open') return Promise.reject(new Error('文件链接已失效，请刷新页面后重试'));
-    return postJson<void>('/files/open', { project_id: link.searchParams.get('project_id'), path: link.searchParams.get('path') });
+    return postJson<void>('/files/open', { project_id: link.searchParams.get('project_id'), file_name: link.searchParams.get('file_name') });
   },
 };

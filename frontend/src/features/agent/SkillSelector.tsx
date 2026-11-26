@@ -1,6 +1,6 @@
 import React from 'react';
 import { BookOpenText, Check } from 'lucide-react';
-import type { Skill } from '../../api/types';
+import type { AssetInfo } from '../../api/assets';
 import { cn } from '../../lib/utils';
 import { MAX_SELECTED_SKILLS } from '../../stores/composerStore';
 import {
@@ -12,7 +12,7 @@ import {
 } from '../../components/ui/dropdown-menu';
 
 interface SkillSelectorProps {
-  skills: Skill[];
+  skills: AssetInfo[];
   selectedIds: string[];
   loading: boolean;
   disabled?: boolean;

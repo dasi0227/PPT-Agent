@@ -1,4 +1,5 @@
-import type { ComponentReference, HTMLState, Snippet } from '../../api/types';
+import type { HTMLState } from '../../api/types';
+import type { AssetDetail, AssetInfo } from '../../api/assets';
 import type { WorkspaceActionId } from '../../lib/useWorkspaceAction';
 
 export const MAX_COMPONENT_MENTIONS = 8;
@@ -208,15 +209,15 @@ function includes(value: string, query: string): boolean {
   return value.toLocaleLowerCase().includes(query.toLocaleLowerCase());
 }
 
-export function matchSnippets(snippets: Snippet[], query: string, tagLabels: Readonly<Record<string, string>> = {}): Snippet[] {
-  const enabledSnippets = snippets.filter((snippet) => !snippet.disabled && snippet.content_state === 'ready');
+export function matchSnippets(snippets: AssetDetail[], query: string, tagLabels: Readonly<Record<string, string>> = {}): AssetDetail[] {
+  const enabledSnippets = snippets.filter((snippet) => snippet.enabled);
   return enabledSnippets
     .map((snippet) => {
       const rank = !query
         ? 0
         : includes(snippet.name, query)
         ? 0
-        : snippet.tags.some((tag) => includes(tag, query) || includes(tagLabels[tag] ?? '', query))
+        : snippet.tag_ids.some((tag) => includes(tag, query) || includes(tagLabels[tag] ?? '', query))
           ? 1
           : includes(snippet.description, query)
             ? 2
@@ -235,15 +236,15 @@ export function matchSnippets(snippets: Snippet[], query: string, tagLabels: Rea
     .map(({ snippet }) => snippet);
 }
 
-export function matchComponents(components: ComponentReference[], query: string, tagLabels: Readonly<Record<string, string>> = {}): ComponentReference[] {
-  const enabled = components.filter((component) => !component.disabled && component.content_state === 'ready');
+export function matchComponents(components: AssetInfo[], query: string, tagLabels: Readonly<Record<string, string>> = {}): AssetInfo[] {
+  const enabled = components.filter((component) => component.enabled);
   return enabled
     .map((component) => {
       const rank = !query
         ? 0
         : includes(component.name, query) || includes(component.id, query)
           ? 0
-          : component.tags.some((tag) => includes(tag, query) || includes(tagLabels[tag] ?? '', query))
+          : component.tag_ids.some((tag) => includes(tag, query) || includes(tagLabels[tag] ?? '', query))
             ? 1
             : includes(component.description, query)
               ? 2

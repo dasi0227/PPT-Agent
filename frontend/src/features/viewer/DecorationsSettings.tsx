@@ -8,7 +8,7 @@ import { floatingPanelTitleClassName } from '../../components/ui/dropdown-styles
 import { Button, IconButton } from '../../components/ui/primitives';
 import { cn } from '../../lib/utils';
 import { defaultPositions, useProjectStore } from '../../stores/projectStore';
-import { showGlobalError } from '../../stores/toastStore';
+import { showGlobalError, showGlobalWarning } from '../../stores/toastStore';
 import { DecorationPlacementEditor } from './DecorationPlacementEditor';
 import { useAuthoringBlock } from './useAuthoringBlock';
 
@@ -65,7 +65,7 @@ export function DecorationsSettings({ projectId }: { projectId: string | null })
       return true;
     } catch (error) {
       if (!(error instanceof RequestCanceledError)) {
-        showGlobalError(error instanceof Error ? error.message : '页面装饰保存失败');
+        showGlobalError(error instanceof Error ? error.message : '页面装饰保存失败，请重试');
         if (projectId) {
           try {
             await loadAppearance(projectId);
@@ -83,17 +83,17 @@ export function DecorationsSettings({ projectId }: { projectId: string | null })
   const uploadFiles = (files: File[]) => {
     if (!projectId || disabled || files.length === 0) return;
     if (files.length !== 1) {
-      showGlobalError('请选择一张 PNG 图片');
+      showGlobalWarning('请选择一张 PNG 图片');
       return;
     }
     const file = files[0];
     const supported = file.type === 'image/png' || (!file.type && /\.png$/i.test(file.name));
     if (!supported) {
-      showGlobalError('仅支持 PNG 图片');
+      showGlobalWarning('仅支持 PNG 图片，请重新选择');
       return;
     }
     if (file.size > 2_000_000) {
-      showGlobalError('图片超过 2 MB，请压缩后重试');
+      showGlobalWarning('图片超过 2 MB，请压缩后重试');
       return;
     }
     void save('upload', () => uploadLogo(projectId, file));
