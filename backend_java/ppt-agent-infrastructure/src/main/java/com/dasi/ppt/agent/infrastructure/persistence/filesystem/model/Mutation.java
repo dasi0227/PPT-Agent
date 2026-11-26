@@ -18,5 +18,5 @@ public final class Mutation {
     private String requestHash;
     private String sessionId;
     private String baseRevision;
-    private List<FileChange> files;
+    private List<FileChange> fileChanges;
 }

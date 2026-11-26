@@ -226,8 +226,6 @@
 - 同一会话最多有一个非终态 Run，与该会话的手动压缩互斥。同项目不同会话可以并行。
 - 项目正在历史切换、Git 提交或执行排他命令时拒绝新开。
 - `message_id` 由客户端生成，全局唯一。新开和追加各使用独立的消息 ID。
-- 同一会话同参重发返回原 Run ID，追加入口关闭后仍可重发。原 Run 已被回退移除时返回 `RUN_NOT_FOUND`。
-- 已使用的 `message_id` 用于其他会话或不同请求时返回 `IDEMPOTENCY_CONFLICT`。
 - `text` 去首尾空白后为空时，有 DOM 选区须至少一条选区注释非空，无 DOM 选区须附图片。
 - 追加仅接受图片和 DOM 引用。附件须属于当前项目，引用的幻灯片和 DOM 源码基准须有效。
 - `scope=null` 授权全项目。范围对象只含 `current_slide_id`、`slide_ids`、`chapter_ids`、`section_ids` 之一。
@@ -247,7 +245,6 @@
 - `commands/append` 首次提交 `session_id`、`type`，仅 `polish` 另传 `text`。
 - 修订仅支持 `polish`、`handoff`，改传 `base_id` 和 `feedback`。
 - 两种形式均须 `request_id`，每次执行有独立 ID，修订沿用 `operation_id`。
-- 同会话内同一 `request_id`、同参重发返回原执行 ID。异参返回 `IDEMPOTENCY_CONFLICT`，原执行已被回退移除时返回 `COMMAND_NOT_FOUND`。
 - 修订的 `base_id` 须指向最近成功执行。该执行不存在时返回 `COMMAND_NOT_FOUND`，已过期时返回 `STALE_BASE`。
 - 同一操作同时只允许一个活动执行。
 - 进度和取消均使用单次执行 ID。取消可重复，最终状态以命令详情为准。

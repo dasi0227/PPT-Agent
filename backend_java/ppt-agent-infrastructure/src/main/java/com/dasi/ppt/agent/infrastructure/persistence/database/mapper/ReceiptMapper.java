@@ -7,7 +7,7 @@ public interface ReceiptMapper {
 
     void deleteByProject(String projectId);
 
-    void insertManualReceipt(ReceiptPo receipt);
+    void insertReceipt(ReceiptPo receipt);
 
     String findManualRequestHash(@Param("projectId") String projectId, @Param("operationId") String operationId);
 

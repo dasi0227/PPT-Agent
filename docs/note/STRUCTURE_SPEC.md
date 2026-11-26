@@ -22,7 +22,7 @@
 - 单独读取项目 Logo 时，Mapper 通过 SQLite JDBC 的 `getBytes()` 读取 BLOB 并返回 `byte[]`。
 - Mapper XML 位于 `ppt-agent-infrastructure/src/main/resources/mapper/`。
 - SQLite `TEXT` 列在 PO、Mapper 参数及结果映射中统一使用 `String`，包括状态、类型、模式和协议。
-- `infrastructure/persistence/database/ReceiptType` 定义数据库凭据类型 `create_run / create_command / agent / manual`，由仓储与 `ReceiptPo.type` 的字符串值相互转换。[凭据类型](DATABASE_SPEC.md#receipts)
+- `infrastructure/persistence/database/ReceiptType` 定义数据库凭据类型 `agent / manual`，由仓储与 `ReceiptPo.type` 的字符串值相互转换。[凭据类型](DATABASE_SPEC.md#receipts)
 - JSON 存储列按 `String` 读写，仓储负责与领域对象转换。
 - `infrastructure/persistence/filesystem/FileStorer` 负责文件的读取、仅新建、原子替换、列举和删除，按数据库提交结果处理项目创建、删除标记。
 - `domain/shared/service/PathResolver` 统一定位五类文稿文件、文稿变更日志目录及文件、项目创建和删除标记。`DeckService` 直接调用 `PathResolver` 的 `metaPath`、`constraintPath`、`outlinePath`、`specPath`、`htmlPath`。前三个方法只需项目 ID，两个页面路径还需页面 ID。

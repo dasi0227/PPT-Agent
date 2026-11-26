@@ -540,7 +540,7 @@
               <td class="nullable">否</td>
               <td>无</td>
               <td>消息的全局唯一标识。</td>
-              <td class="decision">唯一；重复提交复用原 ID。</td>
+              <td class="decision">主键。</td>
             </tr>
             <tr id="messages-session-id">
               <th scope="row"><code>session_id</code></th>
@@ -820,9 +820,9 @@
         <div>
           <div class="table-heading">
             <h2 id="receipts-heading"><code>receipts</code></h2>
-            <span class="table-label">请求处理凭据</span>
+            <span class="table-label">文稿文件提交凭据</span>
           </div>
-          <p class="table-purpose">一行记录一次成功受理或提交的凭据。</p>
+          <p class="table-purpose">一行记录一次已提交的文稿文件修改。</p>
         </div>
         <span class="status">已确定</span>
       </header>
@@ -849,16 +849,16 @@
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
               <td>无</td>
-              <td>需要识别重复提交的操作类别。</td>
-              <td class="decision"><code>create_run / create_command / agent / manual</code>。</td>
+              <td>文稿文件修改的来源。</td>
+              <td class="decision"><code>agent / manual</code>。</td>
             </tr>
             <tr id="receipts-owner-id">
               <th scope="row"><code>owner_id</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
               <td>无</td>
-              <td>本次受理或文件提交所属的会话、Run 或项目。</td>
-              <td class="decision"><code>create_run / create_command</code> 用会话 ID，<code>agent</code> 用 Run ID，<code>manual</code> 用项目 ID。</td>
+              <td>本次文件提交所属的 Run 或项目。</td>
+              <td class="decision"><code>agent</code> 用 Run ID，<code>manual</code> 用项目 ID。</td>
             </tr>
             <tr id="receipts-request-id">
               <th scope="row"><code>request_id</code></th>
@@ -866,23 +866,15 @@
               <td class="nullable">否</td>
               <td>无</td>
               <td>一次请求的稳定提交标识。</td>
-              <td class="decision"><code>create_run</code> 用初始消息的稳定提交标识，<code>agent</code> 用所属 Run 内的 <code>tool_call_id</code>，<code>manual</code> 用后端操作 ID。与 <code>type、owner_id</code> 组合唯一。</td>
+              <td class="decision"><code>agent</code> 用所属 Run 内的 <code>tool_call_id</code>，<code>manual</code> 用后端操作 ID。与 <code>type、owner_id</code> 组合唯一。</td>
             </tr>
             <tr id="receipts-request-hash">
               <th scope="row"><code>request_hash</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
               <td>无</td>
-              <td>原始业务参数的摘要。</td>
-              <td class="decision">按规范化的原始业务参数计算。同一请求标识对应的参数摘要须一致。</td>
-            </tr>
-            <tr id="receipts-result">
-              <th scope="row"><code>result</code></th>
-              <td><code>TEXT</code></td>
-              <td class="nullable">是</td>
-              <td><code>NULL</code></td>
-              <td>成功受理后关联的业务记录。</td>
-              <td class="decision"><code>create_run</code> 为 <code>{run_id}</code>；<code>create_command</code> 为 <code>{id}</code>；<code>agent / manual</code> 为 SQL <code>NULL</code>。</td>
+              <td>用于核对文件提交日志的摘要。</td>
+              <td class="decision">人工保存按序列化的文件变更列表计算，恢复时须与日志摘要一致。</td>
             </tr>
           </tbody>
         </table>

@@ -9,8 +9,6 @@ import lombok.Getter;
 @Getter
 @AllArgsConstructor
 public enum ReceiptType {
-    CREATE_RUN("create_run"),
-    CREATE_COMMAND("create_command"),
     AGENT("agent"),
     MANUAL("manual");
 

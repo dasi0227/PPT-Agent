@@ -86,7 +86,7 @@
 - 返回快照以 `run_id IS NULL` 标识，`session_id` 的部分唯一索引限制每个会话最多一条。
 - `session_id` 随会话级联删除。
 - `run_id` 在写入时校验 Run 归属，不设 Run 外键。回退移除 Run 后可保留其检查点，当前可回退目标只取仍在历史中的 Run。
-- 普通检查点保存 Run 开始前的业务与文件基准，在项目写锁下与 Run、首条消息和受理凭据同事务提交。
+- 普通检查点保存 Run 开始前的业务与文件基准，在项目写锁下与 Run 和首条消息同事务提交。
 - `snapshot` 保存本会话的标题、计划、消息、Run、命令和 `agent` 凭据。
 - 普通检查点和返回快照中的项目数据仅包含五类文稿文件，文件范围见[项目目录](STRUCTURE_SPEC.md#项目目录)。
 - 普通检查点另存原始输入正文、引用、初始模式、模型名和范围。
@@ -111,19 +111,16 @@
 
 ## receipts
 
-- 凭据主键为 `(type, owner_id, request_id)`，只记录成功受理或已提交的文件修改。
-- `request_hash` 使用规范化原始请求的摘要，重复校验沿用原始参数。
+- 凭据主键为 `(type, owner_id, request_id)`，只记录已提交的文稿文件修改。
+- `request_hash` 用于恢复时核对日志与凭据。人工保存按日志中序列化的文件变更列表计算摘要。
 
-| `type` | `owner_id` | `request_id` | `result` |
-|---|---|---|---|
-| `create_run` | 会话 ID | 首条消息的提交标识 | JSON 对象 `{run_id}` |
-| `create_command` | 会话 ID | 命令请求 ID | JSON 对象 `{id}` |
-| `agent` | Run ID | `tool_call_id` | SQL `NULL` |
-| `manual` | 项目 ID | 后端操作 ID | SQL `NULL` |
+| `type` | `owner_id` | `request_id` |
+|---|---|---|
+| `agent` | Run ID | `tool_call_id` |
+| `manual` | 项目 ID | 后端操作 ID |
 
 - 文件应用后，`agent` 凭据与配对的 `tool_result`（含实际差异）、检查点失效及受影响会话版本在同一事务提交。
 - 人工文件应用后，`manual` 凭据与对应业务变更在同一事务提交。
-- `create_run` 和 `create_command` 保留至所属会话删除，回退或返回时均保留原凭据。
 - `agent` 凭据随所属 Run 清理，仅随本会话历史恢复。
 - `manual` 凭据排除在历史快照之外，文件事务日志移除后可清理，项目删除时一并清理。
 - 清理文件提交凭据前，先完成对应遗留日志的恢复。

@@ -274,7 +274,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <a class="class-link" href="#class-RunService" aria-label="查看 RunService 职责">
 <text class="node-name" x="16" y="50">RunService</text>
 </a>
-<text class="node-caption" x="16" y="76">幂等受理、占用检查、固定配置</text>
+<text class="node-caption" x="16" y="76">检查占用、固定配置</text>
 </g>
 <g id="loop-settings" class="node plain" transform="translate(24 164)">
 <rect width="330" height="120" rx="10"/>
@@ -301,7 +301,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <a class="class-link" href="#class-IRunRepository" aria-label="查看 IRunRepository 职责">
 <text class="node-name" x="16" y="50">IRunRepository</text>
 </a>
-<text class="node-caption" x="16" y="76">Run、输入、检查点与凭据同事务</text>
+<text class="node-caption" x="16" y="76">Run、输入与检查点同事务</text>
 </g>
 <g id="loop-owner" class="node primary" transform="translate(465 456)">
 <rect width="310" height="94" rx="10"/>
@@ -1229,7 +1229,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <a class="class-link" href="#class-CommandService" aria-label="查看 CommandService 职责">
 <text class="node-name" x="16" y="50">CommandService</text>
 </a>
-<text class="node-caption" x="16" y="76">统一幂等受理、校验当前状态</text>
+<text class="node-caption" x="16" y="76">受理命令、校验当前状态</text>
 <text class="node-caption" x="16" y="96">处理占用、修订、取消与分支确认</text>
 </g>
 <g id="support-accept" class="node plain" transform="translate(900 124)">
@@ -1238,7 +1238,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <a class="class-link" href="#class-ICommandRepository" aria-label="查看 ICommandRepository 职责">
 <text class="node-name" x="16" y="50">ICommandRepository</text>
 </a>
-<text class="node-caption" x="16" y="76">受理凭据与执行记录同事务</text>
+<text class="node-caption" x="16" y="76">写入命令执行记录</text>
 <text class="node-caption" x="16" y="96">修订沿用操作身份，保留旧产物</text>
 </g>
 <g id="support-handler" class="node primary" transform="translate(460 260)">
@@ -1856,7 +1856,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>首条指令或追加输入；引用、当前授权与待答状态</td>
 <td>受理回执、已处理输入与授权状态；输入边界控制结果</td>
-<td>校验消息幂等、引用与输入开关，受理落库后在安全边界消费队列；发送前检查是否有新输入待处理。输入开始处理时调用 beforeInputProcessed，应用 Result 并保存处理状态。输入出队、授权变化及实际接入对话由本类负责。按主流程要求封闭或恢复受理；追加授权取并集，引用不扩大范围，首条输入被拒后关闭入口，未处理输入留在原 Run 历史。</td>
+<td>校验消息引用与输入开关，受理落库后在安全边界消费队列；发送前检查是否有新输入待处理。输入开始处理时调用 beforeInputProcessed，应用 Result 并保存处理状态。输入出队、授权变化及实际接入对话由本类负责。按主流程要求封闭或恢复受理；追加授权取并集，引用不扩大范围，首条输入被拒后关闭入口，未处理输入留在原 Run 历史。</td>
 </tr>
 </tbody>
 <tbody>
@@ -2166,7 +2166,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>手动或 Hook 发起的命令、修订与取消请求；任务上下文</td>
 <td>命令受理结果、独立执行记录与实际产物</td>
-<td>统一处理幂等受理、当前状态与占用校验、修订、调度及取消，按类型选择 CommandHandler。命令受理时固定写回依据；提交时在同一事务校验并写入产物、关联变更与终态。过期的 rename / suggest 记 cancelled 且 result 为空，再通知；保留每次执行及最近成功产物。自动发起条件由 AutoRenameHook / AutoSuggestHook 判断。</td>
+<td>统一处理命令受理、当前状态与占用校验、修订、调度及取消，按类型选择 CommandHandler。命令受理时固定写回依据；提交时在同一事务校验并写入产物、关联变更与终态。过期的 rename / suggest 记 cancelled 且 result 为空，再通知；保留每次执行及最近成功产物。自动发起条件由 AutoRenameHook / AutoSuggestHook 判断。</td>
 </tr>
 <tr id="class-CommandHandler">
 <th scope="row">
@@ -2443,7 +2443,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>Run 受理、输入处理、模型 / 工具消息或收尾业务变更</td>
 <td>持久结果、消息或一致快照</td>
-<td>由 <code>infrastructure/repository/RunRepository</code> 实现。负责 Run 复合提交与查询：起始快照、首条输入、凭据一起受理；对话用量去重累计；最终回复、净差异与终态一起保存；输入受理后固定归属与序号。失败、取消或中断保留已确认修改与已发生用量。不是逐表 CRUD 包装。</td>
+<td>由 <code>infrastructure/repository/RunRepository</code> 实现。负责 Run 复合提交与查询：一并提交起始快照与首条输入；对话用量去重累计；最终回复、净差异与终态一起保存；输入受理后固定归属与序号。失败、取消或中断保留已确认修改与已发生用量。不是逐表 CRUD 包装。</td>
 </tr>
 <tr id="class-ISessionRepository">
 <th scope="row">
@@ -2461,7 +2461,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>命令受理、修订、取消或完成业务变更</td>
 <td>单次命令记录、成功产物与执行状态</td>
-<td>由 <code>infrastructure/repository/CommandRepository</code> 实现。保证受理幂等、同操作占用与命令终态；命令产物及关联会话状态一并提交。compact 的摘要写入、上下文位置调整与 done 同事务保存。</td>
+<td>由 <code>infrastructure/repository/CommandRepository</code> 实现。核对同操作占用并保存命令终态；命令产物及关联会话状态一并提交。compact 的摘要写入、上下文位置调整与 done 同事务保存。</td>
 </tr>
 <tr id="class-ICheckpointRepository">
 <th scope="row">

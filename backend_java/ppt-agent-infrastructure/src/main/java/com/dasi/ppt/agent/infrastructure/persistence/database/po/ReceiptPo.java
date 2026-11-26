@@ -17,5 +17,4 @@ public class ReceiptPo {
     private String ownerId;
     private String requestId;
     private String requestHash;
-    private String result;
 }

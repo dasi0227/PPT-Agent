@@ -5,11 +5,9 @@ import org.springframework.boot.availability.ApplicationAvailability;
 import org.springframework.boot.availability.ReadinessState;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
-import org.springframework.http.CacheControl;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.MediaTypeFactory;
-import org.springframework.http.ResponseEntity;
+import org.springframework.dao.DataAccessException;
+import org.springframework.http.*;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.util.DigestUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,14 +24,21 @@ public class SystemController {
 
     private final ApplicationAvailability availability;
     private final ResourceLoader resourceLoader;
+    private final JdbcTemplate jdbcTemplate;
     private final Map<String, String> etags = new ConcurrentHashMap<>();
 
     @GetMapping("/healthz")
     public ResponseEntity<Void> health() {
-        if (availability.getReadinessState() == ReadinessState.ACCEPTING_TRAFFIC) {
-            return ResponseEntity.ok().build();
+        if (availability.getReadinessState() != ReadinessState.ACCEPTING_TRAFFIC) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         }
-        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+
+        try {
+            jdbcTemplate.queryForObject("SELECT EXISTS (SELECT 1 FROM projects)", Integer.class);
+            return ResponseEntity.ok().build();
+        } catch (DataAccessException ex) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        }
     }
 
     @GetMapping("/runtime/{file}")

@@ -128,11 +128,7 @@ CREATE TABLE receipts (
     owner_id TEXT NOT NULL,
     request_id TEXT NOT NULL,
     request_hash TEXT NOT NULL,
-    result TEXT DEFAULT NULL,
-    PRIMARY KEY (type, owner_id, request_id),
-    CHECK (type NOT IN ('agent', 'manual') OR result IS NULL),
-    CHECK ((type <> 'create_run' AND type <> 'create_command') OR result IS NOT NULL),
-    CHECK (result IS NULL OR (json_valid(result) AND json_type(result) = 'object'))
+    PRIMARY KEY (type, owner_id, request_id)
 );
 
 CREATE TABLE asset_tags (

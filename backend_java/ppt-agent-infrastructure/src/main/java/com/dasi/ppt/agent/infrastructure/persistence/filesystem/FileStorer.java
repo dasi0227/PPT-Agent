@@ -66,10 +66,11 @@ public class FileStorer {
         } catch (IOException ex) {
             throw new UncheckedIOException(ex);
         }
-        replaceFile(path, log);
+        applyFileChange(path, log);
     }
 
-    public void replaceFile(Path path, byte[] bytes) {
+    // 先写到临时文件，再做一次原子替换
+    public void applyFileChange(Path path, byte[] bytes) {
         Path directory = path.getParent();
         try {
             if (bytes == null) {

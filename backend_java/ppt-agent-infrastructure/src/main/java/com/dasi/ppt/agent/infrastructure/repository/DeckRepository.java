@@ -40,6 +40,28 @@ public class DeckRepository implements IDeckRepository, SmartInitializingSinglet
     private final ObjectMapper objectMapper;
 
     @Override
+    public void afterSingletonsInstantiated() {
+        // 项目创建、删除的目录恢复已在 ProjectRepository 初始化时完成。
+        try (DirectoryStream<Path> projects = Files.newDirectoryStream(pathResolver.projectsRoot())) {
+            for (Path directory : projects) {
+                if (!Files.isDirectory(directory) || directory.getFileName().toString().startsWith(".")) continue;
+                String projectId = directory.getFileName().toString();
+                try {
+                    for (Path path : fileStorer.listMutationLogs(projectId)) {
+                        recoverManualMutation(projectId, path);
+                    }
+                } catch (RuntimeException ex) {
+                    log.error("文稿恢复失败，项目保留写入日志：{}", directory, ex);
+                }
+            }
+        } catch (NoSuchFileException ignored) {
+            // 尚未创建项目。
+        } catch (IOException ex) {
+            throw new UncheckedIOException(ex);
+        }
+    }
+
+    @Override
     public byte[] readFile(Path path) {
         return fileStorer.readFile(path);
     }
@@ -94,84 +116,76 @@ public class DeckRepository implements IDeckRepository, SmartInitializingSinglet
                 .ownerId(projectId)
                 .requestId(operationId)
                 .requestHash(HashUtil.contentHash(objectMapper.writeValueAsBytes(fileChanges)))
-                .files(fileChanges)
+                .fileChanges(fileChanges)
                 .build();
         fileStorer.writeMutationLog(pathResolver.mutationPath(projectId, operationId), objectMapper.writeValueAsBytes(mutation));
         for (FileChange fileChange : fileChanges) {
-            fileStorer.replaceFile(pathResolver.filePathByFileName(projectId, fileChange.getFileName()), fileChange.getAfter());
+            fileStorer.applyFileChange(pathResolver.filePathByFileName(projectId, fileChange.getFileName()), fileChange.getAfter());
         }
-        receiptMapper.insertManualReceipt(ReceiptPo.builder()
+        ReceiptPo receiptPo = ReceiptPo.builder()
                 .type(mutation.getType().getValue())
                 .ownerId(projectId)
                 .requestId(operationId)
                 .requestHash(mutation.getRequestHash())
-                .build());
+                .build();
+        receiptMapper.insertReceipt(receiptPo);
         projectMapper.updateProjectTime(projectId, updatedAt);
     }
 
     @Override
     public void finishManualSave(String projectId, String operationId, boolean committed) {
-        Path path = pathResolver.mutationPath(projectId, operationId);
+        Path mutationPath = pathResolver.mutationPath(projectId, operationId);
         if (committed) {
-            fileStorer.replaceFile(path, null);
+            fileStorer.applyFileChange(mutationPath, null);
             receiptMapper.deleteManualReceipt(projectId, operationId);
         } else {
-            recoverManualLog(projectId, path);
+            recoverManualMutation(projectId, mutationPath);
         }
     }
 
-    @Override
-    public void afterSingletonsInstantiated() {
-        // 项目创建、删除的目录恢复已在 ProjectRepository 初始化时完成。
-        try (DirectoryStream<Path> projects = Files.newDirectoryStream(pathResolver.projectsRoot())) {
-            for (Path directory : projects) {
-                if (!Files.isDirectory(directory) || directory.getFileName().toString().startsWith(".")) continue;
-                String projectId = directory.getFileName().toString();
-                try {
-                    for (Path path : fileStorer.listMutationLogs(projectId)) {
-                        recoverManualLog(projectId, path);
-                    }
-                } catch (RuntimeException ex) {
-                    log.error("文稿恢复失败，项目保留写入日志：{}", directory, ex);
-                }
-            }
-        } catch (NoSuchFileException ignored) {
-            // 尚未创建项目。
-        } catch (IOException ex) {
-            throw new UncheckedIOException(ex);
-        }
-    }
-
-    private void recoverManualLog(String projectId, Path path) {
-        byte[] bytes = fileStorer.readFile(path);
+    private void recoverManualMutation(String projectId, Path mutatationPath) {
+        // 先读取变更日志
+        byte[] bytes = fileStorer.readFile(mutatationPath);
         if (bytes == null) return;
         Mutation mutation;
         try {
             mutation = objectMapper.readValue(bytes, Mutation.class);
         } catch (JacksonException ex) {
-            throw illegal("文稿日志格式无效：" + path);
+            throw illegal("文稿日志格式无效：" + mutatationPath);
         }
-        if (mutation.getType() != MutationType.MANUAL) return;
+        if (mutation.getType() != MutationType.MANUAL)
+            return;
+        // 判断该日志是否有效
         String operationId = mutation.getRequestId();
-        if (!projectId.equals(mutation.getOwnerId()) || !path.getFileName().toString().equals(operationId + ".json")
-                || !HashUtil.contentHash(objectMapper.writeValueAsBytes(mutation.getFiles())).equals(mutation.getRequestHash())) {
-            throw illegal("文稿日志与操作摘要不符：" + path);
+        if (!projectId.equals(mutation.getOwnerId())) {
+            throw illegal("文稿日志的项目 ID 与当前项目不符：" + mutatationPath);
         }
-        String hash = receiptMapper.findManualRequestHash(projectId, operationId);
-        if (hash != null && !hash.equals(mutation.getRequestHash())) {
-            throw illegal("文稿日志与提交凭据不符：" + path);
+        if (!mutatationPath.getFileName().toString().equals(operationId + ".json")) {
+            throw illegal("文稿日志文件名与操作 ID 不符：" + mutatationPath);
         }
-        for (FileChange change : mutation.getFiles()) {
-            String name = change.getFileName();
-            if (!pathResolver.isDocumentFileName(name)) {
-                throw illegal("文稿日志路径无效：" + name);
+        String actualHash = HashUtil.contentHash(objectMapper.writeValueAsBytes(mutation.getFileChanges()));
+        if (!actualHash.equals(mutation.getRequestHash())) {
+            throw illegal("文稿日志的文件变更摘要与记录值不符：" + mutatationPath);
+        }
+        String requestHash = receiptMapper.findManualRequestHash(projectId, operationId);
+        if (requestHash != null && !requestHash.equals(mutation.getRequestHash())) {
+            throw illegal("文稿日志与提交凭据不符：" + mutatationPath);
+        }
+        for (FileChange fileChange : mutation.getFileChanges()) {
+            String fileName = fileChange.getFileName();
+            if (!pathResolver.isDocumentFileName(fileName)) {
+                throw illegal("文稿日志路径无效：" + fileName);
             }
         }
-        for (FileChange change : mutation.getFiles()) {
-            Path target = pathResolver.filePathByFileName(projectId, change.getFileName());
-            fileStorer.replaceFile(target, hash == null ? change.getBefore() : change.getAfter());
+        // 判断是否提交
+        boolean committed = requestHash != null;
+        for (FileChange fileChange : mutation.getFileChanges()) {
+            // 根据提交情况回滚或恢复
+            Path path = pathResolver.filePathByFileName(projectId, fileChange.getFileName());
+            fileStorer.applyFileChange(path, committed ? fileChange.getAfter() : fileChange.getBefore());
         }
-        fileStorer.replaceFile(path, null);
-        if (hash != null) receiptMapper.deleteManualReceipt(projectId, operationId);
+        // 删除变更日志
+        fileStorer.applyFileChange(mutatationPath, null);
+        if (committed) receiptMapper.deleteManualReceipt(projectId, operationId);
     }
 }

@@ -6,11 +6,11 @@
 
 ### 新开 Run
 
-1. `ExecutionController` 调用 DTO 的 `toEntity()` 转换请求，`RunService` 协调 `InputService` 按全局唯一的 `message_id` 检查归属。同一会话同参重发返回原 Run ID，跨会话复用或异参返回 `IDEMPOTENCY_CONFLICT`。先识别重发，再对新请求做占用和分支校验，避免网络重发创建第二次执行。
+1. `ExecutionController` 调用 DTO 的 `toEntity()` 转换请求，`RunService` 协调 `InputService` 按全局唯一的 `message_id` 检查归属。
 2. 校验所属会话、模式、模型、引用和授权范围。同一会话最多一个非终态 Run，且与本会话的手动压缩互斥。同项目不同会话可以并行，但新 Run 须避开项目历史切换、Git 提交等排他操作。处于回退位置时，同时核对 `branch_revision`。
 3. 在项目写锁内，`CheckpointService` 从同一次一致读取取得 Run 开始前的会话数据和五类文稿文件。这份读取同时提供用于历史恢复的持久检查点和本 Run 审查用的内存文件基准。`RunService` 从 `SettingService` 取得全局设置，按本次模型选择和路由组装 `RunConfig`，固定主模型、旁路及备用模型、两项审批开关和自动命名／建议开关，再将配置和审查基准放入本次 `RunState`。
-4. `IRunRepository` 在同一 SQLite 事务中写入普通检查点、`pending` Run、首条 `queued` 指令和 `create_run` 凭据，同时更新会话版本。需要放弃返回入口时，在该事务内清理。事务失败不调度执行。
-5. 执行材料就绪且事务成功后，`RunService` 释放项目写锁，调度后台循环。耗时的模型请求与人工等待均在锁外进行。[执行接口](API_SPEC.md#执行) · [检查点](DATABASE_SPEC.md#checkpoints) · [提交凭据](DATABASE_SPEC.md#receipts)
+4. `IRunRepository` 在同一 SQLite 事务中写入普通检查点、`pending` Run和首条 `queued` 指令，同时更新会话版本。需要放弃返回入口时，在该事务内清理。事务失败不调度执行。
+5. 执行材料就绪且事务成功后，`RunService` 释放项目写锁，调度后台循环。耗时的模型请求与人工等待均在锁外进行。[执行接口](API_SPEC.md#执行) · [检查点](DATABASE_SPEC.md#checkpoints)
 
 | 材料 | 生存期与用途 |
 |---|---|
@@ -21,7 +21,7 @@
 
 ### 追加输入
 
-追加使用同一入口，传 `run_id`，沿用该 Run 的模式与模型。仅 `running` 或 `waiting` 且输入仍开放时接收新消息。已受理消息的同参重发返回受理该消息的 Run ID，即使追加入口已关闭。原 Run 已被回退移除时，重复请求返回 `RUN_NOT_FOUND`。
+追加使用同一入口，传 `run_id`，沿用该 Run 的模式与模型。仅 `running` 或 `waiting` 且输入仍开放时接收新消息。
 
 `InputService` 将原文、有序引用、显式 `scope` 和会话内 `seq` 写入 `messages`。DOM 引用保留提交时的 `DomSelection`，提示词拼装和回退回填均使用该选区。新开和追加均按受理时的大纲展开授权。`chapter_ids` 取章直属页面和下属各节的页面，`section_ids` 只取所选节的页面，页序沿用大纲。追加省略范围时沿用当前授权，显式提交时与现有授权取并集，`null` 放开本项目全部幻灯片。消息与 `runs.scope` 的变更同事务提交。引用本身不扩大授权。等待审批期间收到的追加授权也立即生效。[指令持久化](DATABASE_SPEC.md#messages) · [请求字段](API.html#runs)
 
@@ -94,7 +94,7 @@ Create 中的 `update_plan` 直接替换生效计划的步骤。非空数组使�
 3. **持锁复核。** 拿到项目写锁后，复查取消状态、当前授权、获批候选及文件基准。基准冲突时保留当前文件，按工具失败处理。人工保存在同一提交边界校验项目占用和 `base_hash`。项目有非终态 Run、正在 Git 提交或历史切换时返回 `PROJECT_BUSY`。导出采集快照时只短暂持锁，锁释放后即可保存。
 4. **先写日志。** `DeckRepository` 将原凭据键、请求摘要及文件修改前后的状态组装为 `Mutation`。人工保存和 Agent 写入均使用本次操作的日志路径 `.runtime/mutations/{operationId}.json`。通过 `FileStorer` 原子写入完整日志，确认落盘后才改动项目文件。
 5. **应用文件。** `DeckRepository` 持锁通过 `FileStorer` 新建、替换或删除候选文件，记录本次来源及实际差异。资源编辑使用完整候选文档。
-6. **提交数据库。** 同一 SQLite 事务写入 `agent` 凭据、配对的 `tool_result` 及实际差异，使受影响的检查点失效，每个受影响会话的 `revision` 递增一次。人工写入在同一事务记录 `manual` 凭据并更新项目修改时间。两种文件凭据的 `receipts.result` 都为 SQL `NULL`。[凭据字段](DATABASE.html#receipts) · [事务约束](DATABASE_SPEC.md#receipts)
+6. **提交数据库。** 同一 SQLite 事务写入 `agent` 凭据、配对的 `tool_result` 及实际差异，使受影响的检查点失效，每个受影响会话的 `revision` 递增一次。人工写入在同一事务记录 `manual` 凭据并更新项目修改时间。[凭据字段](DATABASE.html#receipts) · [事务约束](DATABASE_SPEC.md#receipts)
 7. **收尾与通知。** 数据库提交成功后清理日志、释放锁。`ToolExecutor` 从已保存的结果生成配对的模型 observation。结果可读后发送变化通知。只读结果和确定的受阻或失败结果由 `ToolExecutor` 保存。
 
 `agent` 的凭据键是 `(agent, run_id, tool_call_id)`，`manual` 的凭据键是 `(manual, project_id, 后端操作 ID)`。若文件已替换而进程在第 6 步前后退出，重启时用原凭据键核对摘要。对于人工保存，还要核对日志所属项目及文件名中的操作 ID。恢复流程在写回第一个文稿文件前检查日志里的全部目标文件名，只允许三类项目文稿名和合法页面规格或 HTML 文件名。任一名称无效时保留日志和现有文件。凭据匹配则补齐新版，确认无凭据则还原旧版，读取失败或摘要不符则保留日志、阻止该项目后续写入。日志收尾前保留凭据。
@@ -113,7 +113,7 @@ Create 中的 `update_plan` 直接替换生效计划的步骤。非空数组使�
 
 ## 4. 命令、提示词拼装与模型调用
 
-`CommandService` 统一受理手动命令、自动命令和修订。先按会话与 `request_id` 识别重发，再校验占用、分支确认和修订基准。`ICommandRepository` 在同一事务写入执行记录与 `create_command` 凭据，提交后才分派对应的 `CommandHandler`。每个执行有独立 ID，修订沿用 `operation_id`，仅 `polish`、`handoff` 可基于最近成功执行的 `base_id` 修订。进度与取消都针对单次执行。[命令流程图](WORKFLOW.html#support-flow) · [命令持久化](DATABASE_SPEC.md#commands)
+`CommandService` 统一受理手动命令、自动命令和修订。受理时校验占用、分支确认和修订基准。`ICommandRepository` 写入执行记录，提交后才分派对应的 `CommandHandler`。每个执行有独立 ID，修订沿用 `operation_id`，仅 `polish`、`handoff` 可基于最近成功执行的 `base_id` 修订。进度与取消都针对单次执行。[命令流程图](WORKFLOW.html#support-flow) · [命令持久化](DATABASE_SPEC.md#commands)
 
 | 命令 | 执行与提交条件 |
 |---|---|
@@ -173,7 +173,7 @@ JEV 的 Intent、Prune、Rechristen、Preview 分别由 `IntentHook`、`ToolPrun
 
 从锁内核对版本到日志持久移除，其他会推进目标会话版本或删除该会话的操作也须经过同一项目写锁。这样，即使 SQLite 已提交而日志尚在，恢复时读到的版本也只可能由本次切换推进。目标会话的版本始终向前递增，不从快照还原。
 
-历史位置新开 Run、发起非 `polish` 命令或修订 `handoff`，须在受理事务中核对 `branch_revision` 并清理返回行及脱离当前历史的检查点。`polish` 保留返回入口。手动改名和删除计划使用 `expected_revision`。实际改名或删除计划成功后放弃返回入口，同名或失败时保留。人工保存共享文稿时，各会话保留原有检查点、返回行和版本，提交后仅通知项目文稿变更。历史切换保留原有的 `create_run`、`create_command` 受理凭据。[检查点事务](DATABASE_SPEC.md#checkpoints)
+历史位置新开 Run、发起非 `polish` 命令或修订 `handoff`，须在受理事务中核对 `branch_revision` 并清理返回行及脱离当前历史的检查点。`polish` 保留返回入口。手动改名和删除计划使用 `expected_revision`。实际改名或删除计划成功后放弃返回入口，同名或失败时保留。人工保存共享文稿时，各会话保留原有检查点、返回行和版本，提交后仅通知项目文稿变更。[检查点事务](DATABASE_SPEC.md#checkpoints)
 
 新建导出同样需要采集一致的项目数据。项目内有非终态 Run、正在 Git 提交或切换历史时，创建返回 `PROJECT_BUSY`。`ExportService` 在项目写锁内读取文稿，并从同一数据库读事务取得外观和项目标题，组装不可变的 `ExportSnapshot`。快照含项目管理名称、页序、逐页标题与 HTML、装饰位置及 Logo 字节。已选主题时同时读取并固定主题 CSS。与预览相同，`deck_title` 取 `Meta.title`，章内页面的 `chapter_title` 取所属章标题，根直属页省略该装饰，两者都在锁内固定。后台渲染和打包在释放锁后使用这份快照，按基础样式、可选主题 CSS、单页样式的顺序应用。[导出接口](API_SPEC.md#导出) · [项目读取约束](DATABASE_SPEC.md#projects)
 

@@ -6,17 +6,14 @@
         <id column="owner_id" property="ownerId"/>
         <id column="request_id" property="requestId"/>
         <result column="request_hash" property="requestHash"/>
-        <result column="result" property="result"/>
     </resultMap>
     <delete id="deleteByProject">
         DELETE FROM receipts WHERE (type = 'manual' AND owner_id = #{projectId})
-           OR (type IN ('create_run', 'create_command') AND owner_id IN (
-               SELECT id FROM sessions WHERE project_id = #{projectId}))
            OR (type = 'agent' AND owner_id IN (
                SELECT r.id FROM runs r JOIN sessions s ON s.id = r.session_id WHERE s.project_id = #{projectId}))
     </delete>
 
-    <insert id="insertManualReceipt">
+    <insert id="insertReceipt">
         INSERT INTO receipts (type, owner_id, request_id, request_hash) VALUES (#{type}, #{ownerId}, #{requestId}, #{requestHash})
     </insert>
 

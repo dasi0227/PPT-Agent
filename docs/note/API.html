@@ -1264,7 +1264,7 @@
                 <ul class="fields">
                   <li><code>session_id</code>：字符串，新开 Run 时必填。与 run_id 二选一</li>
                   <li><code>run_id</code>：字符串，追加指令时必填。与 session_id 二选一</li>
-                  <li><code>message_id</code>：字符串，必填。客户端生成的全局唯一消息 ID，同次重发复用</li>
+                  <li><code>message_id</code>：字符串，必填。客户端生成的全局唯一消息 ID</li>
                   <li><code>text</code>：字符串，必填。只发图片或带非空注释的 DOM 选区时可为空字符串</li>
                   <li><code>mode</code>：新开 Run 时必填，chat / ask / plan / create。追加沿用该模式；gossip 仅切换当轮提示词及工具</li>
                   <li><code>model</code>：字符串，新开 Run 时必填。在受理时解析并固定模型及备用路由，整次 Run 复用</li>
@@ -1285,7 +1285,7 @@
               </td>
               <td>
                 <ul class="fields">
-                  <li><code>run_id</code>：字符串。新开时返回创建的 Run ID，追加及同参重发时返回受理该消息的 Run ID</li>
+                  <li><code>run_id</code>：字符串。新开时返回创建的 Run ID，追加时返回受理该消息的 Run ID</li>
                 </ul>
               </td>
             </tr>
@@ -1306,7 +1306,7 @@
                 <ul class="fields">
                   <li><code>session_id</code>：字符串，仅首次发起时必填。会话 ID</li>
                   <li><code>type</code>：字符串，仅首次发起时必填。rename / polish / handoff / compact / commit / suggest</li>
-                  <li><code>request_id</code>：字符串，必填。客户端生成，网络重发复用。每次发起或修订生成新 ID</li>
+                  <li><code>request_id</code>：字符串，必填。客户端在每次发起或修订时生成</li>
                   <li><code>text</code>：字符串，仅首次 polish 时必填。原始指令</li>
                   <li><code>base_id</code>：字符串，仅修订 polish 或 handoff 时必填。同一操作最近成功的执行 ID</li>
                   <li><code>feedback</code>：字符串，仅修订时必填。与 base_id 一起提交</li>
