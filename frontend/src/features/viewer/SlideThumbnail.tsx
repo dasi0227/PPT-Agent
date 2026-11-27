@@ -44,7 +44,7 @@ export function SlideThumbnail({ slide, snapshot, className, cachedOnly = false 
     const controller = new AbortController();
     let src: string | undefined;
     void fetch(url, { signal: controller.signal, mode: 'same-origin', cache: cachedOnly ? 'only-if-cached' : 'no-cache' }).then(async response => {
-      if (!response.ok) throw new Error('缩略图读取失败');
+      if (!response.ok || !response.headers.get('Content-Type')?.startsWith('image/webp')) throw new Error('缩略图读取失败');
       const image = await response.blob();
       if (controller.signal.aborted) return;
       src = URL.createObjectURL(image);

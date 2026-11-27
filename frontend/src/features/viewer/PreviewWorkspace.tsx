@@ -23,7 +23,6 @@ import { useThreadStore } from '../../stores/threadStore';
 import { useActiveSession, useActiveThreadId } from '../agent/useActiveSession';
 import { showGlobalError, showGlobalWarning } from '../../stores/toastStore';
 import type { DOMSelection } from '../../api/types';
-import { ExportProgressDialog } from '../export/ExportProgressDialog';
 import { useExportStore } from '../../stores/exportStore';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
 import { useRunStore } from '../../stores/runStore';
@@ -224,12 +223,12 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const hasSlides = slides.length > 0;
-  const runBlocking = projectThreads.some((thread) => ['creating', 'running', 'waiting', 'paused', 'recovering', 'canceling'].includes(allRunSessions[thread.id]?.status ?? 'idle'));
+  const runBlocking = projectThreads.some((thread) => thread.run_status || ['creating', 'running', 'waiting', 'paused', 'recovering', 'canceling'].includes(allRunSessions[thread.id]?.status ?? 'idle'));
   const commitBlocking = commitSession?.status === 'creating' || commitSession?.status === 'running';
-  const exportBlocking = exportSession?.projectId === projectId && ['accepted', 'running', 'ready', 'delivering'].includes(exportSession.operation.status);
+  const exportBlocking = exportSession?.status === 'loading';
   const managementBlocked = useAuthoringBlock(projectId);
   const exportDisabled = !projectId || !hasSlides || runBlocking || commitBlocking || exportBlocking;
-  const exportDisabledReason = !projectId ? '请先打开项目' : !hasSlides ? '暂无幻灯片可导出' : runBlocking ? 'Agent 任务运行中，暂时不能导出' : commitBlocking ? '项目正在提交，暂时不能导出' : exportBlocking ? '当前项目已有导出任务' : undefined;
+  const exportDisabledReason = !projectId ? '请先打开项目' : !hasSlides ? '暂无幻灯片可导出' : runBlocking ? 'Agent 任务运行中，暂时不能导出' : commitBlocking ? '项目正在提交，暂时不能导出' : exportBlocking ? '正在导出' : undefined;
   const selectedIndex = currentSlideId ? slides.findIndex((slide) => slide.id === currentSlideId) : -1;
   const safePage = selectedIndex >= 0 ? selectedIndex : 0;
   const currentSlide = slides[safePage];
@@ -437,7 +436,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
         onContentModeChange={setContentMode}
         sourceDisabled={sourceBlocked || previewMode !== 'main' || !projectId || (activeDocument
           ? !documentSourceAvailable
-          : selectedIndex < 0 || (globalView === 'html' ? !currentHasHTML : !currentSlide?.spec))}
+          : selectedIndex < 0 || (globalView === 'outline' && !currentSlide?.spec))}
         overview={!activeDocument && previewMode === 'overview'}
         onToggleOverview={toggleOverview}
         canPresent={Boolean(presentationSlide)}
@@ -462,8 +461,9 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
       <div className="preview-content" data-status-bar={showStatusBar || undefined}>
         {contentMode === 'source' && !activeDocument && globalView === 'html' && previewMode === 'main' && projectId && selectedIndex >= 0 ? (
           <React.Suspense fallback={<div className="flex flex-1 items-center justify-center text-sm text-text-400">正在加载源码…</div>}>
-            <HTMLSourceView slideId={currentSlide?.id} title={currentSlide?.title} ordinal={safePage + 1}
-              hash={currentSlide?.html_hash} html={currentSlide ? snapshot?.slides_by_id[currentSlide.id]?.html : undefined} />
+            <HTMLSourceView key={`${projectId}:${currentSlide.id}`} projectId={projectId} slideId={currentSlide.id} title={currentSlide.title}
+              ordinal={safePage + 1} hash={snapshot?.hashes[`html:${currentSlide.id}`]} html={snapshot?.slides_by_id[currentSlide.id]?.html}
+              blocked={managementBlocked} />
           </React.Suspense>
         ) : activeDocument ? (
           <ProjectDocumentView
@@ -613,7 +613,6 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
         onZoomOut={zoomOut}
         onZoomIn={zoomIn}
       />}
-      <ExportProgressDialog />
     </div>
   );
 };

@@ -177,24 +177,9 @@
       });
     }
 
-    function attachmentContentURL(projectID, source, resourceHash) {
-      if (!projectID || typeof source !== 'string') return null;
-      const normalized = source.startsWith('/') ? source : `/${source}`;
-      const match = normalized.match(/^\/attachments\/(att_[A-Za-z0-9_-]{1,128})\/original\.(png|jpe?g|webp)$/i);
-      if (!match) return null;
-      return `/api/projects/${encodeURIComponent(projectID)}/attachments/${encodeURIComponent(match[1])}?variant=original${resourceHash ? `&v=${encodeURIComponent(resourceHash)}` : ''}`;
-    }
-
-    function bridgeAttachmentPaths(source, projectID, resourceHash) {
-      if (!projectID || typeof source !== 'string') return source;
-      return source.replace(/\/?attachments\/(att_[A-Za-z0-9_-]{1,128})\/original\.(png|jpe?g|webp)/gi, (path, attachmentID) => (
-        attachmentContentURL(projectID, path, resourceHash) || path
-      ));
-    }
-
-    function normalizeSlideHTML(source, frame, visible, resourceHash) {
-      const { appearance, project_id: projectID, slide_id: slideID, theme_id: themeID } = frame;
-		const document = new DOMParser().parseFromString(bridgeAttachmentPaths(source, projectID, resourceHash), 'text/html');
+    function normalizeSlideHTML(source, frame, visible) {
+      const { appearance, slide_id: slideID, theme_id: themeID } = frame;
+      const document = new DOMParser().parseFromString(source, 'text/html');
       const head = document.head;
       document.documentElement.dataset.previewActive = String(visible);
       const suspension = document.createElement('style');
@@ -221,10 +206,6 @@
       head.prepend(...links);
       const themeBridge=document.createElement('script');themeBridge.src='/api/runtime/theme-bridge.js';themeBridge.dataset.slideId=slideID;
       document.body.appendChild(themeBridge);
-		document.querySelectorAll('img[src], source[src]').forEach((node) => {
-			const bridged = attachmentContentURL(projectID, node.getAttribute('src'), resourceHash);
-			if (bridged) node.setAttribute('src', bridged);
-		});
       const bridge = document.createElement('script');
       bridge.src = '/slide-runtime/selection-bridge.js';
       bridge.dataset.slideId = slideID;
@@ -328,7 +309,7 @@
     }
 
     function createExecution(slide, index, visible = false) {
-      const normalizedHTML = normalizeSlideHTML(slide.html, slide.frame, visible, slide.resource_hash);
+      const normalizedHTML = normalizeSlideHTML(slide.html, slide.frame, visible);
       const container = document.createElement('div');
       container.className = 'runtime-slide';
       container.dataset.slideFrame = 'true';

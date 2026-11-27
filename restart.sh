@@ -31,8 +31,8 @@ done
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$ROOT_DIR/backend_go"
 FRONTEND_DIR="$ROOT_DIR/frontend"
-RENDERER_DIR="$BACKEND_DIR/render-worker"
 JAVA_DIR="$ROOT_DIR/backend_java"
+RENDERER_DIR="$JAVA_DIR/render-worker"
 JAVA_JAR="ppt-agent-bootstrap/target/ppt-agent.jar"
 WORK_ROOT="$HOME/.dasi/ppt"
 DB_PATH="$WORK_ROOT/db/ppt.db"
@@ -132,6 +132,10 @@ start_frontend() {
 }
 
 start_backend() {
+  if [ ! -d "$RENDERER_DIR/node_modules" ] && ! (cd "$RENDERER_DIR" && pnpm install --frozen-lockfile --ignore-scripts) >"$LOG_DIR/backend-build.log" 2>&1; then
+    print_result "$STEP_3" '❌' '渲染依赖安装失败（日志:tmp/run/backend-build.log）'
+    return 1
+  fi
   if ! (cd "$JAVA_DIR" && mvn -q -DskipTests package) >"$LOG_DIR/backend-build.log" 2>&1; then
     print_result "$STEP_3" '❌' 'Java 构建失败（日志:tmp/run/backend-build.log）'
     return 1
@@ -285,8 +289,6 @@ if [ "$RUN_MODE" = "app" ]; then
   if (
     cd "$FRONTEND_DIR" || exit 1
     [ -d node_modules ] || pnpm install || exit 1
-    cd "$RENDERER_DIR" || exit 1
-    [ -d node_modules ] || pnpm install --frozen-lockfile --ignore-scripts || exit 1
     cd "$ROOT_DIR/desktop" || exit 1
     [ -d node_modules ] || npm ci || exit 1
     npm run prepare:local || exit 1

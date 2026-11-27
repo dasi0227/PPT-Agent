@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -26,13 +26,11 @@ export async function build() {
   await cp(join(root, 'frontend', 'dist'), join(runtime, 'frontend'), { recursive: true });
   await cp(join(root, 'backend', 'seed'), join(runtime, 'seed'), { recursive: true, filter: source => !source.endsWith('.DS_Store') });
   const worker = join(runtime, 'render-worker');
-  await mkdir(join(worker, 'node_modules'), { recursive: true });
-  for (const name of ['worker.mjs', 'package.json']) {
-    await cp(join(root, 'backend', 'render-worker', name), join(worker, name));
+  await mkdir(worker, { recursive: true });
+  for (const name of ['worker.mjs', 'render-metrics.mjs', 'export-player.html', 'package.json', 'pnpm-lock.yaml']) {
+    await cp(join(root, 'backend_java', 'render-worker', name), join(worker, name));
   }
-  // Resolve pnpm's symlink before copying so the .app has no repository links.
-  const playwright = await realpath(join(root, 'backend', 'render-worker', 'node_modules', 'playwright-core'));
-  await cp(playwright, join(worker, 'node_modules', 'playwright-core'), { recursive: true, dereference: true });
+  run('pnpm', ['install', '--prod', '--frozen-lockfile', '--ignore-scripts', '--node-linker=hoisted'], worker);
   const commands = join(root, 'backend', 'command-worker');
   // npm's locked, flat dependency tree ships with the application, including
   // upstream licenses. No global install or download occurs at command time.

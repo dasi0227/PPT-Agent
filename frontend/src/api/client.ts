@@ -50,7 +50,7 @@ export class NetworkError extends Error {
 
 export interface FetchClientOptions extends RequestInit {
   timeoutMs?: number;
-  responseType?: 'json' | 'text';
+  responseType?: 'json' | 'text' | 'blob';
   reportError?: boolean;
 }
 
@@ -110,7 +110,7 @@ export async function fetchClient<T>(path: string, options: FetchClientOptions =
     headers.set('Content-Type', 'application/json');
   }
   const timeoutController = new AbortController();
-  const timeout = window.setTimeout(() => timeoutController.abort('timeout'), timeoutMs);
+  const timeout = timeoutMs > 0 ? window.setTimeout(() => timeoutController.abort('timeout'), timeoutMs) : undefined;
   const combined = combineSignals([externalSignal ?? undefined, timeoutController.signal]);
 
   try {
@@ -140,6 +140,11 @@ export async function fetchClient<T>(path: string, options: FetchClientOptions =
     }
 
     if (response.status === 204) return undefined as T;
+    if (responseType === 'blob' && !response.headers.get('Content-Type')?.includes('application/json')) {
+      const blob = await response.blob();
+      if (epoch !== historyEpoch) throw new RequestCanceledError();
+      return { blob, headers: response.headers } as T;
+    }
     const text = await response.text();
     if (epoch !== historyEpoch) throw new RequestCanceledError();
     if (responseType === 'text' && !response.headers.get('Content-Type')?.includes('application/json')) return text as T;
@@ -147,6 +152,7 @@ export async function fetchClient<T>(path: string, options: FetchClientOptions =
     const body = JSON.parse(text);
     const error = errorFields(body);
     if (error.code) throw new APIError(response.status, error.code, error.message ?? error.code, error.details);
+    if (responseType === 'blob') throw new APIError(response.status, undefined, '未收到下载文件');
     if (responseType === 'text') return text as T;
     return body as T;
   } catch (error) {

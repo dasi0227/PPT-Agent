@@ -44,7 +44,7 @@ import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.inval
 public class RenderGateway implements IRenderGateway {
 
     private static final Pattern CSS_REFERENCE = Pattern.compile("(?i)(?:url\\(\\s*|@import\\s+)[\"']?([^\"')\\s]+)");
-    private static final Pattern SRCSET_REFERENCE = Pattern.compile("(?:^|,\\s*)(data:[^\\s]+|[^,\\s]+)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern SRCSET_REFERENCE = Pattern.compile("(?:^|,\\s*)(data:\\S+|[^,\\s]+)", Pattern.CASE_INSENSITIVE);
     private static final Pattern ATTACHMENT = Pattern.compile("(?i)(?:^|/)(?:" + Pattern.quote(ATTACHMENT_PATH_PREFIX)
             + "|api/(?:v1/)?projects/[^/]+/attachments/|attachments/[0-9a-f]{32}\\b)");
     private static final Pattern SCHEME = Pattern.compile("^[a-zA-Z][a-zA-Z0-9+.-]*:");
@@ -53,8 +53,8 @@ public class RenderGateway implements IRenderGateway {
     private final String baseCss = resource("base.css");
     private final String decorations = resource("decorations.js");
 
-    @Value("${PPT_RENDER_WORKER:../backend_go/render-worker/worker.mjs}")
-    private Path worker;
+    @Value("${PPT_RENDER_WORKER:render-worker/worker.mjs}")
+    private String worker;
     @Value("${PPT_RENDER_NODE:node}")
     private String node;
 
@@ -233,7 +233,7 @@ public class RenderGateway implements IRenderGateway {
     }
 
     private ProcessBuilder workerProcess(String... arguments) {
-        List<String> command = new ArrayList<>(List.of(node, worker.toAbsolutePath().toString()));
+        List<String> command = new ArrayList<>(List.of(node, Path.of(worker).toAbsolutePath().normalize().toString()));
         command.addAll(List.of(arguments));
         ProcessBuilder builder = new ProcessBuilder(command).redirectError(ProcessBuilder.Redirect.INHERIT);
         if ("1".equals(System.getenv("PPT_RENDER_ELECTRON"))) {
