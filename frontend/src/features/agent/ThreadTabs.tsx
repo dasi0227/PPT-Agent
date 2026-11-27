@@ -7,6 +7,7 @@ import { HoverScrollText } from '../../components/ui/HoverScrollText';
 import { Loader2, MoreHorizontal, Plus } from 'lucide-react';
 import { ThreadMenu } from './ThreadMenu';
 import { RunStatusDot } from './RunStatusDot';
+import { showGlobalError } from '../../stores/toastStore';
 
 export const ThreadTabs: React.FC = () => {
   const { activeProjectId } = useProjectStore();
@@ -23,8 +24,8 @@ export const ThreadTabs: React.FC = () => {
     setCreating(true);
     try {
       await createThread(activeProjectId);
-    } catch {
-      // The API client reports non-Agent backend errors through the global toast layer.
+    } catch (error) {
+      showGlobalError(error instanceof Error ? error.message : '创建会话失败，请重试');
     } finally {
       setCreating(false);
     }

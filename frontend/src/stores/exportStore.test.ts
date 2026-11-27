@@ -1,67 +1,85 @@
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { APIError } from '../api/client';
-import { exportsApi, type ExportOperation } from '../api/exports';
-import { isProjectExportBlocking, useExportStore } from './exportStore';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { useExportStore } from './exportStore';
 
-const stream = vi.hoisted(() => ({ messages: [] as Array<(operation: ExportOperation) => void>, close: vi.fn() }));
-vi.mock('../api/exports', async (importOriginal) => ({
-  ...await importOriginal<typeof import('../api/exports')>(),
-  subscribeExport: (_id: string, message: (operation: ExportOperation) => void) => {
-    stream.messages.push(message);
-    return stream.close;
-  },
-}));
+const fetchFile = vi.fn<typeof fetch>();
+const createObjectURL = vi.fn(() => 'blob:deck');
+const revokeObjectURL = vi.fn();
+const store = () => useExportStore.getState();
 
-const operation = (id: string): ExportOperation => ({
-  id, project_id: 'pro_one', format: 'png', status: 'ready', completed_pages: 1,
-  total_pages: 1, warnings: [],
+function fileResponse() {
+  return new Response('<html><body>Deck</body></html>', {
+    headers: {
+      'Content-Type': 'text/html;charset=UTF-8',
+      'Content-Disposition': 'attachment; filename="deck.html"; filename*=UTF-8\'\'%E6%96%87%E7%A8%BF.html',
+    },
+  });
+}
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  fetchFile.mockReset();
+  createObjectURL.mockClear();
+  revokeObjectURL.mockClear();
+  vi.stubGlobal('fetch', fetchFile);
+  vi.stubGlobal('URL', class extends URL {
+    static createObjectURL = createObjectURL;
+    static revokeObjectURL = revokeObjectURL;
+  });
+  useExportStore.setState({ session: null });
+});
+afterEach(() => {
+  vi.runOnlyPendingTimers();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
-beforeEach(() => { stream.messages.length = 0; stream.close.mockClear(); useExportStore.setState({ session: null }); });
-afterEach(() => { useExportStore.getState().session?.streamClose?.(); useExportStore.setState({ session: null }); vi.restoreAllMocks(); });
+it('posts once and downloads the response with the UTF-8 filename', async () => {
+  const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+    expect(this.download).toBe('文稿.html');
+    expect(this.href).toBe('blob:deck');
+  });
+  fetchFile.mockResolvedValue(fileResponse());
 
-test('an expired task unlocks the page and retry creates a fresh export', async () => {
-  const create = vi.spyOn(exportsApi, 'create').mockResolvedValueOnce(operation('exp_old')).mockResolvedValueOnce(operation('exp_new'));
-  vi.spyOn(exportsApi, 'get').mockRejectedValue(new APIError(410, 'EXPORT_CONSUMED', '导出文件已失效'));
-  await useExportStore.getState().start('pro_one', 'png');
-  await useExportStore.getState().refresh('exp_old');
-  expect(isProjectExportBlocking('pro_one')).toBe(false);
-  expect(stream.close).toHaveBeenCalled();
-  await useExportStore.getState().retry();
-  expect(useExportStore.getState().session?.operation.id).toBe('exp_new');
-  expect(create.mock.calls[0][2]).not.toBe(create.mock.calls[1][2]);
-  stream.messages[0]({ ...operation('exp_old'), status: 'consumed' });
-  expect(useExportStore.getState().session?.operation.id).toBe('exp_new');
+  await store().start('project', 'html');
+
+  expect(fetchFile).toHaveBeenCalledOnce();
+  expect(fetchFile).toHaveBeenCalledWith('/api/exports/create', expect.objectContaining({
+    method: 'POST', body: JSON.stringify({ project_id: 'project', format: 'html' }),
+  }));
+  expect(click).toHaveBeenCalledOnce();
+  expect(store().session).toBeNull();
+  vi.runOnlyPendingTimers();
+  expect(revokeObjectURL).toHaveBeenCalledWith('blob:deck');
 });
 
-test('retry retains the original task when cancellation fails instead of creating another export', async () => {
-  const create = vi.spyOn(exportsApi, 'create').mockResolvedValue(operation('exp_one'));
-  vi.spyOn(exportsApi, 'cancel').mockRejectedValue(new APIError(500, 'INTERNAL', '清理失败'));
-  await useExportStore.getState().start('pro_one', 'png');
-  stream.messages[0]({ ...operation('exp_one'), status: 'failed' });
-  await useExportStore.getState().retry();
-  expect(create).toHaveBeenCalledTimes(1);
-  expect(useExportStore.getState().session?.operation).toMatchObject({ id: 'exp_one', status: 'failed' });
+it('keeps a Java error response for retry without downloading it', async () => {
+  const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+  fetchFile.mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'INVALID_ARGUMENT', message: '幻灯片缺少 HTML' } }), {
+    headers: { 'Content-Type': 'application/json' },
+  })).mockResolvedValueOnce(fileResponse());
+
+  await store().start('project', 'html');
+
+  expect(click).not.toHaveBeenCalled();
+  expect(store().session).toMatchObject({ status: 'error', message: '幻灯片缺少 HTML' });
+
+  await store().retry();
+  expect(fetchFile).toHaveBeenCalledTimes(2);
+  expect(click).toHaveBeenCalledOnce();
 });
 
-test('termination requested during creation cancels the returned task before allowing a fresh export', async () => {
-  let resolveCreate!: (value: ExportOperation) => void;
-  const create = vi.spyOn(exportsApi, 'create')
-    .mockReturnValueOnce(new Promise<ExportOperation>((resolve) => { resolveCreate = resolve; }))
-    .mockResolvedValueOnce(operation('exp_new'));
-  const cancel = vi.spyOn(exportsApi, 'cancel').mockResolvedValue(undefined);
-  const starting = useExportStore.getState().start('pro_one', 'png');
-  await useExportStore.getState().cancel();
-  expect(useExportStore.getState().session?.canceling).toBe(true);
-  expect(isProjectExportBlocking('pro_one')).toBe(true);
-  expect(cancel).not.toHaveBeenCalled();
-  resolveCreate(operation('exp_old'));
-  await starting;
-  expect(cancel).toHaveBeenCalledWith('exp_old');
-  expect(useExportStore.getState().session).toBeNull();
-  expect(isProjectExportBlocking('pro_one')).toBe(false);
-  await useExportStore.getState().start('pro_one', 'png');
-  expect(create.mock.calls[0][2]).not.toBe(create.mock.calls[1][2]);
-  stream.messages[0]({ ...operation('exp_old'), status: 'ready' });
-  expect(useExportStore.getState().session?.operation.id).toBe('exp_new');
+it('keeps only one file request in flight', async () => {
+  let respond!: (response: Response) => void;
+  fetchFile.mockImplementation(() => new Promise(resolve => { respond = resolve; }));
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+  const first = store().start('project', 'html');
+
+  await store().start('project', 'pdf');
+  expect(store().session).toMatchObject({ status: 'loading', format: 'html' });
+  expect(fetchFile).toHaveBeenCalledOnce();
+
+  respond(fileResponse());
+  await first;
+  expect(store().session).toBeNull();
 });

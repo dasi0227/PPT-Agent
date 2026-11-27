@@ -37,8 +37,8 @@ export const RenamePanel: React.FC = () => {
 	const generating = Boolean(pendingByThread[thread.id]);
 	const run = async (action: 'generate' | 'manual' | 'enable' | 'disable') => {
 		const cleanTitle = title.trim();
-		if (action === 'manual' && (cleanTitle.length < 1 || Array.from(cleanTitle).length > 60)) {
-			setError('名称需为 1–60 个字符');
+		if (action === 'manual' && !cleanTitle) {
+			setError('请输入会话名称');
 			return;
 		}
 		setBusy(action);
@@ -81,7 +81,7 @@ export const RenamePanel: React.FC = () => {
 					<span className="min-w-0 flex-1"><span className="block text-sm font-semibold">手动命名</span><span className="block text-xs text-text-600">自定义会话名称</span></span>
 				</button>
 				{manualExpanded && <form id="manual-rename-form" className="px-3 pb-3" onSubmit={(event) => { event.preventDefault(); if (!busy) void run('manual'); }}>
-					<input autoFocus aria-label="会话名称，按 Enter 保存" disabled={Boolean(busy)} value={title} onChange={(event) => setTitle(event.target.value)} maxLength={60} placeholder="输入会话名称，按 Enter 保存"
+					<input autoFocus aria-label="会话名称，按 Enter 保存" disabled={Boolean(busy)} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="输入会话名称，按 Enter 保存"
 						onKeyDown={(event) => { if (event.key === 'Enter' && (event.nativeEvent.isComposing || event.keyCode === 229)) event.preventDefault(); }}
 						className="w-full min-w-0 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-900 outline-none transition-colors focus:border-border-strong focus-visible:ring-0 focus-visible:ring-offset-0 disabled:opacity-50" />
 				</form>}

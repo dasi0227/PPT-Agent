@@ -9,11 +9,13 @@ import { isProjectDeleted, isThreadDeleted, markThreadDeleted, restoreThread } f
 import { useContextWindowStore } from './contextWindowStore';
 import { dropThreadCommands } from './commandRuntime';
 import { rememberDeletion, recoverDeletionNotices } from './deletionStore';
+import { showGlobalError } from './toastStore';
 
 interface RenamePanelTarget { projectId: string; threadId: string }
 
 type ListedThread = ProjectSession & Partial<Thread>;
 const threadListVersions = new Map<string, number>();
+const ensuringActiveThread = new Map<string, Promise<string>>();
 
 interface ThreadState {
   threadsByProjectId: Record<string, ListedThread[]>;
@@ -101,6 +103,8 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
     }
     get().setActiveThread(projectId, id);
     await get().loadThreads(projectId);
+    const refreshError = get().errorByProjectId[projectId];
+    if (refreshError) showGlobalError('会话已创建，重新读取失败。' + refreshError);
     return id;
   },
 
@@ -117,6 +121,14 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
 	},
 
   performNamingAction: async (projectId, threadId, action, title) => {
+    if (action === 'manual') {
+      if (title === undefined) throw new Error('请输入会话名称');
+      await threadsApi.update(threadId, title);
+      await get().loadThreads(projectId);
+      const refreshError = get().errorByProjectId[projectId];
+      if (refreshError) showGlobalError('会话已改名，重新读取失败。' + refreshError);
+      return;
+    }
     const apply = (updated: Thread) => set(state => ({
       threadsByProjectId: {
         ...state.threadsByProjectId,
@@ -139,9 +151,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
       }
       return;
     }
-    const operationId = newClientIdentity('rename');
-    apply(await threadsApi.naming(threadId, operationId, action, title));
-
+    apply(await threadsApi.setAutoRename(threadId, action === 'enable'));
   },
 
   deleteThread: async (projectId, threadId) => {
@@ -199,16 +209,25 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
   },
 
   ensureActiveThread: async (projectId) => {
+    const pending = ensuringActiveThread.get(projectId);
+    if (pending) return pending;
     const active = get().activeThreadIdByProjectId[projectId];
-    if (active) {
-      return active;
-    }
-    const threads = get().threadsByProjectId[projectId] || [];
-    if (threads.length > 0) {
-      get().setActiveThread(projectId, threads[0].id);
-      return threads[0].id;
-    }
-    return get().createThread(projectId);
+    if (active) return active;
+    const request = (async () => {
+      if (!get().threadsByProjectId[projectId] || get().errorByProjectId[projectId]) await get().loadThreads(projectId);
+      const state = get();
+      const threadId = state.activeThreadIdByProjectId[projectId] ?? state.threadsByProjectId[projectId]?.[0]?.id;
+      if (threadId) {
+        state.setActiveThread(projectId, threadId);
+        return threadId;
+      }
+      const error = state.errorByProjectId[projectId];
+      if (error) throw new Error(error);
+      if (!state.threadsByProjectId[projectId]) throw new Error('会话加载失败，请重试');
+      return state.createThread(projectId);
+    })().finally(() => ensuringActiveThread.delete(projectId));
+    ensuringActiveThread.set(projectId, request);
+    return request;
   },
 
   getActiveThreadId: (projectId) => get().activeThreadIdByProjectId[projectId] ?? null,

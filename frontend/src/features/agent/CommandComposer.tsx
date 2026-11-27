@@ -77,7 +77,7 @@ function formatFileSize(size: number): string {
 }
 
 function supportedImageFile(file: File): boolean {
-	return ['image/png', 'image/jpeg'].includes(file.type);
+	return file.type === 'image/png' || (!file.type && /\.png$/i.test(file.name));
 }
 
 export interface CommandComposerHandle {
@@ -130,9 +130,10 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
   const resetForProject = composer.resetForProject;
   const previousProjectId = useRef<string | null | undefined>(undefined);
   const steering = (runStatus === 'running' || runStatus === 'waiting') && Boolean(activeRunId);
-  const disabled = !activeProjectId || activeSession.loadStatus !== 'ready' || runStatus === 'creating' || runStatus === 'recovering' || runStatus === 'canceling';
+  const disabled = !activeProjectId || runStatus === 'creating' || runStatus === 'recovering' || runStatus === 'canceling';
   const runActive = runStatus === 'creating' || runStatus === 'running' || runStatus === 'waiting' || runStatus === 'paused' || runStatus === 'recovering' || runStatus === 'canceling';
   const activeThreadId = activeProjectId ? activeThreadIdByProjectId[activeProjectId] : undefined;
+  const canSend = Boolean(activeThreadId) && activeSession.loadStatus === 'ready';
   const contextSession = useContextWindowStore((state) => (
     activeThreadId ? state.sessions[activeThreadId] : undefined
   ));
@@ -429,7 +430,7 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
 		if (!activeProjectId || disabled || files.length === 0) return;
 		const unsupported = files.find((file) => !supportedImageFile(file));
 		if (unsupported) {
-			showGlobalWarning('仅支持 PNG 和 JPG 图片，请重新选择');
+			showGlobalWarning('仅支持 PNG 图片，请重新选择');
 			return;
 		}
 		const oversized = files.find((file) => file.size > 10 * 1024 * 1024);
@@ -453,8 +454,7 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
 			try {
 				const uploaded = await attachmentsApi.upload(activeProjectId, file);
 				const item: ComposerAttachment = {
-					attachmentId: uploaded.id, name: uploaded.original_name,
-					size: uploaded.size_bytes,
+					attachmentId: uploaded.id, name: file.name, size: file.size,
 				};
 				composer.addThreadAttachment(threadId, item);
 				return null;
@@ -508,7 +508,7 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
 		if (await openActiveCommandPanel(kind)) { setComposerText(''); editorRef.current?.setPlainText(''); }
 		return;
 	}
-	if (disabled || commitActive || polishing || briefingActive || !activeProjectId || hasPendingUploads || (!commandText && (hasDOMSelections ? !hasDOMIntent : !hasAttachments))) return;
+	if (!canSend || disabled || commitActive || polishing || briefingActive || !activeProjectId || hasPendingUploads || (!commandText && (hasDOMSelections ? !hasDOMIntent : !hasAttachments))) return;
     const projectId = activeProjectId;
     let threadId: string;
     try {
@@ -732,7 +732,7 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
 		<input
 			ref={fileInputRef}
 			type="file"
-			accept="image/png,image/jpeg"
+			accept="image/png,.png"
 			multiple
 			className="sr-only"
 			onChange={(event) => {
@@ -876,7 +876,7 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
               <button
                 type="button"
                 onClick={() => void submit()}
-				disabled={!hasSendableContent || hasPendingTemplateFields || hasPendingUploads || disabled || commitActive || polishing || briefingActive || (!steering && (scopeSelectionEmpty || profilesLoading || Boolean(profilesError)))}
+				disabled={!canSend || !hasSendableContent || hasPendingTemplateFields || hasPendingUploads || disabled || commitActive || polishing || briefingActive || (!steering && (scopeSelectionEmpty || profilesLoading || Boolean(profilesError)))}
                 className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border-0 bg-transparent text-selected-foreground transition-colors ui-interactive disabled:text-text-400 disabled:opacity-40"
 				aria-label={scopeSelectionEmpty && !steering ? '请选择有效的页面范围' : '发送'}
 				title={scopeSelectionEmpty && !steering ? '请选择有效的页面范围' : '发送'}

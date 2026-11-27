@@ -794,13 +794,13 @@
               <td>检查点所属的会话。</td>
               <td class="decision">外键 <code>sessions.id</code>，级联删除。</td>
             </tr>
-            <tr id="checkpoints-run-id">
-              <th scope="row"><code>run_id</code></th>
+            <tr id="checkpoints-message-id">
+              <th scope="row"><code>message_id</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">是</td>
               <td><code>NULL</code></td>
-              <td>回退至哪个 Run 开始前。</td>
-              <td class="decision">非空时同会话内唯一；空值表示返回快照，每会话最多一行。不建立 Run 外键。</td>
+              <td>关联本会话的一条指令或最终回复。</td>
+              <td class="decision">每条消息最多一个检查点。指令对应发送前，最终回复对应提交后。空值表示首次回退前的返回快照，每个会话最多一行。</td>
             </tr>
             <tr id="checkpoints-snapshot">
               <th scope="row"><code>snapshot</code></th>
@@ -808,7 +808,7 @@
               <td class="nullable">否</td>
               <td>无</td>
               <td>该检查点的完整恢复数据。</td>
-              <td class="decision">JSON 对象，含会话标题、计划、消息、Run 和命令，以及五类项目文稿文件。普通检查点另含原始输入正文、引用、最初的模型名、模式及范围。文本文件用 JSON 字符串，二进制内容用 Base64。</td>
+              <td class="decision">JSON 对象，含五类文稿文件、有效计划、有序上下文消息 ID 和会话分支的历史位置。历史位置界定可见消息、Run 与命令及其当时的状态。原始输入由关联指令读取，标题沿用当前值。文本文件用 JSON 字符串，二进制内容用 Base64。</td>
             </tr>
           </tbody>
         </table>

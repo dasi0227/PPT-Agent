@@ -10,6 +10,7 @@ import { SettingsPage } from './features/settings/SettingsPage';
 import { GlobalToasts } from './components/ui/GlobalToasts';
 import { DeletionFeedback } from './features/workspace/DeletionFeedback';
 import { GlobalModals } from './features/workspace/GlobalModals';
+import { ExportProgressDialog } from './features/export/ExportProgressDialog';
 import { NotFoundPage } from './features/workspace/NotFoundPage';
 import { WorkspaceRoute } from './features/workspace/WorkspaceRoute';
 import { getSettingsSection, settingsSections } from './features/workspace/routes';
@@ -66,7 +67,7 @@ function AppLayout() {
         <AssetRepositoryPage key="Theme" type="theme" active={themeActive} />
       </div>
     )}
-    <Outlet /><ProjectHistoryDialogs /><GlobalModals /><GlobalToasts />
+    <Outlet /><ProjectHistoryDialogs /><GlobalModals /><ExportProgressDialog /><GlobalToasts />
     {!getSettingsSection(path) && !themeActive && !path.startsWith('/assets/') && <DeletionFeedback />}
   </>;
 }

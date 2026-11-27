@@ -198,6 +198,7 @@
     </header>
 
     <!-- 每条输入先做意图判定。task 按本 Run 当前模式拼装；gossip 使用下方闲聊分支。两者共用主循环和受理时的模型配置。
+         恢复检查点后，current_plan 取该位置的计划。compact_summary 和 conversation_history 按恢复的有序消息 ID 读取，保持摘要与成组工具消息的顺序。当前分支之外的业务记录排除在拼装之外。
          追加输入被拒时，其正文和引用只留在历史中，不拼入主模型的 user_addition 或后续上下文。后续追加仍在原 Run 中依次判定，通过后按各自意图拼装。
          task 的 run_command 工具说明随当前模式给出权限。Chat、Ask、Plan 只读，Create 执行阶段可在授权范围内提交 STRUCTURE.html 列明的文稿文件，普通文件不写回项目。 -->
     <section class="assembly-group" aria-label="主 Agent 提示词拼装">

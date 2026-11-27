@@ -127,7 +127,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `agent/model/InstructionReference` 表示一条引用。指令按输入顺序保存引用，供提示词拼装和回退回填使用。
 - `agent/model/DomSelection` 是 DOM 引用的选区内容，保存页面与选区标识、标注序号、提交时的 HTML、源码哈希、注释及元素或装饰定位。[选区字段](API.html#runs)
 - `agent/model/enumeration/InstructionReferenceType` 对应 `references[].type`，取 `skill / component / slide / image / dom`。追加输入只接受 `image` 和 `dom`。[引用字段](API.html#runs)
-- `agent/model/CheckpointSnapshot` 是 `Checkpoint` 的恢复内容，包括目标会话记录和五类文稿文件。普通检查点另含用于回填的原始输入。[快照范围](DATABASE_SPEC.md#checkpoints)
+- `agent/model/CheckpointSnapshot` 保存五类文稿、有效计划、有序上下文消息 ID 和当前分支的历史位置。`Checkpoint` 按消息 ID 定位用户发送前或最终回复后的快照。原始输入从关联指令回填，返回快照只记录恢复材料。[快照范围](DATABASE_SPEC.md#checkpoints)
 - `asset/model/` 存放资产、标签及其类型。
 - `IAssetRepository` 负责资产、标签及关联的持久化。
 - `setting/model/` 存放模型配置和各组全局设置。
@@ -198,7 +198,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 ### 渲染与导出
 
 - `ThumbnailService` 通过 `IRenderGateway.renderHash` 取得渲染哈希。`RenderGateway` 为缩略图和整稿导出组装相同的页面 HTML、基础及主题 CSS 和装饰参数。文稿装饰标题取 `Meta.title`，章标题取该页所属章，根直属页省略章标题。
-- `RenderGateway` 调用外部 Node worker。开发时在 `backend_go/render-worker/` 执行 `pnpm install --frozen-lockfile`，从 `backend_java/` 启动 Java，默认脚本为 `../backend_go/render-worker/worker.mjs`。`PPT_RENDER_WORKER` 和 `PPT_RENDER_NODE` 可指定脚本和可执行文件。
+- `RenderGateway` 调用外部 Node worker。开发时在 `backend_java/render-worker/` 执行 `pnpm install --frozen-lockfile`，从 `backend_java/` 启动 Java，默认脚本为 `render-worker/worker.mjs`。`PPT_RENDER_WORKER` 和 `PPT_RENDER_NODE` 可指定脚本和可执行文件。
 - 单页截图使用 `--job <请求文件>`，worker 按给定的页面输入写入 PNG 并返回版面检查结果。
 - 项目导出使用 `--export`。Java 向标准输入一次写入格式、项目名称、按序排列的页面及共用外观。worker 生成完整文件后向标准输出依次写入四字节大端长度、该长度的 UTF-8 JSON（`filename`、`size`）和原始文件字节。Java 将文件流直接写入本次 HTTP 响应。
 - HTML 由 worker 将页面和装饰嵌入同目录的 `export-player.html`，可直接播放。PNG 和 PDF 复用一次 Chromium 实例逐页截图，依序打包为 ZIP 或合成为 PDF。所需临时文件由 worker 在系统临时目录中创建并在本次调用结束时删除。

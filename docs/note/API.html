@@ -976,7 +976,7 @@
                 <ul class="fields">
                   <li><code>session_id</code>：已有会话的 ID</li>
                   <li><code>title</code>：新的会话标题，去除首尾空白后非空</li>
-                  <li><code>expected_revision</code>：十进制字符串。可返回最新且标题实际改变时需提供，取检查点列表的 revision</li>
+                  <li><code>expected_revision</code>：可选的会话版本，十进制字符串。提供时校验，改名保留返回入口</li>
                 </ul>
               </td>
               <td>无</td>
@@ -1267,7 +1267,6 @@
                   <li><code>text</code>：字符串，仅首次 polish 时必填。原始指令</li>
                   <li><code>base_id</code>：字符串，仅修订 polish 或 handoff 时必填。同一操作最近成功的执行 ID</li>
                   <li><code>feedback</code>：字符串，仅修订时必填。与 base_id 一起提交</li>
-                  <li><code>branch_revision</code>：十进制字符串，可返回最新时发起或修订非 polish 命令必填。用户确认放弃「返回最新」时的会话版本</li>
                 </ul>
               </td>
               <td>
@@ -1437,47 +1436,47 @@
               <td>
                 <ul class="fields">
                   <li><code>revision</code>：本次读取的会话版本，十进制字符串</li>
-                  <li><code>run_ids</code>：字符串数组，当前可回退的 Run ID，按首条指令 seq 从新到旧，无则 []</li>
+                  <li><code>message_ids</code>：当前历史中有检查点的指令及最终回复 ID，按消息 seq 从新到旧，无则 []</li>
                   <li><code>can_return</code>：布尔值，是否可返回首次回退前的最新状态</li>
                 </ul>
               </td>
             </tr>
             <tr>
               <th scope="row">预览切换影响</th>
-              <td><code>GET /api/sessions/{session_id}/checkpoints/preview?run_id={run_id}</code></td>
+              <td><code>GET /api/sessions/{session_id}/checkpoints/preview?message_id={message_id}</code></td>
               <td>
                 <ul class="fields">
                   <li><code>session_id</code>：会话 ID</li>
-                  <li><code>run_id</code>：可选，指定回退目标；省略预览返回最新</li>
+                  <li><code>message_id</code>：可选，目标指令或最终回复的 ID，省略时预览返回最新</li>
                 </ul>
               </td>
               <td>
                 <ul class="fields">
                   <li><code>revision</code>：本次读取的会话版本，十进制字符串</li>
-                  <li><code>input_preview</code>：目标原始指令节选，返回最新时为 null</li>
+                  <li><code>input_preview</code>：目标指令的原文节选，回复点和返回最新时为 null</li>
                   <li><code>timestamp</code>：目标位置的毫秒时间戳</li>
                   <li><code>run_count</code>：将从当前视图移除或恢复的 Run 数，非负整数</li>
                 </ul>
               </td>
             </tr>
             <tr>
-              <th scope="row">回退到 Run 前</th>
+              <th scope="row">回退到消息检查点</th>
               <td><code>POST /api/checkpoints/rollback</code></td>
               <td>
                 <ul class="fields">
-                  <li><code>run_id</code>：Run ID，所属会话由该 Run 确定</li>
+                  <li><code>message_id</code>：指令 ID 对应发送前，最终回复 ID 对应提交后，由消息定位会话</li>
                   <li><code>expected_revision</code>：十进制字符串，取回退预览响应的 revision</li>
                 </ul>
               </td>
               <td>
                 <ul class="fields">
                   <li><code>revision</code>：本次提交后的会话版本，十进制字符串</li>
-                  <li><code>input</code>：回填输入框的原始输入对象，字段见下</li>
-                  <li><code>input.text</code>：初始指令正文</li>
-                  <li><code>input.references</code>：初始输入的完整有序引用，含 DOM 原文及注释，结构同「发送指令」</li>
-                  <li><code>input.mode</code>：初始 chat / ask / plan / create</li>
-                  <li><code>input.model</code>：初始模型配置名</li>
-                  <li><code>input.scope</code>：初始范围选择，字段同「发送指令」，保留初始选择与批准后范围的区别</li>
+                  <li><code>input</code>：发送点返回该条指令供编辑，回复点为 null</li>
+                  <li><code>input.text</code>：目标指令正文</li>
+                  <li><code>input.references</code>：目标指令的完整有序引用，含 DOM 原文及注释，结构同「发送指令」</li>
+                  <li><code>input.mode</code>：该指令受理时使用的模式</li>
+                  <li><code>input.model</code>：该指令受理时使用的模型配置名</li>
+                  <li><code>input.scope</code>：该指令发送时的范围选择，沿用「发送指令」的字段语义</li>
                 </ul>
               </td>
             </tr>

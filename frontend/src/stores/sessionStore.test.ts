@@ -21,6 +21,30 @@ beforeEach(() => { Stream.opened = []; vi.stubGlobal('EventSource', Stream); });
 afterEach(() => { store().drop(Object.keys(store().sessions)); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('shared snapshot and incremental synchronization', () => {
+  it('subscribes to Java project changes without requesting history', async () => {
+    const read = vi.spyOn(sessionApi, 'view');
+    const changes = vi.spyOn(sessionApi, 'changes');
+    const refresh = vi.fn();
+    const release = store().retain('t1', 'p1', refresh);
+    const [stream] = Stream.opened;
+    expect(stream.url).toBe('/api/sessions/t1/events');
+
+    stream.onopen?.();
+    expect(refresh).toHaveBeenLastCalledWith(['content', 'appearance', 'sessions']);
+    stream.dispatchEvent(new MessageEvent('project_changed', { data: '{"areas":["sessions"]}' }));
+    expect(refresh).toHaveBeenLastCalledWith(['sessions']);
+    stream.dispatchEvent(new MessageEvent('reset', { data: '{}' }));
+    expect(refresh).toHaveBeenLastCalledWith(['content', 'appearance', 'sessions']);
+    stream.onerror?.();
+    expect(read).not.toHaveBeenCalled();
+    expect(changes).not.toHaveBeenCalled();
+
+    release();
+    stream.dispatchEvent(new MessageEvent('project_changed', { data: '{"areas":["appearance"]}' }));
+    expect(refresh).toHaveBeenCalledTimes(3);
+    await vi.waitFor(() => expect(stream.close).toHaveBeenCalledOnce());
+  });
+
   it('shares initial requests and displays the snapshot before SSE opens', async () => {
     const read = vi.spyOn(sessionApi, 'view').mockResolvedValue(viewFixture());
     const release1 = store().retain('t1', 'p1'), release2 = store().retain('t1', 'p1');

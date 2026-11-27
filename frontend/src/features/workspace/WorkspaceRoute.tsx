@@ -11,9 +11,7 @@ import { showGlobalError } from '../../stores/toastStore';
 function useSessionSync(projectId: string | undefined) {
   const threadId = useThreadStore(state => projectId ? state.activeThreadIdByProjectId[projectId] : null);
   React.useEffect(() => {
-    if (!projectId || !threadId) return;
-    const release = useSessionStore.getState().retain(threadId, projectId);
-    const source = typeof EventSource === 'undefined' ? null : new EventSource('/api/sessions/' + encodeURIComponent(threadId) + '/events');
+    if (!projectId) return;
     const refresh = (areas: readonly unknown[]) => {
       const projectStore = useProjectStore.getState();
       if (areas.includes('content')) void projectStore.loadProjectContent(projectId);
@@ -22,22 +20,14 @@ function useSessionSync(projectId: string | undefined) {
       if (areas.includes('sessions')) void useThreadStore.getState().loadThreads(projectId);
     };
     const refreshAll = () => refresh(['content', 'appearance', 'sessions']);
-    source?.addEventListener('open', refreshAll);
-    source?.addEventListener('reset', refreshAll);
-    source?.addEventListener('project_changed', event => {
-      try {
-        const data = JSON.parse(event.data);
-        if (Array.isArray(data?.areas)) refresh(data.areas);
-      } catch { /* An invalid event carries no refresh information. */ }
-    });
+    const release = threadId ? useSessionStore.getState().retain(threadId, projectId, refresh) : undefined;
     const focus = () => {
-      if (document.visibilityState === 'visible') void useSessionStore.getState().reconnect(threadId);
+      if (document.visibilityState === 'visible') refreshAll();
     };
     window.addEventListener('focus', focus);
     document.addEventListener('visibilitychange', focus);
     return () => {
-      source?.close();
-      release();
+      release?.();
       window.removeEventListener('focus', focus);
       document.removeEventListener('visibilitychange', focus);
     };
@@ -84,12 +74,10 @@ export function WorkspaceRoute() {
   }, [activeProjectId, navigate, openProjectIds, projectId]);
 
   React.useEffect(() => {
-    if (!projectId) return;
-
     let canceled = false;
     const validateAndLoad = async () => {
       const loaded = await loadProjects();
-      if (!loaded || canceled) return;
+      if (!loaded || canceled || !projectId) return;
 
       const state = useProjectStore.getState();
       const exists = state.projects.some((project) => project.id === projectId);

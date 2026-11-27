@@ -210,7 +210,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <div class="diagram-scroll" data-scroll-id="main-loop" tabindex="0" role="region" aria-label="主循环图">
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 2480" width="1240" height="2480" role="group" aria-labelledby="loop-title loop-description">
 <title id="loop-title">Harness 主循环</title>
-<desc id="loop-description">受理与初始快照提交后进入 HarnessLoop。输入处理和主模型调用前经 HookDispatcher 传递各阶段 Result，主流程应用结果。实际发送前检查新输入，有则返回输入处理并重建请求。尝试完成时由主流程控制输入边界并准备材料，CompletionHook 返回完成阶段 Result；不满足则恢复受理并继续循环，满足则提交完成结果，再异步调度建议。Hook 不控制输入、Loop 或终态提交。</desc>
+<desc id="loop-description">首条指令与发送前检查点提交后进入 HarnessLoop。输入处理和主模型调用前经 HookDispatcher 传递各阶段 Result，主流程应用结果。实际发送前检查新输入，有则返回输入处理并重建请求。尝试完成时由主流程控制输入边界并准备材料，CompletionHook 返回完成阶段 Result；不满足则恢复受理并继续循环，满足则提交最终回复及回复后的检查点，再异步调度建议。Hook 不控制输入、Loop 或终态提交。</desc>
 <defs>
 <marker id="loop-arrow-normal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
 <path class="arrow-normal" d="M1 1 L9 5 L1 9 Z"/>
@@ -336,7 +336,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <a class="class-link" href="#class-InputService" aria-label="查看 InputService 职责">
 <text class="node-name" x="16" y="73">InputService</text>
 </a>
-<text class="node-caption" x="16" y="99">running / waiting 时追加并入队</text>
+<text class="node-caption" x="16" y="99">追加指令与发送前检查点同事务</text>
 <text class="node-caption" x="16" y="119">安全边界消费，保留消息身份</text>
 </g>
 <g id="loop-input-hook" class="node plain" transform="translate(24 760)">
@@ -478,7 +478,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <text class="node-name" x="16" y="50">RunService</text>
 </a>
 <text class="node-caption" x="16" y="76">根据主流程结果统一收尾</text>
-<text class="node-caption" x="16" y="96">提交最终回复、净差异与终态</text>
+<text class="node-caption" x="16" y="96">提交最终回复、回复后检查点与终态</text>
 </g>
 <g id="loop-after" class="node plain" transform="translate(465 2378)">
 <rect width="310" height="86" rx="10"/>
@@ -1230,7 +1230,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <text class="node-name" x="16" y="50">CommandService</text>
 </a>
 <text class="node-caption" x="16" y="76">受理命令、校验当前状态</text>
-<text class="node-caption" x="16" y="96">处理占用、修订、取消与分支确认</text>
+<text class="node-caption" x="16" y="96">处理占用、修订和取消</text>
 </g>
 <g id="support-accept" class="node plain" transform="translate(900 124)">
 <rect width="316" height="118" rx="10"/>
@@ -1367,7 +1367,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <a class="class-link" href="#class-IProjectRepository" aria-label="查看 IProjectRepository 职责">
 <text class="node-name" x="16" y="48">IProjectRepository</text>
 </a>
-<text class="node-caption" x="16" y="74">恢复会话和五类文稿文件</text>
+<text class="node-caption" x="16" y="74">恢复文稿、计划、上下文和历史位置</text>
 </g>
 <text class="lane-label" x="24" y="1144" text-anchor="start">通知与启动清理</text>
 <g id="support-subscribe" class="node plain" transform="translate(24 1172)">
@@ -1813,7 +1813,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>新开、追加或取消请求；对话调用用量、已提交修改事实与主循环结束结果</td>
 <td>受理的 Run；状态变化与最终持久结果</td>
-<td>组织受理、模型配置固定、后台执行和统一收尾；协调会话占用与初始检查点。在同一受理临界区将模型配置、执行开关与审查文件基准固定在内存，受理成功后释放锁并调度。收尾时将自动建议所需材料交给异步事件，再释放本 Run 的执行材料。累计并保存主循环对话用量；通过 <code>RunChangeSet</code> 按本 Run 的成功提交记录汇总净差异，抵消自身撤销的修改。完成条件满足后通过 IRunRepository 将最终回复、净差异与终态一起保存；传播至 Run 边界的异常按具体原因及 HarnessErrorCode 处理；取消独立收尾，保留已确认修改和已发生用量。完成提交成功后调用 afterRunCompleted；Hook 不负责终态提交。</td>
+<td>组织受理、模型配置固定、后台执行和统一收尾；协调会话占用与初始检查点。在同一受理临界区将模型配置、执行开关与审查文件基准固定在内存，受理成功后释放锁并调度。收尾时将自动建议所需材料交给异步事件，再释放本 Run 的执行材料。累计并保存主循环对话用量；通过 <code>RunChangeSet</code> 按本 Run 的成功提交记录汇总净差异，抵消自身撤销的修改。完成条件满足后通过 IRunRepository 将最终回复、回复后检查点、净差异与终态一起保存；传播至 Run 边界的异常按具体原因及 HarnessErrorCode 处理；取消独立收尾，保留已确认修改和已发生用量。完成提交成功后调用 afterRunCompleted；Hook 不负责终态提交。</td>
 </tr>
 <tr id="class-RunState">
 <th scope="row"><code>RunState</code><span class="type">Run 内存状态</span></th>
@@ -1856,7 +1856,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>首条指令或追加输入；引用、当前授权与待答状态</td>
 <td>受理回执、已处理输入与授权状态；输入边界控制结果</td>
-<td>校验消息引用与输入开关，受理落库后在安全边界消费队列；发送前检查是否有新输入待处理。输入开始处理时调用 beforeInputProcessed，应用 Result 并保存处理状态。输入出队、授权变化及实际接入对话由本类负责。按主流程要求封闭或恢复受理；追加授权取并集，引用不扩大范围，首条输入被拒后关闭入口，未处理输入留在原 Run 历史。</td>
+<td>校验消息引用与输入开关，受理时一并保存发送前检查点，随后在安全边界消费队列；发送前检查是否有新输入待处理。输入开始处理时调用 beforeInputProcessed，应用 Result 并保存处理状态。输入出队、授权变化及实际接入对话由本类负责。按主流程要求封闭或恢复受理；追加授权取并集，引用不扩大范围，首条输入被拒后关闭入口，未处理输入留在原 Run 历史。</td>
 </tr>
 </tbody>
 <tbody>
@@ -2260,9 +2260,9 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <th scope="row">
 <code>CheckpointService</code>
 </th>
-<td>新 Run 的起始状态，或回退 / 返回请求与预览版本</td>
-<td>起始快照、可用回退目标，或历史恢复结果</td>
-<td>受理时从同一份一致读取生成持久检查点和 Run 内存审查基准。回退与返回均恢复目标会话标题、计划及步骤、历史和建议，以及五类项目文稿文件。回退或返回实际改变共享文稿文件时，清理同项目其他会话的检查点及返回快照。</td>
+<td>用户指令、最终回复，或携带预览版本的回退与返回请求</td>
+<td>消息检查点、可用回退目标，或历史恢复结果</td>
+<td>在用户发送前、最终回复后采集快照。新 Run 受理时同时取得内存审查基准。回退与返回均恢复五类文稿、有效计划、有序上下文和当前分支的历史位置。标题沿用当前值。回退或返回实际改变共享文稿文件时，清理同项目其他会话的检查点及返回快照。</td>
 </tr>
 </tbody>
 <tbody>
@@ -2400,7 +2400,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>检查点列表、预览、回退或返回请求</td>
 <td>检查点信息、预览或恢复结果</td>
-<td>调用 CheckpointService，保留预览版本与分支确认约束。</td>
+<td>按消息 ID 查询和预览检查点，提交回退与返回请求时校验预览版本。</td>
 </tr>
 </tbody>
 <tbody>
@@ -2443,7 +2443,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>Run 受理、输入处理、模型 / 工具消息或收尾业务变更</td>
 <td>持久结果、消息或一致快照</td>
-<td>由 <code>infrastructure/repository/RunRepository</code> 实现。负责 Run 复合提交与查询：一并提交起始快照与首条输入；对话用量去重累计；最终回复、净差异与终态一起保存；输入受理后固定归属与序号。失败、取消或中断保留已确认修改与已发生用量。不是逐表 CRUD 包装。</td>
+<td>由 <code>infrastructure/repository/RunRepository</code> 实现。负责 Run 复合提交与查询：首条指令及追加指令分别与发送前检查点同事务写入。对话用量去重累计。最终回复、回复后检查点、净差异与终态一起保存。输入受理后固定归属与序号。失败、取消或中断保留已确认修改与已发生用量。不是逐表 CRUD 包装。</td>
 </tr>
 <tr id="class-ISessionRepository">
 <th scope="row">
@@ -2470,7 +2470,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>一致快照、检查点查询或历史恢复集合</td>
 <td>检查点、恢复基准或恢复后的会话数据</td>
-<td>由 <code>infrastructure/repository/CheckpointRepository</code> 实现。归 agent/repository。负责普通及返回快照与分支清理，不保存周期性 Loop 运行快照。历史切换在同一事务中恢复业务记录、处理返回行并按预期版本推进会话版本。</td>
+<td>由 <code>infrastructure/repository/CheckpointRepository</code> 实现。归 agent/repository。负责普通及返回快照与分支清理，不保存周期性 Loop 运行快照。历史切换在同一事务中恢复计划、上下文消息顺序和历史位置，处理返回行并按预期版本推进会话版本。</td>
 </tr>
 <tr id="class-IProjectRepository">
 <th scope="row">

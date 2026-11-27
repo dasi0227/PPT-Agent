@@ -4,7 +4,6 @@ import type { Decorations, Project, ProjectContentSnapshot } from '../api/types'
 import { projectsApi, type ProjectFiles, type ProjectFileWrite } from '../api/projects';
 import { assetsApi } from '../api/assets';
 import { useThreadStore } from './threadStore';
-import { isProjectExportBlocking, useExportStore } from './exportStore';
 import { isProjectDeleted, markProjectDeleted } from './deletedTargets';
 import { showGlobalError } from './toastStore';
 
@@ -154,7 +153,6 @@ export const useProjectStore = create<ProjectState>()(persist((set, get) => {
       return created;
     },
     closeProject: (id) => {
-      if (isProjectExportBlocking(id)) return get().activeProjectId;
       advance(contentRequests, id);
       set(state => {
         const openProjectIds = state.openProjectIds.filter(value => value !== id);
@@ -172,7 +170,6 @@ export const useProjectStore = create<ProjectState>()(persist((set, get) => {
       markProjectDeleted(id);
       advance(contentRequests, id);
       advance(appearanceRequests, id);
-      useExportStore.getState().dropProject(id);
       useThreadStore.getState().dropProject(id);
       set(state => {
         const omit = <T,>({ [id]: ignored, ...rest }: Record<string, T>) => rest;
@@ -191,7 +188,6 @@ export const useProjectStore = create<ProjectState>()(persist((set, get) => {
     selectProject: (id) => {
       if (isProjectDeleted(id)) return;
       const current = get().activeProjectId;
-      if (current !== id && isProjectExportBlocking(current)) return;
       if (current !== id) set({ activeProjectId: id });
     },
     loadProjectAppearance: async (id) => {

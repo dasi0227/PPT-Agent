@@ -9,8 +9,10 @@ import {
 import { isProjectDeleted, isThreadDeleted } from './deletedTargets';
 import type { CreateRunRequest } from '../api/types';
 
-export type SessionLoadStatus = 'uninitialized' | 'loading' | 'ready' | 'refreshing' | 'error';
+export type SessionLoadStatus = 'uninitialized' | 'loading' | 'ready' | 'refreshing' | 'error' | 'unavailable';
 export type SessionConnectionStatus = 'closed' | 'connecting' | 'open' | 'reconnecting';
+type ProjectChangeListener = (areas: readonly unknown[]) => void;
+const projectAreas = ['content', 'appearance', 'sessions'] as const;
 
 interface PageState {
   status: 'idle' | 'loading' | 'error';
@@ -66,7 +68,7 @@ export interface SessionState {
 
 interface SessionStore {
   sessions: Record<string, SessionState>;
-  retain: (threadId: string, projectId: string) => () => void;
+  retain: (threadId: string, projectId: string, onProjectChange?: ProjectChangeListener) => () => void;
   ensure: (threadId: string, projectId: string) => Promise<void>;
   retry: (threadId: string) => Promise<void>;
   reconnect: (threadId: string) => Promise<void>;
@@ -368,6 +370,7 @@ interface Controller {
   projectId: string;
   generation: number;
   refs: number;
+  projectListeners: Set<ProjectChangeListener>;
   frozen: boolean;
   abort: AbortController;
   source?: EventSource;
@@ -390,7 +393,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
       assertSync(existing.projectId === projectId, 'session.project_id');
       return existing;
     }
-    const value: Controller = { threadId, projectId, generation: 0, refs: 0, frozen: false,
+    const value: Controller = { threadId, projectId, generation: 0, refs: 0, frozen: false, projectListeners: new Set(),
       abort: new AbortController(), failures: 0, pending: new Map(), batches: [] };
     controllers.set(threadId, value);
     set(state => ({ sessions: { ...state.sessions, [threadId]: fresh(threadId, projectId) } }));
@@ -458,7 +461,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
       const value = state.sessions[c.threadId];
       return !value ? state : { sessions: { ...state.sessions, [c.threadId]: {
         ...value, generation: c.generation, connectionStatus: 'closed',
-        loadStatus: value.thread ? 'refreshing' : 'loading', error: null,
+        loadStatus: value.thread ? 'refreshing' : c.projectListeners.size ? 'uninitialized' : 'loading', error: null,
         historyPage: { status: 'idle', error: null }, detailStates: {},
         groupPages: Object.fromEntries(Object.entries(value.groupPages).map(([id, page]) => [id, { ...page, status: 'idle', error: null }])),
       } } };
@@ -555,16 +558,31 @@ export const useSessionStore = create<SessionStore>((set, get) => {
   }
 
   function connect(c: Controller): void {
-    const state = get().sessions[c.threadId];
-    if (!current(c) || c.frozen || c.refs === 0 || c.source || state?.loadStatus !== 'ready' || !state.cursor || typeof EventSource === 'undefined') return;
+    if (!current(c) || c.frozen || c.refs === 0 || c.source || typeof EventSource === 'undefined') return;
     const generation = c.generation;
-    const source = new EventSource(`/api/v1/threads/${encodeURIComponent(c.threadId)}/events?${new URLSearchParams({ cursor: state.cursor })}`);
+    const source = new EventSource(`/api/sessions/${encodeURIComponent(c.threadId)}/events`);
     c.source = source;
     update(c, value => ({ ...value, connectionStatus: 'connecting' }));
     const active = () => current(c, generation) && c.source === source && !c.frozen;
-    source.onopen = () => { if (active()) update(c, value => ({ ...value, connectionStatus: 'open', error: null })); };
-    source.addEventListener('thread.change', (message: MessageEvent<string>) => {
+    const refreshProject = (areas: readonly unknown[]) => {
+      if (active()) c.projectListeners.forEach(listener => listener(areas));
+    };
+    source.onopen = () => {
       if (!active()) return;
+      update(c, value => ({ ...value, connectionStatus: 'open' }));
+      refreshProject(projectAreas);
+    };
+    source.addEventListener('reset', () => refreshProject(projectAreas));
+    source.addEventListener('project_changed', (message: MessageEvent<string>) => {
+      if (!active()) return;
+      let data: { areas?: unknown } | null;
+      try { data = JSON.parse(message.data); }
+      catch { return; }
+      if (Array.isArray(data?.areas)) refreshProject(data.areas);
+    });
+    // Retained projections belong to the deferred history actions.
+    source.addEventListener('thread.change', (message: MessageEvent<string>) => {
+      if (!active() || c.projectListeners.size) return;
       try {
         assertSync(message.lastEventId.length > 0, 'stream.cursor');
         const batch = parseSessionBatch(JSON.parse(message.data) as unknown, c.threadId);
@@ -579,7 +597,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
       }
     });
     source.addEventListener('thread.reset', (message: MessageEvent<string>) => {
-      if (!active()) return;
+      if (!active() || c.projectListeners.size) return;
       try {
         const payload = JSON.parse(message.data) as { reason?: unknown };
         const reason = typeof payload.reason === 'string' ? payload.reason : 'SYNC_FAILED';
@@ -588,11 +606,12 @@ export const useSessionStore = create<SessionStore>((set, get) => {
     });
     source.onerror = () => {
       if (!active()) return;
+      update(c, value => ({ ...value, connectionStatus: 'reconnecting' }));
+      if (c.projectListeners.size) return;
       if (!flushStream(c)) return;
       disconnect(c);
       // EventSource hides the HTTP status. A range read distinguishes a reset
       // from a transient disconnect without replacing an otherwise valid view.
-      update(c, value => ({ ...value, connectionStatus: 'reconnecting' }));
       schedule(c, () => catchUp(c));
     };
   }
@@ -608,16 +627,22 @@ export const useSessionStore = create<SessionStore>((set, get) => {
 
   return {
     sessions: {},
-    retain: (threadId, projectId) => {
+    retain: (threadId, projectId, onProjectChange) => {
       if (isThreadDeleted(threadId) || isProjectDeleted(projectId)) return () => {};
       const c = controller(threadId, projectId);
       clearTimeout(c.releaseTimer);
       c.refs++;
-      void get().ensure(threadId, projectId);
+      if (onProjectChange) {
+        c.projectListeners.add(onProjectChange);
+        connect(c);
+      } else {
+        void get().ensure(threadId, projectId);
+      }
       let released = false;
       return () => {
         if (released) return;
         released = true;
+        if (onProjectChange) c.projectListeners.delete(onProjectChange);
         c.refs = Math.max(0, c.refs - 1);
         if (c.refs === 0) c.releaseTimer = setTimeout(() => {
           if (current(c) && c.refs === 0) {
@@ -755,7 +780,8 @@ export const useSessionStore = create<SessionStore>((set, get) => {
       for (const c of controllers.values()) if (c.projectId === projectId) {
         c.frozen = false;
         invalidate(c);
-        if (c.refs > 0) void readView(c);
+        if (c.projectListeners.size) connect(c);
+        else if (c.refs > 0) void readView(c);
       }
     },
     drop: threadIds => {

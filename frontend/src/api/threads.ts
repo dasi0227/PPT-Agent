@@ -2,7 +2,7 @@ import { fetchClient, postJson } from './client';
 import type { DeletionResponse } from './deletions';
 import { parseCommitReceipt } from './session';
 import { runCommand } from './commands';
-import { CompactContextResponse, ContextWindowSnapshot, Thread, ThreadNamingAction } from './types';
+import { CompactContextResponse, ContextWindowSnapshot, Thread } from './types';
 
 export interface ProjectSession {
   id: string;
@@ -25,6 +25,8 @@ export const threadsApi = {
     `/projects/${encodeURIComponent(projectId)}/sessions`, { reportError: false, cache: 'no-store' },
   ).then(response => response.items),
   create: (project_id: string, title?: string) => postJson<{ id: string }>('/sessions/create', { project_id, title }),
+  update: (session_id: string, title: string, expected_revision?: string) =>
+    postJson<void>('/sessions/update', { session_id, title, expected_revision }),
   clearPlan: (id: string, sceneRevision: string, planRevision: string) => fetchClient<import('./session').CommitReceipt>(`/threads/${id}/plan`, { method: 'DELETE', body: JSON.stringify({ scene_revision: sceneRevision, plan_revision: planRevision, request_key: crypto.randomUUID() }) }).then(parseCommitReceipt),
   contextWindow: (threadId: string, modelProfileName: string, sceneRevision: string, signal?: AbortSignal) =>
     fetchClient<ContextWindowSnapshot>(
@@ -36,10 +38,7 @@ export const threadsApi = {
   patch: (id: string, patch: {title?: string}, commandId?: string, signal?: AbortSignal) => renameThread(id, { mode: 'manual', title: patch.title }, { signal, commandId }),
   suggest: (id: string, commandId: string) => runCommand<{ requests: string[] }>(id, 'suggest', {}, { commandId }),
   setAutoSuggest: (id: string, enabled: boolean) => fetchClient<Thread>(`/threads/${id}`, { method: 'PATCH', reportError: false, body: JSON.stringify({ auto_suggest_enabled: enabled }) }),
-  naming: async (id: string, operationId: string, action: ThreadNamingAction, title?: string): Promise<Thread> => {
-    if (action === 'enable' || action === 'disable') return fetchClient<Thread>(`/threads/${id}`, { method: 'PATCH', body: JSON.stringify({ auto_rename_enabled: action === 'enable' }) });
-    return renameThread(id, { mode: action === 'manual' ? 'manual' : 'automatic', title }, { commandId: `rename:${operationId}` });
-  },
+  setAutoRename: (id: string, enabled: boolean) => fetchClient<Thread>(`/threads/${id}`, { method: 'PATCH', body: JSON.stringify({ auto_rename_enabled: enabled }) }),
   delete: (id: string) => fetchClient<DeletionResponse>(`/threads/${id}`, {
     method: 'DELETE'
   })
