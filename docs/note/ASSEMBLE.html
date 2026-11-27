@@ -426,16 +426,16 @@
       </div>
     </section>
 
-    <section class="assembly-group" aria-label="Command 提示词拼装">
+    <section class="assembly-group" aria-label="Action 提示词拼装">
       <div class="assembly-grid">
-        <article class="assembly-card" data-case="command-commit" aria-labelledby="commit-title">
+        <article class="assembly-card" data-case="action-commit" aria-labelledby="commit-title">
           <header class="card-header">
             <h3 id="commit-title">Commit</h3>
           </header>
           <section class="request-section" aria-labelledby="commit-system-title">
             <h4 class="request-label" id="commit-system-title">System</h4>
             <ol class="assembly-sequence" role="list" aria-label="Commit System 拼装顺序">
-              <li><code>command_commit</code></li>
+              <li><code>action_commit</code></li>
             </ol>
           </section>
           <section class="request-section" aria-labelledby="commit-user-title">
@@ -455,14 +455,14 @@
           </section>
         </article>
 
-        <article class="assembly-card" data-case="command-polish" aria-labelledby="polish-title">
+        <article class="assembly-card" data-case="action-polish" aria-labelledby="polish-title">
           <header class="card-header">
             <h3 id="polish-title">Polish</h3>
           </header>
           <section class="request-section" aria-labelledby="polish-system-title">
             <h4 class="request-label" id="polish-system-title">System</h4>
             <ol class="assembly-sequence" role="list" aria-label="Polish System 拼装顺序">
-              <li><code>command_polish</code></li>
+              <li><code>action_polish</code></li>
             </ol>
           </section>
           <section class="request-section" aria-labelledby="polish-user-title">
@@ -482,20 +482,20 @@
           </section>
         </article>
 
-        <article class="assembly-card" data-case="command-rename" aria-labelledby="rename-title">
+        <article class="assembly-card" data-case="action-rename" aria-labelledby="rename-title">
           <header class="card-header">
             <h3 id="rename-title">Rename</h3>
           </header>
           <section class="request-section" aria-labelledby="rename-system-title">
             <h4 class="request-label" id="rename-system-title">System</h4>
             <ol class="assembly-sequence" role="list" aria-label="Rename System 拼装顺序">
-              <li><code>command_rename</code></li>
+              <li><code>action_rename</code></li>
             </ol>
           </section>
           <section class="request-section" aria-labelledby="rename-user-title">
             <h4 class="request-label" id="rename-user-title">User</h4>
             <ol class="assembly-sequence" role="list" aria-label="Rename 输入拼装顺序">
-              <li><div><code>current_title</code> · 命令受理时的标题，同时用于写回核对。</div></li>
+              <li><div><code>current_title</code> · 操作受理时的标题，同时用于写回核对。</div></li>
               <li><code>conversation_history</code></li>
               <li><code>user_instruction</code></li>
             </ol>
@@ -508,14 +508,14 @@
           </section>
         </article>
 
-        <article class="assembly-card" data-case="command-suggest" aria-labelledby="suggest-title">
+        <article class="assembly-card" data-case="action-suggest" aria-labelledby="suggest-title">
           <header class="card-header">
             <h3 id="suggest-title">Suggest</h3>
           </header>
           <section class="request-section" aria-labelledby="suggest-system-title">
             <h4 class="request-label" id="suggest-system-title">System</h4>
             <ol class="assembly-sequence" role="list" aria-label="Suggest System 拼装顺序">
-              <li><code>command_suggest</code></li>
+              <li><code>action_suggest</code></li>
             </ol>
           </section>
           <section class="request-section" aria-labelledby="suggest-user-title">
@@ -524,7 +524,7 @@
               <li><code>project_context</code></li>
               <li><code>current_plan</code></li>
               <li><code>conversation_history</code></li>
-              <li><div><code>user_instruction</code> · 固定所依据的用户输入正文。写回时由命令服务核对输入 ID 和 suggest 的受理顺序。</div></li>
+              <li><div><code>user_instruction</code> · 固定所依据的用户输入正文。写回时由操作服务核对输入 ID 和 suggest 的受理顺序。</div></li>
             </ol>
           </section>
           <section class="request-section" aria-labelledby="suggest-tools-title">
@@ -535,14 +535,14 @@
           </section>
         </article>
 
-        <article class="assembly-card" data-case="command-handoff" aria-labelledby="handoff-title">
+        <article class="assembly-card" data-case="action-handoff" aria-labelledby="handoff-title">
           <header class="card-header">
             <h3 id="handoff-title">Handoff</h3>
           </header>
           <section class="request-section" aria-labelledby="handoff-system-title">
             <h4 class="request-label" id="handoff-system-title">System</h4>
             <ol class="assembly-sequence" role="list" aria-label="Handoff System 拼装顺序">
-              <li><code>command_handoff</code></li>
+              <li><code>action_handoff</code></li>
             </ol>
           </section>
           <section class="request-section" aria-labelledby="handoff-user-title">
@@ -563,14 +563,14 @@
           </section>
         </article>
 
-        <article class="assembly-card" data-case="command-compact" aria-labelledby="compact-title">
+        <article class="assembly-card" data-case="action-compact" aria-labelledby="compact-title">
           <header class="card-header">
             <h3 id="compact-title">Compact</h3>
           </header>
           <section class="request-section" aria-labelledby="compact-system-title">
             <h4 class="request-label" id="compact-system-title">System</h4>
             <ol class="assembly-sequence" role="list" aria-label="Compact System 拼装顺序">
-              <li><code>command_compact</code></li>
+              <li><code>action_compact</code></li>
             </ol>
           </section>
           <section class="request-section" aria-labelledby="compact-user-title">

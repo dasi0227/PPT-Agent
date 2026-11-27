@@ -36,8 +36,8 @@
 - 图片、下载和静态资源使用各自的 HTTP 响应类型。无响应体的接口直接返回空响应体。
 - `controller/system/SystemController.java` 提供健康检查和内置预览资源读取接口。
 - 项目文件打开、幻灯片缩略图和图片附件接口归 `controller/file/`。项目导出归 `controller/export/`。
-- 会话历史、Run 与命令详情、工具详情和会话订阅归 `controller/history/`。
-- Run 与旁路命令的受理及取消入口归 `controller/execution/`。
+- 会话历史、Run 与操作详情、工具详情和会话订阅归 `controller/history/`。
+- Run 与旁路操作的受理及取消入口归 `controller/execution/`。
 - `interfaces/handler/` 存放 `GlobalExceptionHandler.java` 和 `ErrorResponse.java`。
 - `interfaces/sse/SseEventPublisher` 实现 `domain/shared/sse/EventPublisher`，管理订阅连接，并将事件名和数据写入目标会话的 SSE 流。
 
@@ -49,10 +49,10 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 | `project` | `ProjectAppearanceVo` | `DecorationPositionsVo` |
 | `session` | `SessionListVo` | `SessionSummaryVo` |
 | `session` | `SessionStateVo` | `PlanVo`、`PlanStepVo`、`ContextWindowVo`、`ContextDetailsVo`、`TokenBreakdownItemVo` |
-| `history` | `HistoryListVo` | `HistoryItemVo`、`RunHistoryVo`、`CommandHistoryVo`、`HistoryInstructionVo`、`HistoryReplyVo`、`PublicReferenceVo`、`CommandSummaryResultVo`、`ChangeSummaryVo` |
+| `history` | `HistoryListVo` | `HistoryItemVo`、`RunHistoryVo`、`ActionHistoryVo`、`HistoryInstructionVo`、`HistoryReplyVo`、`PublicReferenceVo`、`ActionSummaryResultVo`、`ChangeSummaryVo` |
 | `history` | `RunChangesVo` | `ChangeTargetVo`、`RunChangeDetailVo`、`ChangeDiffVo`、`FieldDiffVo`、`FieldDiffRowVo`、`OutlineDiffGroupVo`、`OutlineDiffRowVo`、`TextDiffHunkVo`、`TextDiffRowVo` |
 | `history` | `RunInfoVo` | `RunMessageVo`、`RunUsageVo`、`PendingInteractionVo`、`ExecutionFailureVo` |
-| `history` | `CommandInfoVo` | `CommandInputVo`、`CommandResultVo` |
+| `history` | `ActionDetailVo` | `ActionInputVo`、`ActionResultVo` |
 | `history` | `ToolInfoVo` | `ToolResultVo`、`ToolChangedTargetVo`、`ToolImageVo`、`LoadedResourceVo`、`ToolCommandVo`、`ToolInteractionVo`、`PreviewAssessmentVo`、`PreviewScoresVo`、`PreviewJudgesVo` |
 | `execution` | `AppendRunDto` | `RunScopeDto`、`InstructionReferenceDto`、`DomRegionDto`、`DomTargetDto`、`DomDecorationDto`、`DomFingerprintDto`、`DomAncestorDto`、`CanvasRectDto` |
 | `interaction` | `AnswerQuestionsDto` | `QuestionAnswerDto` |
@@ -69,7 +69,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `CreateSessionDto` 创建会话，`UpdateSessionDto` 修改会话标题。
 - `DeleteSessionPlanDto` 对应 `DeleteSessionPlanVo`，返回提交后的会话 `revision`。
 - `AppendRunDto` 对应 `AppendRunVo`，返回指令受理后所属的 `run_id`。
-- `AppendCommandDto` 对应 `AppendCommandVo`，返回受理的单次命令执行 `id`。
+- `AppendActionDto` 对应 `AppendActionVo`，返回受理的单次操作执行 `id`。
 - `DeleteProjectDto` 和 `DeleteProjectLogoDto` 分别用于删除项目和删除项目 Logo，请求体均只含 `project_id`。删除成功返回空响应体。
 - `ContentHashVo` 供基本信息、约束、大纲、单页规格和单页 HTML 的保存接口共用。
 - 文稿正文沿用 `Meta`、`Constraint`、`Outline`、`Spec` 对应的 JSON 结构。
@@ -84,7 +84,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `domain/shared/` 与业务包平级，`exception/` 存放共用异常与错误码，`constant/` 和 `util/` 存放跨领域常量和辅助函数。
 - `domain/shared/service/NotifyService` 按项目 ID 或已取得的会话 ID 列表广播项目内容、外观及会话列表的变更。
 - `domain/shared/sse/EventPublisher` 接收投递目标和 `SseEvent`，供项目与 Agent 服务发布订阅通知。
-- `domain/shared/sse/SseEvent` 是普通 Java 接口，六个实现均在接口内声明为嵌套类，分别为 `ProjectChanged`、`SessionChanged`、`RunProgress`、`InteractionChanged`、`CommandProgress` 和 `Reset`。[事件名与字段](API.html#history)
+- `domain/shared/sse/SseEvent` 是普通 Java 接口，六个实现均在接口内声明为嵌套类，分别为 `ProjectChanged`、`SessionChanged`、`RunProgress`、`InteractionChanged`、`ActionProgress` 和 `Reset`。[事件名与字段](API.html#history)
 - `domain/shared/sse/ProjectChangeArea` 对应 `project_changed.areas`，取 `content / appearance / sessions`。`domain/shared/sse/SessionChangeArea` 对应 `session_changed.areas`，取 `history / run / commands / plan / suggestions / context / checkpoints`。[重读范围](API_SPEC.md#消息)
 - `domain/shared/enumeration/RunActivity` 供 Run 详情的 `activity` 与 SSE 的 `progress.activity` 共用。当前无活动或 Run 已终态时返回 `null`。[活动取值与订阅字段](API.html#history)
 - 每个领域的 `model/` 存放值对象及业务输入和结果，`model/entity/` 存放实体，`model/enumeration/` 存放枚举。
@@ -116,10 +116,10 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `IProjectRepository` 负责项目查询与创建、改名、删除，文稿提交及恢复由文稿仓储负责。
 - `domain/shared/gateway/IFileGateway` 接收调用方解析好的文件或目录 `Path`，写入时另传 `byte[] content`。文稿、附件和缩略图共用此接口。列举返回目录直属的普通文件名。`DeckService` 保存大纲时按文件名顺序识别并删除已移出大纲的页面文件，`ThumbnailService` 选择需要清理的旧 WebP。[项目文件布局](#项目目录)
 - `infrastructure/gateway/FileGateway` 新建和替换都先完整写入同目录临时文件并刷盘。新建以硬链接创建正式文件名，目标已存在或文件系统不支持硬链接时失败。替换通过原子移动发布。写入完成后清理临时文件名并同步父目录。
-- `agent/model/entity/` 下的持久化实体有 `Session`、`Run`、`Message`、`Command` 和 `Checkpoint`。
+- `agent/model/entity/` 下的持久化实体有 `Session`、`Run`、`Message`、`ActionExecution` 和 `Checkpoint`。
 - `agent/model/entity/PendingInteraction` 是由 `InteractionService` 管理的内存实体，以 `run_id + tool_call_id` 标识一项待答交互，持有 `InteractionType`、当前表单及其 `version`。[待答与答复](API_SPEC.md#人工)
 - `agent/model/` 存放会话的 `Plan` 和 `PlanStep`。
-- `agent/model/RunConfig` 由 `RunService` 在受理时根据全局设置组装，包含本次 Run 的主模型、旁路及备用模型、审批开关和自动命令开关，由 `RunState` 持有并在整次 Run 中复用。[受理与执行材料](WORKFLOW_SPEC.md#新开-run)
+- `agent/model/RunConfig` 由 `RunService` 在受理时根据全局设置组装，包含本次 Run 的主模型、旁路及备用模型、审批开关和自动操作开关，由 `RunState` 持有并在整次 Run 中复用。[受理与执行材料](WORKFLOW_SPEC.md#新开-run)
 - `agent/model/RunScope` 表示已生效的页面授权。`InputService` 在受理时将 `chapter_ids`（章）或 `section_ids`（节）展开为页面 ID，`ToolGuard` 按生效范围核对目标页。
 - `agent/model/RunChangeSet` 按 `ChangeTarget` 合并归属本 Run 的已提交 `DeckChange`，抵消本 Run 自身撤销的修改，供独立审查和 Run 收尾使用。[净修改归属](DATABASE_SPEC.md#runs)
 - `agent/model/ContextEstimate` 保存一次完整请求的上下文 Token 总量与分类明细，由 `ContextService` 整体更新，供压缩判断和会话状态查询使用。[会话上下文](API.html#sessions)
@@ -142,7 +142,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `agent/model/enumeration/ScopeDecision` 取 `approve / refuse / revise`，分别表示合并提议范围、保留已有授权、授权本项目全部页面。
 - `agent/model/enumeration/PlanDecision` 取 `approve / refuse`。批准使同一 Run 从 Plan 切换至 Create，拒绝时继续规划并保留原计划。
 - `agent/model/enumeration/ResourceDecision` 取 `approve / reject`。只有批准时可提交完整 `draft`，省略时采用原提案。[审批答复字段](API.html#interactions)
-- `agent/model/enumeration/ToolName` 取四种运行模式公开工具名的并集。每个工具名对应一个独立的 `AgentTool` 实现，`ToolRegistry.resolve(ToolName)` 按名返回该实例。[Create 工具清单](ASSEMBLE.html#create-tools-title) · [Chat、Ask、Plan 工具清单](ASSEMBLE.html#other-tools-title)
+- `agent/model/enumeration/ToolName` 取四种运行模式公开工具名的并集。每个工具名对应一个独立的 `Tool` 实现，`ToolRegistry.getToolByName(ToolName)` 按名返回该实例。[Create 工具清单](ASSEMBLE.html#create-tools-title) · [Chat、Ask、Plan 工具清单](ASSEMBLE.html#other-tools-title)
 - `ILlmGateway.LlmRequest` 的消息字段使用 Spring AI 的 `List<org.springframework.ai.chat.messages.Message>`，角色由消息的 `getMessageType()` 提供。
 - `LlmRequest` 同时携带本次调用可用的工具定义。
 - `ILlmGateway.LlmResponse` 是 `ILlmGateway` 的领域响应，携带正文、推理内容、有序的 `ToolCall`、各次实际请求可取得的用量及后续请求所需的协议回传数据。
@@ -154,7 +154,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `agent/model/enumeration/PreviewIssue` 对应 `result.preview.judges.issue`，取 `expression_issue / layout_issue / visual_issue / none`。
 - `agent/model/event/` 存放生命周期事件。
 - `agent/model/result/` 存放生命周期阶段结果、`ToolResult` 和 `PreviewAssessment`。
-- `agent/service/` 按 `run`、`input`、`hook`、`context`、`tool`、`interaction`、`command`、`session`、`history` 分包，其余领域的 `service/` 保持单层。
+- `agent/service/` 按 `run`、`input`、`hook`、`context`、`tool`、`interaction`、`action`、`session`、`history` 分包，其余领域的 `service/` 保持单层。
 - `agent/service/run/` 存放 Run 生命周期、主循环和 `RunState`。
 - `agent/service/hook/` 存放 `SyncHook`、`AsyncHook` 和负责四个阶段的 `HookDispatcher`。
 - `hook/beforeinputprocessed/` 存放 `beforeInputProcessed` 阶段的 `IntentHook` 和 `AutoRenameHook`。
@@ -163,10 +163,10 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `hook/afterruncompleted/` 存放 `afterRunCompleted` 阶段的 `AutoSuggestHook`。
 - `agent/service/context/` 存放 `ContextService`、`ContextCompactor` 和 `PromptAssembler` 接口。
 - `context/assembler/` 存放各场景的 `XxxPromptAssembler` 实现。
-- `agent/service/command/` 存放 `CommandService` 和 `CommandHandler` 接口。
-- `command/handler/` 存放各命令的 `XxxCommandHandler` 实现。
-- `agent/service/tool/` 存放 `AgentTool` 接口、`ToolRegistry`、`ToolGuard` 和 `ToolExecutor`。
-- `tool/builtin/` 存放 16 个内置工具类。每个类以工具名注册为 Spring Bean，例如 `@Component("edit_meta")` 对应 `name()` 返回的 `ToolName.EDIT_META`。五个编辑类复用 `DeckService` 的文稿校验与提交逻辑，两个资产加载类通过 `AssetService` 读取各自的正文。
+- `agent/service/action/` 存放 `ActionService` 和 `Action` 接口。
+- `action/builtin/` 存放各操作的 `XxxAction` 实现。
+- `agent/service/tool/` 存放 `Tool` 接口、`ToolRegistry`、`ToolGuard` 和 `ToolExecutor`。
+- `tool/builtin/` 存放 16 个内置工具类。每个类以工具名注册为 Spring Bean，例如 `@Component("edit_meta")` 对应 `ToolName.EDIT_META.getValue()`。五个编辑类复用 `DeckService` 的文稿校验与提交逻辑，两个资产加载类通过 `AssetService` 读取各自的正文。
 
 ## 后端依赖
 

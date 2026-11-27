@@ -64,7 +64,7 @@
   --ui-chart-runtime: 37 139 134;
   --ui-chart-history: 184 92 102;
   --ui-chart-files: 184 137 62;
-  --ui-chart-commands: 13 148 136;
+  --ui-chart-actions: 13 148 136;
   --ui-chart-other: 123 135 151;
   --radius-control: 8px;
   --radius-card: 10px;
@@ -183,7 +183,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <a href="#main-loop">主循环</a>
 <a href="#hook-flow">生命周期 Hook</a>
 <a href="#tool-flow">工具执行</a>
-<a href="#support-flow">命令与历史</a>
+<a href="#support-flow">操作与历史</a>
 <a href="#handler-assembler-flow">接口与实现</a>
 <a href="#class-catalog">类职责</a>
 </nav>
@@ -364,8 +364,8 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <a class="class-link" href="#class-AutoRenameHook" aria-label="查看 AutoRenameHook 职责">
 <text class="node-name" x="16" y="25">AutoRenameHook</text>
 </a>
-<a class="class-link" href="#class-CommandService" aria-label="查看 CommandService 职责">
-<text class="node-name" x="16" y="48">CommandService</text>
+<a class="class-link" href="#class-ActionService" aria-label="查看 ActionService 职责">
+<text class="node-name" x="16" y="48">ActionService</text>
 </a>
 <text class="node-caption" x="16" y="74">异步检查条件并受理 rename</text>
 </g>
@@ -395,12 +395,12 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </g>
 <g id="loop-compact" class="node plain" transform="translate(900 1200)">
 <rect width="316" height="140" rx="10"/>
-<text class="node-tag" x="16" y="25">command → context</text>
-<a class="class-link" href="#class-CommandService" aria-label="查看 CommandService 职责">
-<text class="node-name" x="16" y="50">CommandService</text>
+<text class="node-tag" x="16" y="25">action → context</text>
+<a class="class-link" href="#class-ActionService" aria-label="查看 ActionService 职责">
+<text class="node-name" x="16" y="50">ActionService</text>
 </a>
-<a class="class-link" href="#class-CompactCommandHandler" aria-label="查看 CompactCommandHandler 职责">
-<text class="node-name" x="16" y="73">CompactCommandHandler</text>
+<a class="class-link" href="#class-CompactAction" aria-label="查看 CompactAction 职责">
+<text class="node-name" x="16" y="73">CompactAction</text>
 </a>
 <a class="class-link" href="#class-ContextCompactor" aria-label="查看 ContextCompactor 职责">
 <text class="node-name" x="16" y="96">ContextCompactor</text>
@@ -631,13 +631,13 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <text class="node-caption" x="16" y="76">execute(event)</text>
 <text class="node-caption" x="16" y="96">按自身条件发起 rename</text>
 </g>
-<g id="hooks-rename-command" class="node plain" transform="translate(936 260)">
+<g id="hooks-rename-action" class="node plain" transform="translate(936 260)">
 <rect width="280" height="112" rx="10"/>
-<a class="class-link" href="#class-CommandService" aria-label="查看 CommandService 职责">
-<text class="node-name" x="16" y="25">CommandService</text>
+<a class="class-link" href="#class-ActionService" aria-label="查看 ActionService 职责">
+<text class="node-name" x="16" y="25">ActionService</text>
 </a>
-<a class="class-link" href="#class-RenameCommandHandler" aria-label="查看 RenameCommandHandler 职责">
-<text class="node-name" x="16" y="48">RenameCommandHandler</text>
+<a class="class-link" href="#class-RenameAction" aria-label="查看 RenameAction 职责">
+<text class="node-name" x="16" y="48">RenameAction</text>
 </a>
 <text class="node-caption" x="16" y="74">统一受理 → 执行命名</text>
 </g>
@@ -765,13 +765,13 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <text class="node-caption" x="16" y="76">Run 固定开关与当前会话状态</text>
 <text class="node-caption" x="16" y="96">符合条件发起 suggest</text>
 </g>
-<g id="hooks-suggest-command" class="node plain" transform="translate(936 980)">
+<g id="hooks-suggest-action" class="node plain" transform="translate(936 980)">
 <rect width="280" height="132" rx="10"/>
-<a class="class-link" href="#class-CommandService" aria-label="查看 CommandService 职责">
-<text class="node-name" x="16" y="25">CommandService</text>
+<a class="class-link" href="#class-ActionService" aria-label="查看 ActionService 职责">
+<text class="node-name" x="16" y="25">ActionService</text>
 </a>
-<a class="class-link" href="#class-SuggestCommandHandler" aria-label="查看 SuggestCommandHandler 职责">
-<text class="node-name" x="16" y="48">SuggestCommandHandler</text>
+<a class="class-link" href="#class-SuggestAction" aria-label="查看 SuggestAction 职责">
+<text class="node-name" x="16" y="48">SuggestAction</text>
 </a>
 <text class="node-caption" x="16" y="74">统一受理 → 执行建议</text>
 </g>
@@ -820,7 +820,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <div class="diagram-scroll" data-scroll-id="tool-flow" tabindex="0" role="region" aria-label="工具执行、审批与提交图">
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 2240" width="1240" height="2240" role="group" aria-labelledby="tool-title tool-description">
 <title id="tool-title">工具分发与修改提交</title>
-<desc id="tool-description">ToolExecutor 保存调用并经过 ToolGuard 后分发到 AgentTool 实现。读取直接返回，修改先生成候选，必要时审批，应用前重新校验并协调文件和数据库提交。可处理失败返回 ToolResult，已识别业务异常在工具边界转换；无法继续的异常传至 RunService，取消独立处理。</desc>
+<desc id="tool-description">ToolExecutor 保存调用并经过 ToolGuard 校验，再由 ToolRegistry 按工具名找到唯一的 Tool 实现。读取直接返回，修改先生成候选，必要时审批，应用前重新校验并协调文件和数据库提交。可处理失败返回 ToolResult，已识别业务异常在工具边界转换。无法继续的异常传至 RunService，取消独立处理。</desc>
 <defs>
 <marker id="tool-arrow-normal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
 <path class="arrow-normal" d="M1 1 L9 5 L1 9 Z"/>
@@ -901,10 +901,10 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <g id="tool-dispatch" class="node primary" transform="translate(465 340)">
 <rect width="310" height="98" rx="10"/>
 <text class="node-tag" x="16" y="25">tool · 接口</text>
-<a class="class-link" href="#class-AgentTool" aria-label="查看 AgentTool 职责">
-<text class="node-name" x="16" y="50">AgentTool</text>
+<a class="class-link" href="#class-Tool" aria-label="查看 Tool 职责">
+<text class="node-name" x="16" y="50">Tool</text>
 </a>
-<text class="node-caption" x="16" y="76">按工具名分派实际实现</text>
+<text class="node-caption" x="16" y="76">按工具名查找实现</text>
 </g>
 <g id="tool-read" class="node plain" transform="translate(24 530)">
 <rect width="274" height="182" rx="10"/>
@@ -912,24 +912,43 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <a class="class-link" href="#class-ReadResourceTool" aria-label="查看 ReadResourceTool 职责">
 <text class="node-name" x="16" y="50">ReadResourceTool</text>
 </a>
+<text class="node-caption" x="258" y="50" text-anchor="end">read_resource</text>
 <a class="class-link" href="#class-ReadImageTool" aria-label="查看 ReadImageTool 职责">
 <text class="node-name" x="16" y="73">ReadImageTool</text>
 </a>
-<a class="class-link" href="#class-LoadAssetTool" aria-label="查看 LoadAssetTool 职责">
-<text class="node-name" x="16" y="96">LoadAssetTool</text>
+<text class="node-caption" x="258" y="73" text-anchor="end">read_image</text>
+<a class="class-link" href="#class-LoadSkillTool" aria-label="查看 LoadSkillTool 职责">
+<text class="node-name" x="16" y="96">LoadSkillTool</text>
 </a>
-<text class="node-caption" x="16" y="122">read_resource · read_image</text>
-<text class="node-caption" x="16" y="142">load_skill · load_component</text>
+<text class="node-caption" x="258" y="96" text-anchor="end">load_skill</text>
+<a class="class-link" href="#class-LoadComponentTool" aria-label="查看 LoadComponentTool 职责">
+<text class="node-name" x="16" y="119">LoadComponentTool</text>
+</a>
+<text class="node-caption" x="258" y="119" text-anchor="end">load_component</text>
 </g>
 <g id="tool-edit" class="node plain" transform="translate(330 530)">
 <rect width="274" height="182" rx="10"/>
 <text class="node-tag" x="16" y="25">资源编辑</text>
-<a class="class-link" href="#class-EditResourceTool" aria-label="查看 EditResourceTool 职责">
-<text class="node-name" x="16" y="50">EditResourceTool</text>
+<a class="class-link" href="#class-EditMetaTool" aria-label="查看 EditMetaTool 职责">
+<text class="node-name" x="16" y="50">EditMetaTool</text>
 </a>
-<text class="node-caption" x="16" y="76">edit_meta · edit_constraint</text>
-<text class="node-caption" x="16" y="96">edit_outline · edit_spec</text>
-<text class="node-caption" x="16" y="116">edit_html</text>
+<text class="node-caption" x="258" y="50" text-anchor="end">edit_meta</text>
+<a class="class-link" href="#class-EditConstraintTool" aria-label="查看 EditConstraintTool 职责">
+<text class="node-name" x="16" y="73">EditConstraintTool</text>
+</a>
+<text class="node-caption" x="258" y="73" text-anchor="end">edit_constraint</text>
+<a class="class-link" href="#class-EditOutlineTool" aria-label="查看 EditOutlineTool 职责">
+<text class="node-name" x="16" y="96">EditOutlineTool</text>
+</a>
+<text class="node-caption" x="258" y="96" text-anchor="end">edit_outline</text>
+<a class="class-link" href="#class-EditSpecTool" aria-label="查看 EditSpecTool 职责">
+<text class="node-name" x="16" y="119">EditSpecTool</text>
+</a>
+<text class="node-caption" x="258" y="119" text-anchor="end">edit_spec</text>
+<a class="class-link" href="#class-EditHtmlTool" aria-label="查看 EditHtmlTool 职责">
+<text class="node-name" x="16" y="142">EditHtmlTool</text>
+</a>
+<text class="node-caption" x="258" y="142" text-anchor="end">edit_html</text>
 </g>
 <g id="tool-external" class="node plain" transform="translate(636 530)">
 <rect width="274" height="182" rx="10"/>
@@ -1102,8 +1121,8 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <g id="tool-failure-return" class="node plain" transform="translate(24 1820)">
 <rect width="360" height="150" rx="10"/>
 <text class="node-tag" x="16" y="25">直接返回</text>
-<a class="class-link" href="#class-AgentTool" aria-label="查看 AgentTool 职责">
-<text class="node-name" x="16" y="50">AgentTool</text>
+<a class="class-link" href="#class-Tool" aria-label="查看 Tool 职责">
+<text class="node-name" x="16" y="50">Tool</text>
 </a>
 <text class="node-caption" x="16" y="76">替换目标不存在、页面渲染失败等</text>
 <text class="node-caption" x="16" y="99">返回完整 ToolResult.failure(...)</text>
@@ -1156,13 +1175,13 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </details>
 <details class="panel" id="support-flow" open>
 <summary aria-expanded="true" aria-controls="support-flow-body">
-<h2>命令、历史与运行边界</h2>
+<h2>操作、历史与运行边界</h2>
 </summary>
 <div id="support-flow-body">
-<div class="diagram-scroll" data-scroll-id="support-flow" tabindex="0" role="region" aria-label="命令、历史与运行边界图">
+<div class="diagram-scroll" data-scroll-id="support-flow" tabindex="0" role="region" aria-label="操作、历史与运行边界图">
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 1490" width="1240" height="1490" role="group" aria-labelledby="support-title support-description">
-<title id="support-title">旁路命令、会话、历史与通知</title>
-<desc id="support-description">AutoRenameHook、AutoSuggestHook 与手动命令共用 CommandService 的受理入口；同时展示历史与检查点边界、SSE 提交后通知，以及启动中断清理。</desc>
+<title id="support-title">旁路操作、会话、历史与通知</title>
+<desc id="support-description">AutoRenameHook、AutoSuggestHook 与手动操作共用 ActionService 的受理入口；同时展示历史与检查点边界、SSE 提交后通知，以及启动中断清理。</desc>
 <defs>
 <marker id="support-arrow-normal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
 <path class="arrow-normal" d="M1 1 L9 5 L1 9 Z"/>
@@ -1203,14 +1222,14 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <polyline class="edge normal" points="900,1222 770,1222" marker-end="url(#support-arrow-normal)"/>
 <polyline class="edge normal" points="324,1401 460,1401" marker-end="url(#support-arrow-normal)"/>
 <polyline class="edge normal" points="770,1401 900,1401" marker-end="url(#support-arrow-normal)"/>
-<text class="lane-label" x="24" y="34" text-anchor="start">旁路命令</text>
+<text class="lane-label" x="24" y="34" text-anchor="start">旁路操作</text>
 <g id="support-manual" class="node plain" transform="translate(24 62)">
 <rect width="300" height="92" rx="10"/>
 <text class="node-tag" x="16" y="25">interfaces/controller/execution</text>
 <a class="class-link" href="#class-ExecutionController" aria-label="查看 ExecutionController 职责">
 <text class="node-name" x="16" y="50">ExecutionController</text>
 </a>
-<text class="node-caption" x="16" y="76">发起、修订与取消命令</text>
+<text class="node-caption" x="16" y="76">发起、修订与取消操作</text>
 </g>
 <g id="support-auto" class="node plain" transform="translate(24 194)">
 <rect width="300" height="112" rx="10"/>
@@ -1221,37 +1240,37 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <text class="node-name" x="16" y="48">AutoSuggestHook</text>
 </a>
 <text class="node-caption" x="16" y="74">由 HookDispatcher 异步调度</text>
-<text class="node-caption" x="16" y="94">按自身条件发起命令</text>
+<text class="node-caption" x="16" y="94">按自身条件发起操作</text>
 </g>
-<g id="support-command" class="node primary" transform="translate(460 124)">
+<g id="support-action" class="node primary" transform="translate(460 124)">
 <rect width="310" height="118" rx="10"/>
-<text class="node-tag" x="16" y="25">command</text>
-<a class="class-link" href="#class-CommandService" aria-label="查看 CommandService 职责">
-<text class="node-name" x="16" y="50">CommandService</text>
+<text class="node-tag" x="16" y="25">action</text>
+<a class="class-link" href="#class-ActionService" aria-label="查看 ActionService 职责">
+<text class="node-name" x="16" y="50">ActionService</text>
 </a>
-<text class="node-caption" x="16" y="76">受理命令、校验当前状态</text>
+<text class="node-caption" x="16" y="76">受理操作、校验当前状态</text>
 <text class="node-caption" x="16" y="96">处理占用、修订和取消</text>
 </g>
 <g id="support-accept" class="node plain" transform="translate(900 124)">
 <rect width="316" height="118" rx="10"/>
 <text class="node-tag" x="16" y="25">repository</text>
-<a class="class-link" href="#class-ICommandRepository" aria-label="查看 ICommandRepository 职责">
-<text class="node-name" x="16" y="50">ICommandRepository</text>
+<a class="class-link" href="#class-IActionRepository" aria-label="查看 IActionRepository 职责">
+<text class="node-name" x="16" y="50">IActionRepository</text>
 </a>
-<text class="node-caption" x="16" y="76">写入命令执行记录</text>
+<text class="node-caption" x="16" y="76">写入操作执行记录</text>
 <text class="node-caption" x="16" y="96">修订沿用操作身份，保留旧产物</text>
 </g>
 <g id="support-handler" class="node primary" transform="translate(460 260)">
 <rect width="310" height="86" rx="10"/>
-<a class="class-link" href="#class-CommandHandler" aria-label="查看 CommandHandler 职责">
-<text class="node-name" x="16" y="25">CommandHandler</text>
+<a class="class-link" href="#class-Action" aria-label="查看 Action 职责">
+<text class="node-name" x="16" y="25">Action</text>
 </a>
-<text class="node-caption" x="16" y="51">按命令类型选择一个实现</text>
+<text class="node-caption" x="16" y="51">按操作类型选择一个实现</text>
 </g>
 <g id="support-compact" class="node plain" transform="translate(24 366)">
 <rect width="330" height="100" rx="10"/>
-<a class="class-link" href="#class-CompactCommandHandler" aria-label="查看 CompactCommandHandler 职责">
-<text class="node-name" x="16" y="25">CompactCommandHandler</text>
+<a class="class-link" href="#class-CompactAction" aria-label="查看 CompactAction 职责">
+<text class="node-name" x="16" y="25">CompactAction</text>
 </a>
 <a class="class-link" href="#class-ContextCompactor" aria-label="查看 ContextCompactor 职责">
 <text class="node-name" x="16" y="48">ContextCompactor</text>
@@ -1266,12 +1285,12 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <a class="class-link" href="#class-ILlmGateway" aria-label="查看 ILlmGateway 职责">
 <text class="node-name" x="16" y="48">ILlmGateway</text>
 </a>
-<text class="node-caption" x="16" y="74">由对应 Handler 组装并调用模型</text>
+<text class="node-caption" x="16" y="74">由对应的 Action 实现 组装并调用模型</text>
 </g>
 <g id="support-git" class="node plain" transform="translate(900 366)">
 <rect width="316" height="100" rx="10"/>
-<a class="class-link" href="#class-CommitCommandHandler" aria-label="查看 CommitCommandHandler 职责">
-<text class="node-name" x="16" y="25">CommitCommandHandler</text>
+<a class="class-link" href="#class-CommitAction" aria-label="查看 CommitAction 职责">
+<text class="node-name" x="16" y="25">CommitAction</text>
 </a>
 <a class="class-link" href="#class-IGitGateway" aria-label="查看 IGitGateway 职责">
 <text class="node-name" x="16" y="48">IGitGateway</text>
@@ -1280,11 +1299,11 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </g>
 <g id="support-finish" class="node plain" transform="translate(460 510)">
 <rect width="310" height="100" rx="10"/>
-<a class="class-link" href="#class-CommandService" aria-label="查看 CommandService 职责">
-<text class="node-name" x="16" y="25">CommandService</text>
+<a class="class-link" href="#class-ActionService" aria-label="查看 ActionService 职责">
+<text class="node-name" x="16" y="25">ActionService</text>
 </a>
-<a class="class-link" href="#class-ICommandRepository" aria-label="查看 ICommandRepository 职责">
-<text class="node-name" x="16" y="48">ICommandRepository</text>
+<a class="class-link" href="#class-IActionRepository" aria-label="查看 IActionRepository 职责">
+<text class="node-name" x="16" y="48">IActionRepository</text>
 </a>
 <text class="node-caption" x="16" y="74">产物、相关会话变更与终态同事务</text>
 </g>
@@ -1326,7 +1345,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <a class="class-link" href="#class-HistoryController" aria-label="查看 HistoryController 职责">
 <text class="node-name" x="16" y="25">HistoryController</text>
 </a>
-<text class="node-caption" x="16" y="51">历史 / Run / 命令 / 工具详情</text>
+<text class="node-caption" x="16" y="51">历史 / Run / 操作 / 工具详情</text>
 </g>
 <g id="support-history" class="node plain" transform="translate(460 840)">
 <rect width="310" height="88" rx="10"/>
@@ -1340,8 +1359,8 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <a class="class-link" href="#class-IRunRepository" aria-label="查看 IRunRepository 职责">
 <text class="node-name" x="16" y="25">IRunRepository</text>
 </a>
-<a class="class-link" href="#class-ICommandRepository" aria-label="查看 ICommandRepository 职责">
-<text class="node-name" x="16" y="48">ICommandRepository</text>
+<a class="class-link" href="#class-IActionRepository" aria-label="查看 IActionRepository 职责">
+<text class="node-name" x="16" y="48">IActionRepository</text>
 </a>
 <text class="node-caption" x="16" y="74">按 API 聚合历史与详情</text>
 </g>
@@ -1419,7 +1438,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <a class="class-link" href="#class-RunRecoveryService" aria-label="查看 RunRecoveryService 职责">
 <text class="node-name" x="16" y="50">RunRecoveryService</text>
 </a>
-<text class="node-caption" x="16" y="76">处理中断的 Run 和命令</text>
+<text class="node-caption" x="16" y="76">处理中断的 Run 和操作</text>
 <text class="node-caption" x="16" y="99">标记 interrupted，保留确认成功项</text>
 </g>
 </svg>
@@ -1428,17 +1447,17 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </details>
 <details class="panel" id="handler-assembler-flow" open>
 <summary aria-expanded="true" aria-controls="handler-assembler-flow-body">
-<h2>CommandHandler 与 PromptAssembler</h2>
+<h2>Action 与 PromptAssembler</h2>
 </summary>
 <div id="handler-assembler-flow-body">
 <div class="legend" aria-label="多态图连线含义">
 <span><i></i>调用</span>
 <span><i class="dependency-key"></i>按类型选择具体实现</span>
 </div>
-<div class="diagram-scroll" data-scroll-id="handler-assembler-flow" tabindex="0" role="region" aria-label="命令执行与提示词拼装多态图">
+<div class="diagram-scroll" data-scroll-id="handler-assembler-flow" tabindex="0" role="region" aria-label="操作执行与提示词拼装多态图">
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 1400" width="1240" height="1400" role="group" aria-labelledby="dispatch-title dispatch-description">
-<title id="dispatch-title">命令处理与提示词拼装的接口和实现</title>
-<desc id="dispatch-description">CommandService 按命令类型选择六个 CommandHandler 之一；各处理器使用对应 PromptAssembler，压缩经 ContextCompactor，提交协调 Git 与模型。PromptAssembler 的实现覆盖四种主模式、六种命令、Reviewer 和四种 JEV 判定；具体实现负责拼装，模型或 JEV 调用由调用方负责。</desc>
+<title id="dispatch-title">操作处理与提示词拼装的接口和实现</title>
+<desc id="dispatch-description">ActionService 按操作类型选择六个 Action 之一；各处理器使用对应 PromptAssembler，压缩经 ContextCompactor，提交协调 Git 与模型。PromptAssembler 的实现覆盖四种主模式、六种操作、Reviewer 和四种 JEV 判定；具体实现负责拼装，模型或 JEV 调用由调用方负责。</desc>
 <defs>
 <marker id="dispatch-arrow-normal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
 <path class="arrow-normal" d="M1 1 L9 5 L1 9 Z"/>
@@ -1463,30 +1482,30 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <polyline class="edge normal" points="384,1250 440,1250" marker-end="url(#dispatch-arrow-normal)"/>
 <polyline class="edge normal" points="204,1340 204,1372 1036,1372 1036,1340" marker-end="url(#dispatch-arrow-normal)"/>
 <text class="edge-label" x="620" y="1364" text-anchor="middle">调用方携组装材料发起判定</text>
-<text class="lane-label" x="24" y="34" text-anchor="start">命令执行 · 每个 Handler 使用对应的提示词实现</text>
+<text class="lane-label" x="24" y="34" text-anchor="start">操作执行 · 每个 Action 实现 使用对应的提示词实现</text>
 <path class="section-rule" d="M24 624 H1216"/>
 <text class="lane-label" x="24" y="654" text-anchor="start">提示词拼装 · 实现类掌握各自的拼装顺序</text>
 <g id="dispatch-service" class="node primary" transform="translate(24 60)">
 <rect width="360" height="110" rx="10"/>
-<text class="node-tag" x="16" y="25">命令生命周期</text>
-<a class="class-link" href="#class-CommandService" aria-label="查看 CommandService 职责">
-<text class="node-name" x="16" y="50">CommandService</text>
+<text class="node-tag" x="16" y="25">操作生命周期</text>
+<a class="class-link" href="#class-ActionService" aria-label="查看 ActionService 职责">
+<text class="node-name" x="16" y="50">ActionService</text>
 </a>
 <text class="node-caption" x="16" y="76">统一受理、分派与生命周期</text>
 </g>
 <g id="dispatch-handler" class="node primary" transform="translate(440 60)">
 <rect width="360" height="110" rx="10"/>
-<text class="node-tag" x="16" y="25">接口 · 按命令类型选择</text>
-<a class="class-link" href="#class-CommandHandler" aria-label="查看 CommandHandler 职责">
-<text class="node-name" x="16" y="50">CommandHandler</text>
+<text class="node-tag" x="16" y="25">接口 · 按操作类型选择</text>
+<a class="class-link" href="#class-Action" aria-label="查看 Action 职责">
+<text class="node-name" x="16" y="50">Action</text>
 </a>
 <text class="node-caption" x="16" y="76">每次执行委托一个具体实现</text>
 </g>
 <g id="dispatch-rename" class="node plain" transform="translate(24 230)">
 <rect width="360" height="140" rx="10"/>
 <text class="node-tag" x="16" y="25">rename</text>
-<a class="class-link" href="#class-RenameCommandHandler" aria-label="查看 RenameCommandHandler 职责">
-<text class="node-name" x="16" y="50">RenameCommandHandler</text>
+<a class="class-link" href="#class-RenameAction" aria-label="查看 RenameAction 职责">
+<text class="node-name" x="16" y="50">RenameAction</text>
 </a>
 <a class="class-link" href="#class-RenamePromptAssembler" aria-label="查看 RenamePromptAssembler 职责">
 <text class="node-name" x="16" y="73">RenamePromptAssembler</text>
@@ -1496,8 +1515,8 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <g id="dispatch-suggest" class="node plain" transform="translate(440 230)">
 <rect width="360" height="140" rx="10"/>
 <text class="node-tag" x="16" y="25">suggest</text>
-<a class="class-link" href="#class-SuggestCommandHandler" aria-label="查看 SuggestCommandHandler 职责">
-<text class="node-name" x="16" y="50">SuggestCommandHandler</text>
+<a class="class-link" href="#class-SuggestAction" aria-label="查看 SuggestAction 职责">
+<text class="node-name" x="16" y="50">SuggestAction</text>
 </a>
 <a class="class-link" href="#class-SuggestPromptAssembler" aria-label="查看 SuggestPromptAssembler 职责">
 <text class="node-name" x="16" y="73">SuggestPromptAssembler</text>
@@ -1507,8 +1526,8 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <g id="dispatch-polish" class="node plain" transform="translate(856 230)">
 <rect width="360" height="140" rx="10"/>
 <text class="node-tag" x="16" y="25">polish</text>
-<a class="class-link" href="#class-PolishCommandHandler" aria-label="查看 PolishCommandHandler 职责">
-<text class="node-name" x="16" y="50">PolishCommandHandler</text>
+<a class="class-link" href="#class-PolishAction" aria-label="查看 PolishAction 职责">
+<text class="node-name" x="16" y="50">PolishAction</text>
 </a>
 <a class="class-link" href="#class-PolishPromptAssembler" aria-label="查看 PolishPromptAssembler 职责">
 <text class="node-name" x="16" y="73">PolishPromptAssembler</text>
@@ -1518,8 +1537,8 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <g id="dispatch-handoff" class="node plain" transform="translate(24 430)">
 <rect width="360" height="140" rx="10"/>
 <text class="node-tag" x="16" y="25">handoff</text>
-<a class="class-link" href="#class-HandoffCommandHandler" aria-label="查看 HandoffCommandHandler 职责">
-<text class="node-name" x="16" y="50">HandoffCommandHandler</text>
+<a class="class-link" href="#class-HandoffAction" aria-label="查看 HandoffAction 职责">
+<text class="node-name" x="16" y="50">HandoffAction</text>
 </a>
 <a class="class-link" href="#class-HandoffPromptAssembler" aria-label="查看 HandoffPromptAssembler 职责">
 <text class="node-name" x="16" y="73">HandoffPromptAssembler</text>
@@ -1529,8 +1548,8 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <g id="dispatch-compact" class="node plain" transform="translate(440 430)">
 <rect width="360" height="140" rx="10"/>
 <text class="node-tag" x="16" y="25">compact</text>
-<a class="class-link" href="#class-CompactCommandHandler" aria-label="查看 CompactCommandHandler 职责">
-<text class="node-name" x="16" y="50">CompactCommandHandler</text>
+<a class="class-link" href="#class-CompactAction" aria-label="查看 CompactAction 职责">
+<text class="node-name" x="16" y="50">CompactAction</text>
 </a>
 <a class="class-link" href="#class-ContextCompactor" aria-label="查看 ContextCompactor 职责">
 <text class="node-name" x="16" y="73">ContextCompactor</text>
@@ -1543,8 +1562,8 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <g id="dispatch-commit" class="node plain" transform="translate(856 430)">
 <rect width="360" height="140" rx="10"/>
 <text class="node-tag" x="16" y="25">commit</text>
-<a class="class-link" href="#class-CommitCommandHandler" aria-label="查看 CommitCommandHandler 职责">
-<text class="node-name" x="16" y="50">CommitCommandHandler</text>
+<a class="class-link" href="#class-CommitAction" aria-label="查看 CommitAction 职责">
+<text class="node-name" x="16" y="50">CommitAction</text>
 </a>
 <a class="class-link" href="#class-CommitPromptAssembler" aria-label="查看 CommitPromptAssembler 职责">
 <text class="node-name" x="16" y="73">CommitPromptAssembler</text>
@@ -1595,9 +1614,9 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </a>
 <text class="node-caption" x="16" y="145">组装结果交回 HarnessLoop 调用模型</text>
 </g>
-<g id="dispatch-command-prompts" class="node plain" transform="translate(440 860)">
+<g id="dispatch-action-prompts" class="node plain" transform="translate(440 860)">
 <rect width="360" height="220" rx="10"/>
-<text class="node-tag" x="16" y="25">旁路命令 · 六种场景</text>
+<text class="node-tag" x="16" y="25">旁路操作 · 六种场景</text>
 <a class="class-link" href="#class-RenamePromptAssembler" aria-label="查看 RenamePromptAssembler 职责">
 <text class="node-name" x="16" y="50">RenamePromptAssembler</text>
 </a>
@@ -1616,7 +1635,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <a class="class-link" href="#class-CommitPromptAssembler" aria-label="查看 CommitPromptAssembler 职责">
 <text class="node-name" x="16" y="165">CommitPromptAssembler</text>
 </a>
-<text class="node-caption" x="16" y="191">由对应 Handler / ContextCompactor 使用</text>
+<text class="node-caption" x="16" y="191">由对应的 Action 实现 / ContextCompactor 使用</text>
 </g>
 <g id="dispatch-review-prompts" class="node plain" transform="translate(856 860)">
 <rect width="360" height="220" rx="10"/>
@@ -1738,7 +1757,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>本轮材料及按模式、授权允许的候选工具</td>
 <td>主模型调用前生命周期的不可变输入</td>
-<td>仅用于 Harness 主模型请求，不覆盖 JEV 或旁路命令；候选工具是裁剪上限，事件及集合保持不可变，筛选结果单独保存在 BeforeModelCallResult。</td>
+<td>仅用于 Harness 主模型请求，不覆盖 JEV 或旁路操作；候选工具是裁剪上限，事件及集合保持不可变，筛选结果单独保存在 BeforeModelCallResult。</td>
 </tr>
 <tr id="class-BeforeRunCompletedEvent">
 <th scope="row">
@@ -1838,9 +1857,9 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <th scope="row">
 <code>RunRecoveryService</code>
 </th>
-<td>启动时遗留的活动 Run 和命令</td>
-<td>Run 和命令的中断状态</td>
-<td>文件恢复后，通过 <code>IRunRepository</code> 和 <code>ICommandRepository</code> 将无法继续的执行标记为 interrupted，保留已确认的工具与 Git 结果。旧 Loop 和结果未知的工具均不重放。</td>
+<td>启动时遗留的活动 Run 和操作</td>
+<td>Run 和操作的中断状态</td>
+<td>文件恢复后，通过 <code>IRunRepository</code> 和 <code>IActionRepository</code> 将无法继续的执行标记为 interrupted，保留已确认的工具与 Git 结果。旧 Loop 和结果未知的工具均不重放。</td>
 </tr>
 </tbody>
 <tbody>
@@ -1905,7 +1924,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>BeforeInputProcessedEvent 及命名所需设置、会话状态</td>
 <td>void；符合条件时发起 rename</td>
-<td>实现 AsyncHook，输入开始处理时使用 Run 固定的开关及路由检查自动命名，按需使用 RechristenPromptAssembler 组装材料并通过 IJevGateway 判定，再调用 CommandService 统一受理；可返回最新时不自动发起。意图拒绝不统一短路命名，不参与同步 Result。</td>
+<td>实现 AsyncHook，输入开始处理时使用 Run 固定的开关及路由检查自动命名，按需使用 RechristenPromptAssembler 组装材料并通过 IJevGateway 判定，再调用 ActionService 统一受理；可返回最新时不自动发起。意图拒绝不统一短路命名，不参与同步 Result。</td>
 </tr>
 </tbody>
 <tbody>
@@ -1944,7 +1963,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>RunCompletedEvent 及建议所需设置、会话状态</td>
 <td>void；符合条件时发起 suggest</td>
-<td>实现 AsyncHook，在完成提交成功后使用事件内的开关与路由，核对触发输入仍是会话最新用户输入，通过 CommandService 受理 suggest；可返回最新时不自动发起。调度及执行失败由 Dispatcher 隔离，不改变已提交的主流程结果。</td>
+<td>实现 AsyncHook，在完成提交成功后使用事件内的开关与路由，核对触发输入仍是会话最新用户输入，通过 ActionService 受理 suggest；可返回最新时不自动发起。调度及执行失败由 Dispatcher 隔离，不改变已提交的主流程结果。</td>
 </tr>
 </tbody>
 <tbody>
@@ -1965,7 +1984,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>原摘要、待压缩内容、保留内容及压缩模型</td>
 <td>新摘要、保留的上下文成员及前后用量</td>
-<td>由 CompactCommandHandler 调用；使用 CompactPromptAssembler 和 ILlmGateway 生成并校验压缩结果，对明确格式或业务约束违规执行有限纠错，保留工具轮次完整性。校验通过后交给 CommandService 保存，历史正文不删除；不反向调用 command。</td>
+<td>由 CompactAction 调用；使用 CompactPromptAssembler 和 ILlmGateway 生成并校验压缩结果，对明确格式或业务约束违规执行有限纠错，保留工具轮次完整性。校验通过后交给 ActionService 保存，历史正文不删除；不反向调用 ActionService。</td>
 </tr>
 <tr id="class-PromptAssembler">
 <th scope="row">
@@ -2019,7 +2038,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>当前标题、会话历史及命名要求</td>
 <td>命名提示词与所需工具定义</td>
-<td>拼装 command_rename、当前标题、历史和用户要求，附带 rename_thread 输出约束。</td>
+<td>拼装 action_rename、当前标题、历史和用户要求，附带 rename_thread 输出约束。</td>
 </tr>
 <tr id="class-SuggestPromptAssembler">
 <th scope="row">
@@ -2027,7 +2046,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>项目与计划状态、会话历史及建议要求</td>
 <td>建议提示词与所需工具定义</td>
-<td>拼装 command_suggest、项目与计划上下文、历史和用户要求，附带 suggest_request 输出约束。</td>
+<td>拼装 action_suggest、项目与计划上下文、历史和用户要求，附带 suggest_request 输出约束。</td>
 </tr>
 <tr id="class-PolishPromptAssembler">
 <th scope="row">
@@ -2035,7 +2054,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>用户草稿、上一修订、反馈及当前要求</td>
 <td>润色提示词与所需工具定义</td>
-<td>拼装 command_polish、草稿及修订材料，附带 polish_instruction 输出约束；保持修订材料顺序。</td>
+<td>拼装 action_polish、草稿及修订材料，附带 polish_instruction 输出约束；保持修订材料顺序。</td>
 </tr>
 <tr id="class-HandoffPromptAssembler">
 <th scope="row">
@@ -2043,7 +2062,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>项目上下文、会话历史、上一修订及反馈</td>
 <td>交接提示词与所需工具定义</td>
-<td>拼装 command_handoff、项目与历史、修订反馈和用户要求，附带 handoff_thread 输出约束。</td>
+<td>拼装 action_handoff、项目与历史、修订反馈和用户要求，附带 handoff_thread 输出约束。</td>
 </tr>
 <tr id="class-CompactPromptAssembler">
 <th scope="row">
@@ -2051,7 +2070,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>原摘要、待压缩上下文与需要保留的上下文</td>
 <td>压缩提示词与所需工具定义</td>
-<td>拼装 command_compact、previous_summary、compressed_context、retained_context，附带 compact_context 输出约束。</td>
+<td>拼装 action_compact、previous_summary、compressed_context、retained_context，附带 compact_context 输出约束。</td>
 </tr>
 <tr id="class-CommitPromptAssembler">
 <th scope="row">
@@ -2059,7 +2078,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>Git 状态、变更统计、暂存差异及提交要求</td>
 <td>提交分析提示词与所需工具定义</td>
-<td>拼装 command_commit、文件状态、行数统计、暂存差异和用户要求，附带 git_commit 输出约束；不执行 Git。</td>
+<td>拼装 action_commit、文件状态、行数统计、暂存差异和用户要求，附带 git_commit 输出约束；不执行 Git。</td>
 </tr>
 <tr id="class-ReviewPromptAssembler">
 <th scope="row">
@@ -2112,7 +2131,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>已有工具实现、当前模式、授权及 BeforeModelCallResult</td>
 <td>允许的候选工具、最终工具定义及工具名对应的实现</td>
-<td>按 ASSEMBLE、输入路由、模式与当前授权产生候选集合，gossip 的集合固定为空，再由主流程应用最终阶段 Result；最终工具集合只能是允许候选集合的子集。Prune 不可用时沿用未额外裁剪的当前结果，执行权限仍由 ToolGuard 强制校验。</td>
+<td>Spring 通过构造器注入以 Bean 名为键的 <code>Map&lt;String, Tool&gt;</code>，<code>getToolByName(name)</code> 用 <code>name.getValue()</code> 查找对应实现。<code>getToolNames(...)</code> 按 ASSEMBLE、输入路由、模式与授权给出候选工具名，gossip 返回空集。主流程应用 Hook 返回的子集，由 <code>getToolDefinitions(names)</code> 提供最终工具定义。Prune 不可用时沿用进入 Hook 前的集合，执行时由 ToolGuard 复核权限。</td>
 </tr>
 <tr id="class-ToolGuard">
 <th scope="row">
@@ -2128,16 +2147,16 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>模型返回的工具调用及当前运行上下文</td>
 <td>有序 ToolResult、必要的待答状态与修改结果</td>
-<td>先记录调用，再分派 AgentTool；统一保存 ToolResult，并将可反馈失败映射为配对 observation。只将已识别、允许反馈给模型的业务异常转换为失败结果；持久化不确定、内部状态损坏和未知异常向上传递至 RunService，取消走取消流程。独立只读调用可并行，冲突写入受提交边界约束；结果可读后通知。</td>
+<td>先记录调用，再分派 Tool；统一保存 ToolResult，并将可反馈失败映射为配对 observation。只将已识别、允许反馈给模型的业务异常转换为失败结果；持久化不确定、内部状态损坏和未知异常向上传递至 RunService，取消走取消流程。独立只读调用可并行，冲突写入受提交边界约束；结果可读后通知。</td>
 </tr>
-<tr id="class-AgentTool">
+<tr id="class-Tool">
 <th scope="row">
-<code>AgentTool</code>
+<code>Tool</code>
 <span class="type">接口</span>
 </th>
 <td>已验证的工具参数与当前运行上下文</td>
 <td>ToolResult，或待主流程处理的候选变更 / 人工交互请求</td>
-<td>统一工具定义与执行契约，由具体工具实现。可明确处理的执行失败直接返回完整 ToolResult.failure，成功返回业务结果；深层调用的异常交由 ToolExecutor 边界识别，不在各处改写 RunState.error，也不把所有 Exception 转为 observation。审批中的候选继续走原交互流程。</td>
+<td>每个组件通过 <code>getDefinition(ToolName)</code> 接收注册表传入的工具名并生成定义，通过 <code>execute(call, state)</code> 执行调用。可明确处理的执行失败直接返回完整 ToolResult.failure，成功返回业务结果。深层调用的异常交由 ToolExecutor 边界识别，不在各处改写 RunState.error，也不把所有 Exception 转为 observation。审批中的候选继续走原交互流程。</td>
 </tr>
 </tbody>
 <tbody>
@@ -2155,73 +2174,73 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </tbody>
 <tbody>
 <tr class="group-heading">
-<th colspan="4" scope="rowgroup">agent/service/command</th>
+<th colspan="4" scope="rowgroup">agent/service/action</th>
 </tr>
-<tr id="class-CommandService">
+<tr id="class-ActionService">
 <th scope="row">
-<code>CommandService</code>
+<code>ActionService</code>
 </th>
-<td>手动或 Hook 发起的命令、修订与取消请求；任务上下文</td>
-<td>命令受理结果、独立执行记录与实际产物</td>
-<td>统一处理命令受理、当前状态与占用校验、修订、调度及取消，按类型选择 CommandHandler。命令受理时固定写回依据；提交时在同一事务校验并写入产物、关联变更与终态。过期的 rename / suggest 记 cancelled 且 result 为空，再通知；保留每次执行及最近成功产物。自动发起条件由 AutoRenameHook / AutoSuggestHook 判断。</td>
+<td>手动或 Hook 发起的操作、修订与取消请求；任务上下文</td>
+<td>操作受理结果、独立执行记录与实际产物</td>
+<td>统一处理操作受理、当前状态与占用校验、修订、调度及取消，按类型选择 Action。操作受理时固定写回依据；提交时在同一事务校验并写入产物、关联变更与终态。过期的 rename / suggest 记 cancelled 且 result 为空，再通知；保留每次执行及最近成功产物。自动发起条件由 AutoRenameHook / AutoSuggestHook 判断。</td>
 </tr>
-<tr id="class-CommandHandler">
+<tr id="class-Action">
 <th scope="row">
-<code>CommandHandler</code>
+<code>Action</code>
 <span class="type">接口</span>
 </th>
-<td>已受理的命令类型、业务上下文与取消信号</td>
-<td>可校验的命令产物、关联变更及外部执行事实</td>
-<td>命令业务执行接口，不加 I。每种命令对应一个 XxxCommandHandler，负责组装、调用及明确格式与业务约束校验；可纠正的违规反馈到该命令模型上下文，有限重试。校验通过前不应用产物；不把文案质量等主观判断作为程序校验。公共纠错步骤可复用，生命周期与终态保存交给 CommandService。</td>
+<td>已受理的操作类型、业务上下文与取消信号</td>
+<td>可校验的操作产物、关联变更及外部执行事实</td>
+<td>业务操作的执行接口。每种操作对应一个 XxxAction，负责组装、调用及明确格式与业务约束校验；可纠正的违规反馈到该操作模型上下文，有限重试。校验通过前不应用产物；不把文案质量等主观判断作为程序校验。公共纠错步骤可复用，生命周期与终态保存交给 ActionService。</td>
 </tr>
 </tbody>
 <tbody>
 <tr class="group-heading">
-<th colspan="4" scope="rowgroup">agent/service/command/handler</th>
+<th colspan="4" scope="rowgroup">agent/service/action/builtin</th>
 </tr>
-<tr id="class-RenameCommandHandler">
+<tr id="class-RenameAction">
 <th scope="row">
-<code>RenameCommandHandler</code>
+<code>RenameAction</code>
 </th>
 <td>命名请求、当前标题、会话历史及取消信号</td>
 <td>校验后的标题与待应用的会话变更</td>
-<td>调用 RenamePromptAssembler 与 ILlmGateway，解析并校验 rename_thread 结果；交由 CommandService 比较会话标题是否仍等于受理时原名，匹配才写回。</td>
+<td>调用 RenamePromptAssembler 与 ILlmGateway，解析并校验 rename_thread 结果；交由 ActionService 比较会话标题是否仍等于受理时原名，匹配才写回。</td>
 </tr>
-<tr id="class-SuggestCommandHandler">
+<tr id="class-SuggestAction">
 <th scope="row">
-<code>SuggestCommandHandler</code>
+<code>SuggestAction</code>
 </th>
 <td>建议请求、项目与计划上下文、会话历史及取消信号</td>
 <td>校验后的下一步建议</td>
-<td>调用 SuggestPromptAssembler 与 ILlmGateway，解析并校验 suggest_request 结果。CommandService 比较最新用户 instruction ID，并核对本次仍为会话内 seq 最大的 suggest，均匹配才写回。</td>
+<td>调用 SuggestPromptAssembler 与 ILlmGateway，解析并校验 suggest_request 结果。ActionService 比较最新用户 instruction ID，并核对本次仍为会话内 seq 最大的 suggest，均匹配才写回。</td>
 </tr>
-<tr id="class-PolishCommandHandler">
+<tr id="class-PolishAction">
 <th scope="row">
-<code>PolishCommandHandler</code>
+<code>PolishAction</code>
 </th>
 <td>润色请求、原草稿、上一修订、反馈及取消信号</td>
 <td>当前执行生成的润色产物</td>
-<td>调用 PolishPromptAssembler 与 ILlmGateway，解析并校验 polish_instruction 结果；修订记录与最近成功产物由 CommandService 管理。</td>
+<td>调用 PolishPromptAssembler 与 ILlmGateway，解析并校验 polish_instruction 结果；修订记录与最近成功产物由 ActionService 管理。</td>
 </tr>
-<tr id="class-HandoffCommandHandler">
+<tr id="class-HandoffAction">
 <th scope="row">
-<code>HandoffCommandHandler</code>
+<code>HandoffAction</code>
 </th>
 <td>交接请求、项目与会话上下文、修订反馈及取消信号</td>
 <td>交接产物及待应用的关联变更</td>
-<td>调用 HandoffPromptAssembler 与 ILlmGateway，解析并校验 handoff_thread 结果；交接产物及关联会话变更由 CommandService 统一保存。</td>
+<td>调用 HandoffPromptAssembler 与 ILlmGateway，解析并校验 handoff_thread 结果；交接产物及关联会话变更由 ActionService 统一保存。</td>
 </tr>
-<tr id="class-CompactCommandHandler">
+<tr id="class-CompactAction">
 <th scope="row">
-<code>CompactCommandHandler</code>
+<code>CompactAction</code>
 </th>
 <td>压缩请求、当前摘要、会话上下文及取消信号</td>
 <td>压缩产物与待调整的上下文位置</td>
-<td>委托 ContextCompactor 完成压缩；将结果交还 CommandService，保证摘要、上下文位置与命令终态同事务提交。</td>
+<td>委托 ContextCompactor 完成压缩；将结果交还 ActionService，保证摘要、上下文位置与操作终态同事务提交。</td>
 </tr>
-<tr id="class-CommitCommandHandler">
+<tr id="class-CommitAction">
 <th scope="row">
-<code>CommitCommandHandler</code>
+<code>CommitAction</code>
 </th>
 <td>提交请求、项目 Git 状态、用户要求及取消信号</td>
 <td>已确认的 Git 提交事实或明确失败</td>
@@ -2249,7 +2268,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <th scope="row">
 <code>HistoryService</code>
 </th>
-<td>历史游标、Run / 命令 / 工具定位信息</td>
+<td>历史游标、Run / 操作 / 工具定位信息</td>
 <td>历史分组、执行详情与已保存差异</td>
 <td>按 API 聚合可公开历史，过滤供应商原生数据和内部提示；失败工具结果仍可持久化，展示设置不改变事实。</td>
 </tr>
@@ -2282,21 +2301,61 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <td>图片内容及必要描述</td>
 <td>实现 read_image；解析项目附件或工具截图，校验归属与存在性，供模型理解图片。</td>
 </tr>
-<tr id="class-LoadAssetTool">
+<tr id="class-LoadSkillTool">
 <th scope="row">
-<code>LoadAssetTool</code>
+<code>LoadSkillTool</code>
 </th>
-<td>技能或组件的稳定资产标识</td>
-<td>资产正文与更新后的活动资产集合</td>
-<td>共用实现 load_skill、load_component；通过 AssetService 读取数据库正文，再加入本 Run 上下文。</td>
+<td>技能 ID</td>
+<td>技能正文与本次 Run 的活动技能集合</td>
+<td>实现 <code>load_skill</code>。通过 AssetService 加载指定技能的完整说明，加入 active_skills。</td>
 </tr>
-<tr id="class-EditResourceTool">
+<tr id="class-LoadComponentTool">
 <th scope="row">
-<code>EditResourceTool</code>
+<code>LoadComponentTool</code>
 </th>
-<td>资源种类、字段更新或正文修改意图，以及已读基准</td>
-<td>完整候选文档、审批请求或实际修改结果</td>
-<td>共用实现 edit_meta、edit_constraint、edit_outline、edit_spec、edit_html。委托项目领域校验与提交；按设置审批资料修改；不使用 JSON Patch。</td>
+<td>组件 ID</td>
+<td>组件 HTML 与本次 Run 的活动组件集合</td>
+<td>实现 <code>load_component</code>。通过 AssetService 加载指定组件的完整 HTML，加入 active_components。</td>
+</tr>
+<tr id="class-EditMetaTool">
+<th scope="row">
+<code>EditMetaTool</code>
+</th>
+<td>基本信息字段更新及已读基准</td>
+<td>基本信息候选与实际保存的定稿</td>
+<td>实现 <code>edit_meta</code>。合并指定字段，按设置发起资料审批，由 DeckService 校验并提交定稿。</td>
+</tr>
+<tr id="class-EditConstraintTool">
+<th scope="row">
+<code>EditConstraintTool</code>
+</th>
+<td>约束类别、列表更新及已读基准</td>
+<td>约束候选与实际保存的定稿</td>
+<td>实现 <code>edit_constraint</code>。替换指定类别中提交的约束列表，按设置发起资料审批，由 DeckService 校验并提交定稿。</td>
+</tr>
+<tr id="class-EditOutlineTool">
+<th scope="row">
+<code>EditOutlineTool</code>
+</th>
+<td>完整大纲或顺序文本替换，以及已读基准</td>
+<td>大纲候选与含正式节点 ID 的大纲定稿</td>
+<td>实现 <code>edit_outline</code>。准备大纲源码，按设置发起资料审批，由 DeckService 校验并提交定稿。</td>
+</tr>
+<tr id="class-EditSpecTool">
+<th scope="row">
+<code>EditSpecTool</code>
+</th>
+<td>目标页面、规格字段更新及已读基准</td>
+<td>页面规格候选与实际修改结果</td>
+<td>实现 <code>edit_spec</code>。按字段更新目标页面的规格，由 DeckService 校验并提交。</td>
+</tr>
+<tr id="class-EditHtmlTool">
+<th scope="row">
+<code>EditHtmlTool</code>
+</th>
+<td>目标页面、完整 HTML 或顺序文本替换，以及已读基准</td>
+<td>页面 HTML 候选与实际修改结果</td>
+<td>实现 <code>edit_html</code>。采用完整源码或依次在页面 HTML 中替换唯一匹配的原文，由 DeckService 校验并提交。</td>
 </tr>
 <tr id="class-RunCommandTool">
 <th scope="row">
@@ -2363,9 +2422,9 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <th scope="row">
 <code>ExecutionController</code>
 </th>
-<td>发送指令、发起命令及取消的 HTTP 请求</td>
+<td>发送指令、发起操作及取消的 HTTP 请求</td>
 <td>受理 ID 或空成功响应</td>
-<td>通过 <code>@Valid</code> 触发 DTO 校验，调用 DTO 的 <code>toEntity()</code> 转换领域输入，再调用 RunService / CommandService。</td>
+<td>通过 <code>@Valid</code> 触发 DTO 校验，调用 DTO 的 <code>toEntity()</code> 转换领域输入，再调用 RunService / ActionService。</td>
 </tr>
 <tr id="class-InteractionController">
 <th scope="row">
@@ -2443,7 +2502,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>模型选择与所需行为设置</td>
 <td>已校验的模型 / 路由与行为配置</td>
-<td>归 domain/setting/service，提供全局模型、路由和行为设置。RunService 在受理时组装 RunConfig，主循环、审批判断及该 Run 的自动命令复用这份配置。手动命令在自身受理时取配置，show_tool_failures 即时影响展示。</td>
+<td>归 domain/setting/service，提供全局模型、路由和行为设置。RunService 在受理时组装 RunConfig，主循环、审批判断及该 Run 的自动操作复用这份配置。手动操作在自身受理时取配置，show_tool_failures 即时影响展示。</td>
 </tr>
 </tbody>
 <tbody>
@@ -2468,14 +2527,14 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <td>会话数据及对应 revision</td>
 <td>由 <code>infrastructure/repository/SessionRepository</code> 实现。保存和读取会话业务状态。受影响数据与版本在同一事务处理，跨实体业务提交通过仓储实现协调，不能单独先递增版本。</td>
 </tr>
-<tr id="class-ICommandRepository">
+<tr id="class-IActionRepository">
 <th scope="row">
-<code>ICommandRepository</code>
+<code>IActionRepository</code>
 <span class="type">接口</span>
 </th>
-<td>命令受理、修订、取消或完成业务变更</td>
-<td>单次命令记录、成功产物与执行状态</td>
-<td>由 <code>infrastructure/repository/CommandRepository</code> 实现。核对同操作占用并保存命令终态；命令产物及关联会话状态一并提交。compact 的摘要写入、上下文位置调整与 done 同事务保存。</td>
+<td>操作受理、修订、取消或完成业务变更</td>
+<td>单次操作记录、成功产物与执行状态</td>
+<td>由 <code>infrastructure/repository/ActionRepository</code> 实现。核对同一操作的占用状态并保存本次执行的终态；操作产物及关联会话状态一并提交。compact 的摘要写入、上下文位置调整与 done 同事务保存。</td>
 </tr>
 <tr id="class-ICheckpointRepository">
 <th scope="row">
@@ -2543,7 +2602,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>项目 Git 操作及确定的提交意图</td>
 <td>状态 / 差异或已确认的提交结果</td>
-<td>由 <code>infrastructure/gateway/GitGateway</code> 实现。执行 Git 能力；项目互斥和命令生命周期由 CommandService 协调。无法确认的提交结果不能假定成功或重复执行。</td>
+<td>由 <code>infrastructure/gateway/GitGateway</code> 实现。执行 Git 能力；项目互斥和操作生命周期由 ActionService 协调。无法确认的提交结果不能假定成功或重复执行。</td>
 </tr>
 </tbody>
 <tbody>
@@ -2583,7 +2642,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>领域模型请求及固定的协议 / 路由配置</td>
 <td>转换后的领域模型响应或可识别错误</td>
-<td>实现 ILlmGateway，由 Spring AI 2.1 的 OpenAiResponsesChatModel 对接 responses，AnthropicChatModel 对接 anthropic。关闭框架自动工具执行。处理请求层有限重试、模型切换、取消、逐次用量报告与协议转换；切换后按目标协议重建请求。命令产物的业务校验与纠错归对应 Handler 或 ContextCompactor。</td>
+<td>实现 ILlmGateway，由 Spring AI 2.1 的 OpenAiResponsesChatModel 对接 responses，AnthropicChatModel 对接 anthropic。关闭框架自动工具执行。处理请求层有限重试、模型切换、取消、逐次用量报告与协议转换；切换后按目标协议重建请求。操作产物的业务校验与纠错归对应的 Action 实现 或 ContextCompactor。</td>
 </tr>
 </tbody>
 </table>

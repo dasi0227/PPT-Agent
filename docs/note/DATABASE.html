@@ -564,7 +564,7 @@
               <td class="nullable">否</td>
               <td>无</td>
               <td>消息在会话中的固定顺序。</td>
-              <td class="decision">与 <code>commands.seq</code> 在会话内共同唯一，创建后不变。</td>
+              <td class="decision">与 <code>actions.seq</code> 在会话内共同唯一，创建后不变。</td>
             </tr>
             <tr id="messages-type">
               <th scope="row"><code>type</code></th>
@@ -635,20 +635,20 @@
       </div>
     </article>
 
-    <article class="database-card" id="commands" aria-labelledby="commands-heading">
+    <article class="database-card" id="actions" aria-labelledby="actions-heading">
       <header class="card-header">
         <div>
           <div class="table-heading">
-            <h2 id="commands-heading"><code>commands</code></h2>
-            <span class="table-label">旁路命令</span>
+            <h2 id="actions-heading"><code>actions</code></h2>
+            <span class="table-label">旁路操作</span>
           </div>
-          <p class="table-purpose">一行对应一次辅助命令执行，首次执行和修订归入同一操作。</p>
+          <p class="table-purpose">每行记录一次业务操作的执行。首次执行及后续修订共用 operation_id。</p>
         </div>
         <span class="status">已确定</span>
       </header>
 
-      <div class="table-scroll" role="region" aria-label="commands 字段与约束" tabindex="0">
-        <table aria-label="commands 字段设计与约束">
+      <div class="table-scroll" role="region" aria-label="actions 字段与约束" tabindex="0">
+        <table aria-label="actions 字段设计与约束">
           <colgroup>
             <col class="field-col"><col class="type-col"><col class="nullable-col">
             <col class="default-col"><col class="meaning-col"><col class="decision-col">
@@ -664,15 +664,15 @@
             </tr>
           </thead>
           <tbody>
-            <tr id="commands-id">
+            <tr id="actions-id">
               <th scope="row"><code>id</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
               <td>无</td>
-              <td>本次命令执行的唯一标识。</td>
+              <td>本次操作执行的唯一标识。</td>
               <td class="decision">唯一。</td>
             </tr>
-            <tr id="commands-operation-id">
+            <tr id="actions-operation-id">
               <th scope="row"><code>operation_id</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
@@ -680,23 +680,23 @@
               <td>同一次操作的标识，关联首次执行与修订。</td>
               <td class="decision">同组会话与 <code>type</code> 一致；同组最多一条非终态记录。</td>
             </tr>
-            <tr id="commands-session-id">
+            <tr id="actions-session-id">
               <th scope="row"><code>session_id</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
               <td>无</td>
-              <td>命令所属的会话。</td>
+              <td>操作所属的会话。</td>
               <td class="decision">外键 <code>sessions.id</code>，级联删除。</td>
             </tr>
-            <tr id="commands-run-id">
+            <tr id="actions-run-id">
               <th scope="row"><code>run_id</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">是</td>
               <td><code>NULL</code></td>
-              <td>本次命令关联的 Run。</td>
+              <td>本次操作关联的 Run。</td>
               <td class="decision">外键 <code>runs.id</code>，会话须一致；独立操作为 <code>NULL</code>。</td>
             </tr>
-            <tr id="commands-seq">
+            <tr id="actions-seq">
               <th scope="row"><code>seq</code></th>
               <td><code>INTEGER</code></td>
               <td class="nullable">否</td>
@@ -704,31 +704,31 @@
               <td>本次执行在会话中的创建顺序。</td>
               <td class="decision">与 <code>messages.seq</code> 在会话内共同唯一，创建后不变。</td>
             </tr>
-            <tr id="commands-type">
+            <tr id="actions-type">
               <th scope="row"><code>type</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
               <td>无</td>
-              <td>辅助命令的业务类型。</td>
+              <td>辅助操作的业务类型。</td>
               <td class="decision"><code>rename / polish / handoff / compact / commit / suggest</code>。</td>
             </tr>
-            <tr id="commands-status">
+            <tr id="actions-status">
               <th scope="row"><code>status</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
               <td><code>'pending'</code></td>
-              <td>本次命令执行的状态。</td>
+              <td>本次操作执行的状态。</td>
               <td class="decision"><code>pending / running / cancelling / done / failed / interrupted / cancelled</code>。</td>
             </tr>
-            <tr id="commands-input">
+            <tr id="actions-input">
               <th scope="row"><code>input</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">否</td>
               <td>无</td>
-              <td>本次命令的业务输入。</td>
+              <td>本次操作的业务输入。</td>
               <td class="decision">合法 JSON，无参数时为 <code>{}</code>。首次润色保存 <code>text</code>，修订保存 <code>base_id、feedback</code>。</td>
             </tr>
-            <tr id="commands-result">
+            <tr id="actions-result">
               <th scope="row"><code>result</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">是</td>
@@ -736,7 +736,7 @@
               <td>本次执行成功后的业务结果。</td>
               <td class="decision">合法 JSON。交接保存标题及文稿，压缩保存摘要引用、标题、压缩前后 Token 数和当时的窗口上限，Git 提交保存已确认的哈希、说明与业务结果。rename 保存 title，suggest 保存 requests。写回依据过期时执行记 cancelled，结果为 SQL NULL。压缩结果引用摘要消息。</td>
             </tr>
-            <tr id="commands-error">
+            <tr id="actions-error">
               <th scope="row"><code>error</code></th>
               <td><code>TEXT</code></td>
               <td class="nullable">是</td>
@@ -744,7 +744,7 @@
               <td>执行失败的原因。</td>
               <td class="decision">JSON 对象 <code>{code, message}</code>。</td>
             </tr>
-            <tr id="commands-created-at">
+            <tr id="actions-created-at">
               <th scope="row"><code>created_at</code></th>
               <td><code>INTEGER</code></td>
               <td class="nullable">否</td>
@@ -808,7 +808,7 @@
               <td class="nullable">否</td>
               <td>无</td>
               <td>该检查点的完整恢复数据。</td>
-              <td class="decision">JSON 对象，含五类文稿文件、有效计划、有序上下文消息 ID 和会话分支的历史位置。历史位置界定可见消息、Run 与命令及其当时的状态。原始输入由关联指令读取，标题沿用当前值。文本文件用 JSON 字符串，二进制内容用 Base64。</td>
+              <td class="decision">JSON 对象，含五类文稿文件、有效计划、有序上下文消息 ID 和会话分支的历史位置。历史位置界定可见消息、Run 与操作及其当时的状态。原始输入由关联指令读取，标题沿用当前值。文本文件用 JSON 字符串，二进制内容用 Base64。</td>
             </tr>
           </tbody>
         </table>

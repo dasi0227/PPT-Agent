@@ -753,7 +753,7 @@
                 <p>只接受以下两个字段，未声明的字段返回 <code>INVALID_ARGUMENT</code>。</p>
                 <ul class="fields">
                   <li><code>route</code>：main_default、side_default、main_fallback、side_fallback、rename、compact、commit、polish、handoff 或 suggest</li>
-                  <li><code>model_id</code>：已有模型配置 ID。两个默认路由均需提供；对备用路由省略或传 null 表示关闭，对命令路由则表示跟随 side_default。</li>
+                  <li><code>model_id</code>：已有模型配置 ID。两个默认路由均需提供；对备用路由省略或传 null 表示关闭，对操作路由则表示跟随 side_default。</li>
                 </ul>
               </td>
               <td>无</td>
@@ -927,7 +927,7 @@
                   <li><code>items[].title</code>：会话标题</li>
                   <li><code>items[].updated_at</code>：最近更新时间，毫秒时间戳</li>
                   <li><code>items[].run_status</code>：字符串或 null；pending / running / waiting / cancelling，没有活动 Run 时为 null</li>
-                  <li><code>items[].has_active_commands</code>：布尔值，必返。是否有非终态旁路命令，用于恢复后台会话的订阅</li>
+                  <li><code>items[].has_active_commands</code>：布尔值，必返。是否有非终态旁路操作，用于恢复后台会话的订阅</li>
                 </ul>
               </td>
             </tr>
@@ -949,7 +949,7 @@
                   <li><code>context.threshold_min / threshold_max</code>：正整数，分别为 12000 和 170000 Token</li>
                   <li><code>context.details</code>：含 <code>system_prompt、runtime、chat_history、read_file、other</code>。各类为有序 <code>{name, tokens}</code> 数组，name 为字符串，tokens 为非负整数，无明细为 []</li>
                   <li><code>active_run_id</code>：当前会话的非终态 Run ID，无则 null；据此读取状态、进度与待答事项</li>
-                  <li><code>active_command_ids</code>：当前会话非终态旁路命令的 id 数组，无则 []</li>
+                  <li><code>active_command_ids</code>：当前会话非终态旁路操作的 id 数组，无则 []</li>
                   <li><code>suggestions</code>：当前会话最后一条用户输入之后最近成功的 suggest 结果。无用户输入时取最近成功结果，无匹配则为 []</li>
                 </ul>
               </td>
@@ -1048,7 +1048,7 @@
                   <li><code>items[].run.instructions</code>：全部指令，按 <code>seq</code> 升序，无时为 <code>[]</code>。每项含字符串 <code>id、text</code>、毫秒时间戳 <code>created_at</code>、<code>instruction_status</code>（queued / sent）和有序公开 <code>references</code>（无时为 <code>[]</code>）。被拒输入另含 <code>instruction_decision</code>（disclosure / bypass / irrelevant）</li>
                   <li><code>items[].run.response</code>：最终回复，最多一条。含字符串 <code>id、text</code> 和毫秒时间戳 <code>created_at</code>，未生成时为 null。指令和回复均返回原消息 ID 和完整正文</li>
                   <li><code>items[].run.changes</code>：净差异概况，每项含 <code>target、status</code>（added / modified / deleted）。已知时含增删行数 <code>insertions、deletions</code>。未生成或不可得为 null，确认无变化为 <code>[]</code></li>
-                  <li><code>items[].command</code>：对象，仅命令分组返回。含 <code>id、operation_id、type、status、phase、failure、last_success_id、result</code>。<code>type</code> 可为 polish / handoff / compact / commit，<code>status</code> 同命令详情，<code>phase</code> 为非负整数或 null，<code>failure</code> 为 <code>{code, message}</code> 或 null</li>
+                  <li><code>items[].command</code>：对象，仅操作分组返回。含 <code>id、operation_id、type、status、phase、failure、last_success_id、result</code>。<code>type</code> 可为 polish / handoff / compact / commit，<code>status</code> 同操作详情，<code>phase</code> 为非负整数或 null，<code>failure</code> 为 <code>{code, message}</code> 或 null</li>
                   <li><code>items[].command.result</code>：<code>polish / handoff</code> 含字符串 <code>title</code>。<code>compact</code> 含 <code>title</code> 和非负整数 <code>before_tokens、after_tokens、max_tokens</code>。<code>commit</code> 为空时仅为 <code>{empty: true}</code>，否则另含字符串 <code>title、hash、branch</code> 和非负整数 <code>files_changed、insertions、deletions</code></li>
                 </ul>
               </td>
@@ -1113,11 +1113,11 @@
               </td>
             </tr>
             <tr>
-              <th scope="row">读取命令详情</th>
+              <th scope="row">读取操作详情</th>
               <td><code>GET /api/commands/{command_id}</code></td>
               <td>
                 <ul class="fields">
-                  <li><code>command_id</code>：单次执行的 ID，对应 commands.id</li>
+                  <li><code>command_id</code>：单次执行的 ID，对应 actions.id</li>
                 </ul>
               </td>
               <td>
@@ -1188,7 +1188,7 @@
                   <li><code>session_changed</code>：data 含 revision、areas。areas 为 history / run / commands / plan / suggestions / context / checkpoints 数组，重读对应数据</li>
                   <li><code>progress</code>：SSE 事件，data 含 run_id、activity、commentary，后两项可为 null</li>
                   <li><code>interaction</code>：SSE 事件，data 含 run_id；重读 Run 当前待答项</li>
-                  <li><code>command_progress</code>：SSE 事件，data 含 id、phase（当前阶段序号，整数），id 为单次命令执行的 ID</li>
+                  <li><code>command_progress</code>：SSE 事件，data 含 id、phase（当前阶段序号，整数），id 为单次操作执行的 ID</li>
                   <li><code>reset</code>：SSE 事件，data 为 {}。历史切换、删除或同步中断时，废弃旧状态并重新同步</li>
                 </ul>
               </td>
@@ -1257,7 +1257,7 @@
               <td>无</td>
             </tr>
             <tr>
-              <th scope="row">发起命令</th>
+              <th scope="row">发起操作</th>
               <td><code>POST /api/commands/append</code></td>
               <td>
                 <ul class="fields">
@@ -1276,7 +1276,7 @@
               </td>
             </tr>
             <tr>
-              <th scope="row">取消旁路命令</th>
+              <th scope="row">取消旁路操作</th>
               <td><code>POST /api/commands/cancel</code></td>
               <td>
                 <ul class="fields">
