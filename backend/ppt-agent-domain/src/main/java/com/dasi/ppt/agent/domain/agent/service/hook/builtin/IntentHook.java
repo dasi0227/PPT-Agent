@@ -1,7 +1,7 @@
 package com.dasi.ppt.agent.domain.agent.service.hook.builtin;
 
 import com.dasi.ppt.agent.domain.shared.gateway.IJevGateway;
-import com.dasi.ppt.agent.domain.agent.service.hook.event.BeforeInputProcessedEvent;
+import com.dasi.ppt.agent.domain.agent.model.entity.BeforeInputProcessedEvent;
 import com.dasi.ppt.agent.domain.agent.model.entity.BeforeInputProcessedResult;
 import com.dasi.ppt.agent.domain.agent.service.context.assembler.IntentPromptAssembler;
 import com.dasi.ppt.agent.domain.agent.service.hook.SyncHook;

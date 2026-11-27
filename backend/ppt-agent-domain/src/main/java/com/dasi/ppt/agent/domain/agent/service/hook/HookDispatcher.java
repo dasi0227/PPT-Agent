@@ -1,9 +1,9 @@
 package com.dasi.ppt.agent.domain.agent.service.hook;
 
-import com.dasi.ppt.agent.domain.agent.service.hook.event.BeforeInputProcessedEvent;
-import com.dasi.ppt.agent.domain.agent.service.hook.event.BeforeModelCallEvent;
-import com.dasi.ppt.agent.domain.agent.service.hook.event.BeforeRunCompletedEvent;
-import com.dasi.ppt.agent.domain.agent.service.hook.event.RunCompletedEvent;
+import com.dasi.ppt.agent.domain.agent.model.entity.BeforeInputProcessedEvent;
+import com.dasi.ppt.agent.domain.agent.model.entity.BeforeModelCallEvent;
+import com.dasi.ppt.agent.domain.agent.model.entity.BeforeRunCompletedEvent;
+import com.dasi.ppt.agent.domain.agent.model.entity.RunCompletedEvent;
 import com.dasi.ppt.agent.domain.agent.model.entity.BeforeInputProcessedResult;
 import com.dasi.ppt.agent.domain.agent.model.entity.BeforeModelCallResult;
 import com.dasi.ppt.agent.domain.agent.model.entity.BeforeRunCompletedResult;

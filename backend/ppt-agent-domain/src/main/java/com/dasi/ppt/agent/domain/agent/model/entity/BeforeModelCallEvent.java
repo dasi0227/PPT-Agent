@@ -1,6 +1,5 @@
-package com.dasi.ppt.agent.domain.agent.service.hook.event;
+package com.dasi.ppt.agent.domain.agent.model.entity;
 
-import com.dasi.ppt.agent.domain.agent.model.entity.Message;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.ToolName;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
