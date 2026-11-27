@@ -132,9 +132,6 @@ async function start() {
     PPT_RENDER_NODE: process.execPath,
     PPT_RENDER_WORKER: path.join(resources, 'render-worker', 'worker.mjs'),
     PPT_RENDER_ELECTRON: '1',
-    PPT_BASH_NODE: process.execPath,
-    PPT_BASH_WORKER: path.join(resources, 'bash-worker', 'worker.mjs'),
-    PPT_COMMAND_ELECTRON: '1',
   };
   // Development-only Node injection flags must not leak into the worker.
   delete env.NODE_OPTIONS;

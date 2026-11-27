@@ -33,7 +33,6 @@ BACKEND_DIR="$ROOT_DIR/backend_go"
 FRONTEND_DIR="$ROOT_DIR/frontend"
 JAVA_DIR="$ROOT_DIR/backend"
 RENDERER_DIR="$JAVA_DIR/render-worker"
-BASH_WORKER_DIR="$JAVA_DIR/bash-worker"
 JAVA_JAR="ppt-agent-bootstrap/target/ppt-agent.jar"
 WORK_ROOT="$HOME/.dasi/ppt"
 DB_PATH="$WORK_ROOT/db/ppt.db"
@@ -133,12 +132,6 @@ start_frontend() {
 }
 
 start_backend() {
-  if [[ "$(uname -s)" =~ ^(Darwin|MINGW|MSYS|CYGWIN) ]] && [ -z "${PPT_BASH_WORKER:-}" ] && [ ! -d "$BASH_WORKER_DIR/node_modules/@anthropic-ai/sandbox-runtime" ]; then
-    if ! (cd "$BASH_WORKER_DIR" && npm ci --omit=dev --ignore-scripts --no-audit --no-fund) >"$LOG_DIR/backend-build.log" 2>&1; then
-      print_result "$STEP_3" '❌' '命令沙箱依赖安装失败（日志:tmp/run/backend-build.log）'
-      return 1
-    fi
-  fi
   if [ ! -d "$RENDERER_DIR/node_modules" ] && ! (cd "$RENDERER_DIR" && pnpm install --frozen-lockfile --ignore-scripts) >"$LOG_DIR/backend-build.log" 2>&1; then
     print_result "$STEP_3" '❌' '渲染依赖安装失败（日志:tmp/run/backend-build.log）'
     return 1
