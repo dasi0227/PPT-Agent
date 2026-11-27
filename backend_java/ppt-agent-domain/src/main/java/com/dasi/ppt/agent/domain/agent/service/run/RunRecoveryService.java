@@ -4,7 +4,7 @@ import com.dasi.ppt.agent.domain.agent.repository.ICommandRepository;
 import com.dasi.ppt.agent.domain.agent.repository.IRunRepository;
 import com.dasi.ppt.agent.domain.project.repository.IProjectRepository;
 import com.dasi.ppt.agent.domain.project.service.DeckService;
-import com.dasi.ppt.agent.domain.project.service.ProjectWriteLock;
+import com.dasi.ppt.agent.domain.shared.service.LockService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -16,5 +16,5 @@ public class RunRecoveryService {
     private final IRunRepository runRepository;
     private final ICommandRepository commandRepository;
     private final DeckService deckService;
-    private final ProjectWriteLock projectWriteLock;
+    private final LockService lockService;
 }

@@ -4,7 +4,6 @@ import com.dasi.ppt.agent.domain.setting.model.entity.*;
 import com.dasi.ppt.agent.domain.setting.model.enumeration.ModelRoute;
 import com.dasi.ppt.agent.domain.setting.repository.ISettingRepository;
 import com.dasi.ppt.agent.domain.shared.exception.ErrorCode;
-import com.dasi.ppt.agent.domain.shared.gateway.IPlatformGateway;
 import com.dasi.ppt.agent.domain.shared.util.IdUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -24,7 +23,6 @@ import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.*;
 public class SettingService {
 
     private final ISettingRepository settingRepository;
-    private final IPlatformGateway platformGateway;
 
     private static final Pattern SHORTCUT = Pattern.compile("(Primary|Option|Alt)\\+([^+\\s]+)", Pattern.UNICODE_CHARACTER_CLASS);
     private static final Set<String> MODIFIER_KEYS = Set.of("Primary", "Option", "Alt", "AltLeft", "AltRight", "AltGraph", "Shift", "ShiftLeft", "ShiftRight", "Ctrl", "Control", "ControlLeft", "ControlRight", "Command", "Meta", "MetaLeft", "MetaRight", "OSLeft", "OSRight", "Fn");
@@ -67,10 +65,6 @@ public class SettingService {
             throw invalid("应用路径无效");
         }
         throw invalid("应用需使用以 " + APPLICATION_SUFFIX + " 结尾的绝对路径");
-    }
-
-    public Path pickApplication() {
-        return platformGateway.pickApplication();
     }
 
     public ShortcutSettings getShortcutSettings() {

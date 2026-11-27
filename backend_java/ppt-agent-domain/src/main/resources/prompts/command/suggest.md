@@ -23,7 +23,7 @@ desc: Suggest useful next requests from the conversation context.
 
 ## Examples
 
-Input: The outline lists page 2 as “市场规模” and page 3 as “竞争格局”. The current plan marks page 2 complete and page 3 pending. The latest reply confirms that page 2 is finished.
+Input: The outline lists slide 2 as “市场规模” and slide 3 as “竞争格局”. The current plan marks slide 2 complete and slide 3 pending. The latest reply confirms that slide 2 is finished.
 
 ```json
 {

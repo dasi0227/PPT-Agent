@@ -2,7 +2,7 @@ package com.dasi.ppt.agent.domain.agent.service.command;
 
 import com.dasi.ppt.agent.domain.agent.repository.ICommandRepository;
 import com.dasi.ppt.agent.domain.agent.repository.ISessionRepository;
-import com.dasi.ppt.agent.domain.project.service.ProjectWriteLock;
+import com.dasi.ppt.agent.domain.shared.service.LockService;
 import com.dasi.ppt.agent.domain.setting.service.SettingService;
 import com.dasi.ppt.agent.domain.shared.sse.EventPublisher;
 import lombok.RequiredArgsConstructor;
@@ -17,7 +17,7 @@ public class CommandService {
 
     private final ICommandRepository commandRepository;
     private final ISessionRepository sessionRepository;
-    private final ProjectWriteLock projectWriteLock;
+    private final LockService lockService;
     private final SettingService settingService;
     private final List<CommandHandler> handlers;
     private final AsyncTaskExecutor asyncTaskExecutor;

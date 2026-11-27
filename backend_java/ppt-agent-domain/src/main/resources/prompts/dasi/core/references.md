@@ -24,4 +24,4 @@ desc: Specify the significances of the references.
 ## User's Material 
 
 - `attachment`: Uploaded images with attachment IDs and original asset paths, used to extract content and incorporate assets into slides.
-- `annotation`: Comments on selected elements or regions with location and captured page content, used to locate edit targets and interpret requested changes.
+- `annotation`: Comments on selected elements or regions with location and captured slide content, used to locate edit targets and interpret requested changes.

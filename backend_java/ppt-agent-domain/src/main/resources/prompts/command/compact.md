@@ -29,7 +29,7 @@ desc: Summarize the working context for task continuation.
 
 ## Examples
 
-Input: The user wants to fix clipped chart labels on page 2 of a quarterly report without changing text or data. The previous summary records the clipping. The compressed records show a layout adjustment. The retained context contains a failed render followed by another saved layout correction, with no subsequent render.
+Input: The user wants to fix clipped chart labels on slide 2 of a quarterly report without changing text or data. The previous summary records the clipping. The compressed records show a layout adjustment. The retained context contains a failed render followed by another saved layout correction, with no subsequent render.
 
 ```json
 {
@@ -38,7 +38,7 @@ Input: The user wants to fix clipped chart labels on page 2 of a quarterly repor
 }
 ```
 
-Input: The previous summary contains an eight-slide proposal and an unresolved source requirement for page 4. The newer records include the user's explicit correction to five slides and a completed, verified revision of page 2. No source for page 4 has been supplied.
+Input: The previous summary contains an eight-slide proposal and an unresolved source requirement for slide 4. The newer records include the user's explicit correction to five slides and a completed, verified revision of slide 2. No source for slide 4 has been supplied.
 
 ```json
 {

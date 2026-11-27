@@ -6,7 +6,7 @@ import com.dasi.ppt.agent.domain.agent.service.history.CheckpointService;
 import com.dasi.ppt.agent.domain.agent.service.hook.HookDispatcher;
 import com.dasi.ppt.agent.domain.agent.service.input.InputService;
 import com.dasi.ppt.agent.domain.agent.service.interaction.InteractionService;
-import com.dasi.ppt.agent.domain.project.service.ProjectWriteLock;
+import com.dasi.ppt.agent.domain.shared.service.LockService;
 import com.dasi.ppt.agent.domain.setting.service.SettingService;
 import com.dasi.ppt.agent.domain.shared.sse.EventPublisher;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +22,7 @@ public class RunService {
     private final InputService inputService;
     private final SettingService settingService;
     private final CheckpointService checkpointService;
-    private final ProjectWriteLock projectWriteLock;
+    private final LockService lockService;
     private final HarnessLoop harnessLoop;
     private final HookDispatcher hookDispatcher;
     private final InteractionService interactionService;

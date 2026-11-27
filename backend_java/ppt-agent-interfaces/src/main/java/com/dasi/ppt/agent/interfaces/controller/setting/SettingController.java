@@ -1,6 +1,7 @@
 package com.dasi.ppt.agent.interfaces.controller.setting;
 
 import com.dasi.ppt.agent.domain.setting.service.SettingService;
+import com.dasi.ppt.agent.domain.shared.gateway.IPlatformGateway;
 import com.dasi.ppt.agent.interfaces.controller.IdVo;
 import com.dasi.ppt.agent.interfaces.controller.setting.dto.CreateModelDto;
 import com.dasi.ppt.agent.interfaces.controller.setting.dto.DeleteModelDto;
@@ -30,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class SettingController {
 
     private final SettingService settingService;
+    private final IPlatformGateway platformGateway;
 
     @GetMapping("/fileopen")
     public FileOpenSettingsVo getFileOpenSettings() {
@@ -43,7 +45,7 @@ public class SettingController {
 
     @PostMapping("/fileopen/pick")
     public PickApplicationVo pickApplication() {
-        return PickApplicationVo.toVo(settingService.pickApplication());
+        return PickApplicationVo.toVo(platformGateway.pickApp());
     }
 
     @GetMapping("/shortcuts")

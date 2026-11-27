@@ -4,7 +4,7 @@ import com.dasi.ppt.agent.domain.agent.model.entity.Session;
 import com.dasi.ppt.agent.domain.agent.repository.ICheckpointRepository;
 import com.dasi.ppt.agent.domain.agent.repository.ISessionRepository;
 import com.dasi.ppt.agent.domain.project.repository.IProjectRepository;
-import com.dasi.ppt.agent.domain.project.service.ProjectWriteLock;
+import com.dasi.ppt.agent.domain.shared.service.LockService;
 import com.dasi.ppt.agent.domain.shared.exception.ErrorCode;
 import com.dasi.ppt.agent.domain.shared.service.NotifyService;
 import com.dasi.ppt.agent.domain.shared.sse.ProjectChangeArea;
@@ -29,7 +29,7 @@ public class SessionService {
     private final ICheckpointRepository checkpointRepository;
     private final TransactionTemplate transaction;
     private final IProjectRepository projectRepository;
-    private final ProjectWriteLock projectWriteLock;
+    private final LockService lockService;
     private final NotifyService notifyService;
 
     @Transactional(readOnly = true)
@@ -42,7 +42,7 @@ public class SessionService {
 
     public String createSession(Session session) {
         String projectId = session.getProjectId();
-        synchronized (projectWriteLock.lockFor(projectId)) {
+        synchronized (lockService.projectLock(projectId)) {
             List<String> sessionIds = transaction.execute(status -> {
                 if (!projectRepository.existsProject(projectId)) {
                     throw notFound(ErrorCode.PROJECT_NOT_FOUND);
@@ -68,7 +68,7 @@ public class SessionService {
         if (projectId == null) {
             throw notFound(ErrorCode.SESSION_NOT_FOUND);
         }
-        synchronized (projectWriteLock.lockFor(projectId)) {
+        synchronized (lockService.projectLock(projectId)) {
             Long checkpointsRevision = transaction.execute(status -> {
                 Session session = sessionRepository.findSession(sessionId);
                 if (session == null) {
