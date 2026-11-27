@@ -24,8 +24,8 @@
 - SQLite `TEXT` 列在 PO、Mapper 参数及结果映射中统一使用 `String`，包括状态、类型、模式和协议。
 - JSON 存储列按 `String` 读写，仓储负责与领域对象转换。
 - `infrastructure/persistence/filesystem/FileStorer` 负责项目删除目录的暂存、状态检查和恢复，按数据库提交结果恢复或清除暂存目录。
-- `domain/shared/service/PathService` 定位项目目录、项目内文件和删除暂存目录，并识别文稿文件名。文稿读写使用 `SystemConstant` 中的项目级文稿文件名和页面文件名格式。
-- 打开文稿时，`DeckService` 调用 `PathService.resolveDocumentForOpen(projectId, fileName)` 校验请求文件名并解析符号链接。实际目标必须是该项目根目录下符合文稿命名规则的普通文件。文稿保存允许首次创建文件。
+- `domain/shared/service/PathService` 按固定布局计算路径，目标可尚未创建。`projectsRoot`、`projectDirectory`、`deletingDirectory` 定位目录，`meta`、`constraint`、`outline`、`slideSpec`、`slideHtml` 定位文稿，`attachmentOriginal`、`attachmentThumbnail` 定位附件，`slideThumbnailDirectory`、`slideThumbnail` 定位单页预览目录和指定渲染哈希的 WebP。
+- `PathService` 统一维护五类文稿的命名规则，`isProjectFile(projectDirectory, path)` 按指定项目根目录和文件名判断文稿路径，目标可以尚未创建。保存大纲时用 `slideIdFromFileName` 从页面文件名提取 ID。`OpenProjectFileDto` 复用文稿命名规则校验请求的 `file_name`。`DeckService` 打开文稿前解析符号链接，确认真实目标是该项目根目录下的普通文稿文件。撤销记录只接受文件名，仓储验证整批目标路径后执行恢复。首次保存文稿时允许创建文件。
 - `infrastructure` 模块将 `base.css`、`decorations.js` 和 `theme-bridge.js` 直接存放在 `resources/runtime/` 下。基础样式定义系统字体、颜色、字号和间距等默认值，预览和导出都先应用基础样式，再应用已选主题和单页样式。
 
 - `interfaces/controller/` 按功能分为 `project`、`asset`、`setting`、`export`、`file`、`session`、`history`、`execution`、`interaction`、`checkpoint` 和 `system`。
@@ -179,7 +179,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 ## 项目目录
 
 - 创建项目只写 SQLite。首次写入文稿或附件时创建独立的 `{project_id}/` 目录，由同一工作目录下的单个后端进程管理。
-- 删除带文件的项目时，在事务内将项目目录原子改名为同级的 `.deleting-{project_id}/`。事务提交后清除暂存目录，回滚时恢复原名。若进程中断或事务结果未知，启动时按 SQLite 中项目记录是否存在决定恢复或清除。
+- 删除带文件的项目时，在事务内将项目目录原子改名为同级的 `.deleting-{project_id}/`。事务提交后清除暂存目录，回滚时恢复原名。若进程中断或事务结果未知，`FileStorer` 在启动时遍历项目根目录，将条目名传给 `PathService.projectIdFromDeletingDirectory` 取得项目 ID，再按 SQLite 中项目记录是否存在决定恢复或清除。删除标记的 ID 为空、`.` 或 `..` 时，记录警告、保留该条目并继续处理其余项目。
 - 项目级文稿存于根目录的 `.meta.json`、`.constraint.json`、`.outline.json`。
 - 单页规格和源码按幻灯片 ID 存为根目录的 `{slide_id}.json` 和 `{slide_id}.html`。
 - 文稿回退和返回只处理上述五类文件，其他项目文件保留原状。

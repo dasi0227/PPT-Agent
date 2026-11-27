@@ -18,15 +18,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
-import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.META_FILE_NAME;
-import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.OUTLINE_FILE_NAME;
-import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.SLIDE_HTML_FILE_NAME_FORMAT;
 import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.*;
 
 @Service
@@ -70,18 +66,17 @@ public class ExportService {
             Project project = projectRepository.findProjectAppearance(projectId);
 
             // 2. 得到 meta（用于装饰）和 outline（用于页面顺序）
-            Path projectDirectory = pathService.projectDirectory(projectId);
-            Meta meta = schemaService.decode(DeckFileType.META, fileGateway.readFile(projectDirectory.resolve(META_FILE_NAME)), Meta.class);
-            Outline outline = schemaService.decode(DeckFileType.OUTLINE, fileGateway.readFile(projectDirectory.resolve(OUTLINE_FILE_NAME)), Outline.class);
+            Meta meta = schemaService.decode(DeckFileType.META, fileGateway.readFile(pathService.meta(projectId)), Meta.class);
+            Outline outline = schemaService.decode(DeckFileType.OUTLINE, fileGateway.readFile(pathService.outline(projectId)), Outline.class);
 
             // 3. 得到 slides
             List<ExportSnapshot.Slide> slides = new ArrayList<>();
             if (outline != null) {
-                appendSlides(slides, outline.getPages(), null, projectDirectory);
+                appendSlides(slides, outline.getPages(), null, projectId);
                 for (Outline.Chapter chapter : outline.getChapters()) {
-                    appendSlides(slides, chapter.getPages(), chapter.getTitle(), projectDirectory);
+                    appendSlides(slides, chapter.getPages(), chapter.getTitle(), projectId);
                     for (Outline.Section section : chapter.getSections()) {
-                        appendSlides(slides, section.getPages(), chapter.getTitle(), projectDirectory);
+                        appendSlides(slides, section.getPages(), chapter.getTitle(), projectId);
                     }
                 }
             }
@@ -105,10 +100,10 @@ public class ExportService {
         });
     }
 
-    private void appendSlides(List<ExportSnapshot.Slide> slides, List<Outline.Page> pages, String chapterTitle, Path projectDirectory) {
+    private void appendSlides(List<ExportSnapshot.Slide> slides, List<Outline.Page> pages, String chapterTitle, String projectId) {
         for (Outline.Page page : pages) {
             String slideId = page.getId();
-            byte[] html = fileGateway.readFile(projectDirectory.resolve(SLIDE_HTML_FILE_NAME_FORMAT.formatted(slideId)));
+            byte[] html = fileGateway.readFile(pathService.slideHtml(projectId, slideId));
             ExportSnapshot.Slide slide = ExportSnapshot.Slide.builder()
                     .slideId(slideId)
                     .title(page.getTitle())

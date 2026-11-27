@@ -34,18 +34,16 @@ public class FileStorer {
         if (Files.notExists(projectsRoot)) {
             return;
         }
-        // 2. 遍历所有项目，拿到存在的删除标记
-        try (DirectoryStream<Path> entries = Files.newDirectoryStream(projectsRoot, pathService::isDeletingDirectory)) {
-            for (Path deletingDirectory : entries) {
-                // 3. 从标记中解析出项目
-                Path projectDirectory = pathService.projectDirectoryFromDeletion(deletingDirectory);
-                String projectId = projectDirectory.getFileName().toString();
+        try (DirectoryStream<Path> entries = Files.newDirectoryStream(projectsRoot)) {
+            for (Path entry : entries) {
+                String projectId = pathService.projectIdFromDeletingDirectory(entry.getFileName().toString());
+                if (projectId == null) continue;
                 if (projectMapper.existsProject(projectId)) {
-                    // 4.1 恢复未提交删除的项目
-                    Files.move(deletingDirectory, projectDirectory, ATOMIC_MOVE);
+                    // 恢复未提交删除的项目
+                    Files.move(entry, pathService.projectDirectory(projectId), ATOMIC_MOVE);
                 } else {
-                    // 4.2 清理已删除项目的暂存目录
-                    FileSystemUtils.deleteRecursively(deletingDirectory);
+                    // 清理已删除项目的暂存目录
+                    FileSystemUtils.deleteRecursively(entry);
                 }
             }
         } catch (IOException ex) {
@@ -72,16 +70,10 @@ public class FileStorer {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCompletion(int status) {
-                if (status == STATUS_UNKNOWN) {
-                    return;
-                }
                 try {
-                    // 3.1 事务回滚则恢复项目
                     if (status == STATUS_ROLLED_BACK) {
                         Files.move(deletingDirectory, projectDirectory, ATOMIC_MOVE);
-                    }
-                    // 3.2 事务提交则删除备份
-                    if (status == STATUS_COMMITTED) {
+                    } else if (status == STATUS_COMMITTED) {
                         FileSystemUtils.deleteRecursively(deletingDirectory);
                     }
                 } catch (IOException ex) {

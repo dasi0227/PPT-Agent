@@ -12,7 +12,6 @@ import org.springframework.stereotype.Service;
 
 import java.nio.file.Path;
 
-import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.ATTACHMENT_PATH_PREFIX;
 import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.notFound;
 
 @Service
@@ -27,8 +26,10 @@ public class AttachmentService {
     public byte[] readAttachment(String projectId, String attachmentId, boolean original) {
         synchronized (lockService.projectLock(projectId)) {
             if (!projectRepository.existsProject(projectId)) return null;
-            String relativePath = ATTACHMENT_PATH_PREFIX + attachmentId + (original ? ".png" : ".webp");
-            return fileGateway.readFile(pathService.filePathByFileName(projectId, relativePath));
+            Path file = original
+                    ? pathService.attachmentOriginal(projectId, attachmentId)
+                    : pathService.attachmentThumbnail(projectId, attachmentId);
+            return fileGateway.readFile(file);
         }
     }
 
@@ -39,11 +40,10 @@ public class AttachmentService {
                 throw notFound(ErrorCode.PROJECT_NOT_FOUND);
             }
             String id = IdUtil.genAttachmentId();
-            Path attachmentDirectory = pathService.projectDirectory(projectId).resolve(ATTACHMENT_PATH_PREFIX);
-            Path originalFile = attachmentDirectory.resolve(id + ".png");
+            Path originalFile = pathService.attachmentOriginal(projectId, id);
             fileGateway.createFile(originalFile, png);
             try {
-                fileGateway.createFile(attachmentDirectory.resolve(id + ".webp"), thumbnail);
+                fileGateway.createFile(pathService.attachmentThumbnail(projectId, id), thumbnail);
             } catch (RuntimeException ex) {
                 fileGateway.deleteFile(originalFile);
                 throw ex;

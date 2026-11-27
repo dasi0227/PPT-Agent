@@ -24,11 +24,6 @@ import java.nio.file.Path;
 import java.util.EnumMap;
 import java.util.Map;
 
-import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.META_FILE_NAME;
-import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.OUTLINE_FILE_NAME;
-import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.SLIDE_HTML_FILE_NAME_FORMAT;
-import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.THUMBNAIL_DIRECTORY_FORMAT;
-
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -47,16 +42,13 @@ public class ThumbnailService {
         // 1. 给 slide 上锁
         synchronized (lockService.slideLock(projectId, slideId)) {
             IRenderGateway.RenderMaterial renderMaterial;
-            Path thumbnailDirectory;
-            String thumbnailName;
             Path thumbnailFile;
             // 2. 读取页面内容，按渲染哈希查找缓存
             synchronized (lockService.projectLock(projectId)) {
                 renderMaterial = getRenderMaterial(projectId, slideId);
                 if (renderMaterial == null) return null;
-                thumbnailDirectory = pathService.projectDirectory(projectId).resolve(THUMBNAIL_DIRECTORY_FORMAT.formatted(slideId));
-                thumbnailName = renderGateway.renderHash(renderMaterial) + ".webp";
-                thumbnailFile = thumbnailDirectory.resolve(thumbnailName);
+                String renderHash = renderGateway.renderHash(renderMaterial);
+                thumbnailFile = pathService.slideThumbnail(projectId, slideId, renderHash);
                 byte[] cached = fileGateway.readFile(thumbnailFile);
                 if (cached != null) return cached;
             }
@@ -70,6 +62,8 @@ public class ThumbnailService {
                 // 5. 先保存新的
                 fileGateway.replaceFile(thumbnailFile, thumbnail);
                 // 6. 再删除旧的
+                Path thumbnailDirectory = pathService.slideThumbnailDirectory(projectId, slideId);
+                String thumbnailName = thumbnailFile.getFileName().toString();
                 for (String fileName : fileGateway.listFileNames(thumbnailDirectory)) {
                     if (fileName.endsWith(".webp") && !fileName.equals(thumbnailName)) {
                         fileGateway.deleteFile(thumbnailDirectory.resolve(fileName));
@@ -84,15 +78,14 @@ public class ThumbnailService {
         return transactionTemplate.execute(status -> {
             Project project = projectRepository.findProjectAppearance(projectId);
             if (project == null) return null;
-            Path projectDirectory = pathService.projectDirectory(projectId);
-            byte[] outlineBytes = fileGateway.readFile(projectDirectory.resolve(OUTLINE_FILE_NAME));
+            byte[] outlineBytes = fileGateway.readFile(pathService.outline(projectId));
             Outline outline = schemaService.decode(DeckFileType.OUTLINE, outlineBytes, Outline.class);
             if (outline == null) return null;
             Outline.PagePosition position = outline.findPagePosition(slideId);
             if (position == null) return null;
-            byte[] html = fileGateway.readFile(projectDirectory.resolve(SLIDE_HTML_FILE_NAME_FORMAT.formatted(slideId)));
+            byte[] html = fileGateway.readFile(pathService.slideHtml(projectId, slideId));
             if (html == null) return null;
-            byte[] metaBytes = fileGateway.readFile(projectDirectory.resolve(META_FILE_NAME));
+            byte[] metaBytes = fileGateway.readFile(pathService.meta(projectId));
             Meta meta = schemaService.decode(DeckFileType.META, metaBytes, Meta.class);
             Map<DecorationType, DecorationPosition> decorations = new EnumMap<>(DecorationType.class);
             decorations.put(DecorationType.SLIDE_PAGINATION, project.getSlidePaginationPosition());

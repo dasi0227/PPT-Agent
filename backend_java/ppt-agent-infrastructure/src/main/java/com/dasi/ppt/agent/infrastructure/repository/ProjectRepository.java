@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -45,18 +46,7 @@ public class ProjectRepository implements IProjectRepository, SmartInitializingS
         for (String projectId : fileUndoMapper.listPendingProjectIds()) {
             synchronized (lockService.projectLock(projectId)) {
                 try {
-                    List<FileUndoPo> fileUndoList = fileUndoMapper.listFileUndo(projectId);
-                    if (fileUndoList.isEmpty()) {
-                        continue;
-                    }
-                    for (FileUndoPo fileUndo : fileUndoList) {
-                        if (!pathService.isProjectFile(fileUndo.getFileName())) {
-                            throw illegal("撤销记录中的文稿文件名无效：" + fileUndo.getFileName());
-                        }
-                    }
-                    for (FileUndoPo fileUndo : fileUndoList) {
-                        applyFileContent(projectId, fileUndo.getFileName(), fileUndo.getBeforeContent());
-                    }
+                    restoreFiles(projectId, fileUndoMapper.listFileUndo(projectId));
                     fileUndoMapper.deleteFileUndo(projectId);
                 } catch (RuntimeException ex) {
                     log.error("文稿恢复失败，项目保留撤销记录：{}", projectId, ex);
@@ -165,14 +155,7 @@ public class ProjectRepository implements IProjectRepository, SmartInitializingS
                     return;
                 }
                 // 5. 验证整批文件名后逐一还原文件
-                for (FileUndoPo fileUndo : fileUndoList) {
-                    if (!pathService.isProjectFile(fileUndo.getFileName())) {
-                        throw illegal("撤销记录中的文稿文件名无效：" + fileUndo.getFileName());
-                    }
-                }
-                for (FileUndoPo fileUndo : fileUndoList) {
-                    applyFileContent(projectId, fileUndo.getFileName(), fileUndo.getBeforeContent());
-                }
+                restoreFiles(projectId, fileUndoList);
                 // 6. 清除记录
                 fileUndoMapper.deleteFileUndo(projectId);
             } catch (RuntimeException recoveryFailure) {
@@ -182,8 +165,26 @@ public class ProjectRepository implements IProjectRepository, SmartInitializingS
         }
     }
 
+    private void restoreFiles(String projectId, List<FileUndoPo> fileUndoList) {
+        Path directory = pathService.projectDirectory(projectId);
+        for (FileUndoPo fileUndo : fileUndoList) {
+            String fileName = fileUndo.getFileName();
+            try {
+                Path file = directory.resolve(fileName);
+                if (!pathService.isProjectFile(directory, file) || !fileName.equals(file.getFileName().toString())) {
+                    throw illegal("撤销记录中的文稿文件名无效：" + fileName);
+                }
+            } catch (InvalidPathException ex) {
+                throw illegal("撤销记录中的文稿文件名无效：" + fileName);
+            }
+        }
+        for (FileUndoPo fileUndo : fileUndoList) {
+            applyFileContent(projectId, fileUndo.getFileName(), fileUndo.getBeforeContent());
+        }
+    }
+
     private void applyFileContent(String projectId, String fileName, byte[] content) {
-        Path file = pathService.filePathByFileName(projectId, fileName);
+        Path file = pathService.projectDirectory(projectId).resolve(fileName).normalize();
         if (content == null) {
             fileGateway.deleteFile(file);
         } else {

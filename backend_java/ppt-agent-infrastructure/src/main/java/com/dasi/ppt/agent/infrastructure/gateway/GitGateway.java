@@ -1,15 +1,10 @@
 package com.dasi.ppt.agent.infrastructure.gateway;
 
 import com.dasi.ppt.agent.domain.shared.gateway.IGitGateway;
-import com.dasi.ppt.agent.domain.shared.service.PathService;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 @Component
-@RequiredArgsConstructor
 public class GitGateway implements IGitGateway {
-
-    private final PathService pathService;
 
     @Override
     public StagedChanges stageAndReadDiff(String projectId) {
