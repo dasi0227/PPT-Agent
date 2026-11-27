@@ -7,6 +7,7 @@
 - `ppt-agent-bootstrap` 的启动类为 `com.dasi.ppt.agent.PptAgentApplication`。
 - 应用配置位于 `ppt-agent-bootstrap/src/main/resources/application.yml`。
 - `bootstrap` 的 `configuration/` 存放 Web、JSON、持久化、后台执行器及模型客户端的装配配置。
+- `bootstrap` 的 `startup/StartupRecovery` 在单例初始化完成后依次调用 `ProjectRepository.recoverProjectDeletions()` 和 `recoverPendingFiles()`。
 - `backend_java/sql/schema.sql` 保存 SQLite 建表与索引定义，由应用外部执行。
 - `backend_java/sql/init.sql` 保存预置资产、标签、初始设置及本地模型配置，由 Git 忽略。
 - `domain` 模块的 `resources/prompts/` 存放 Agent 提示词与工具定义。
@@ -15,15 +16,14 @@
 - `infrastructure/repository/` 存放仓储实现，负责领域实体与数据库 PO 的转换。
 - `infrastructure/gateway/` 存放 `FileGateway`、`LlmGateway`、`JevGateway`、`GitGateway`、`PlatformGateway`、`BashGateway` 和 `RenderGateway`。
 - `JevGateway` 实现 `IJevGateway`，统一负责 JEV 的 HTTP 请求编码和判定结果解析。
-- `infrastructure/persistence/` 按存储介质分为 `database/` 和 `filesystem/`。
-- `infrastructure/persistence/database/po/` 为每张业务表定义一个 `XxxPo`。
-- `infrastructure/persistence/database/mapper/` 为每张业务表定义一个同名前缀的 `XxxMapper` 接口。
+- `infrastructure/persistence/po/` 为每张业务表定义一个 `XxxPo`。
+- `infrastructure/persistence/mapper/` 为每张业务表定义一个同名前缀的 `XxxMapper` 接口。
 - Mapper 读写整组字段时使用 PO，返回多条记录时使用 PO 列表。按 ID 修改单项、查询单值或批量绑定 ID 时直接使用对应的标量或集合。领域实体、枚举与持久化表示的转换由 Repository 完成。
 - 单独读取项目 Logo 时，Mapper 通过 SQLite JDBC 的 `getBytes()` 读取 BLOB 并返回 `byte[]`。
 - Mapper XML 位于 `ppt-agent-infrastructure/src/main/resources/mapper/`。
 - SQLite `TEXT` 列在 PO、Mapper 参数及结果映射中统一使用 `String`，包括状态、类型、模式和协议。
 - JSON 存储列按 `String` 读写，仓储负责与领域对象转换。
-- `infrastructure/persistence/filesystem/FileStorer` 负责项目删除目录的暂存、状态检查和恢复，按数据库提交结果恢复或清除暂存目录。
+- `infrastructure/repository/ProjectRepository` 负责项目删除时的目录暂存、状态检查和恢复。
 - `domain/shared/service/PathService` 按固定布局计算路径，目标可尚未创建。`projectsRoot`、`projectDirectory`、`deletingDirectory` 定位目录，`meta`、`constraint`、`outline`、`slideSpec`、`slideHtml` 定位文稿，`attachmentOriginal`、`attachmentThumbnail` 定位附件，`slideThumbnailDirectory`、`slideThumbnail` 定位单页预览目录和指定渲染哈希的 WebP。
 - `PathService` 统一维护五类文稿的命名规则，`isProjectFile(projectDirectory, path)` 按指定项目根目录和文件名判断文稿路径，目标可以尚未创建。保存大纲时用 `slideIdFromFileName` 从页面文件名提取 ID。`OpenProjectFileDto` 复用文稿命名规则校验请求的 `file_name`。`DeckService` 打开文稿前解析符号链接，确认真实目标是该项目根目录下的普通文稿文件。撤销记录只接受文件名，仓储验证整批目标路径后执行恢复。首次保存文稿时允许创建文件。
 - `infrastructure` 模块将 `base.css`、`decorations.js` 和 `theme-bridge.js` 直接存放在 `resources/runtime/` 下。基础样式定义系统字体、颜色、字号和间距等默认值，预览和导出都先应用基础样式，再应用已选主题和单页样式。
@@ -179,7 +179,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 ## 项目目录
 
 - 创建项目只写 SQLite。首次写入文稿或附件时创建独立的 `{project_id}/` 目录，由同一工作目录下的单个后端进程管理。
-- 删除带文件的项目时，在事务内将项目目录原子改名为同级的 `.deleting-{project_id}/`。事务提交后清除暂存目录，回滚时恢复原名。若进程中断或事务结果未知，`FileStorer` 在启动时遍历项目根目录，将条目名传给 `PathService.projectIdFromDeletingDirectory` 取得项目 ID，再按 SQLite 中项目记录是否存在决定恢复或清除。删除标记的 ID 为空、`.` 或 `..` 时，记录警告、保留该条目并继续处理其余项目。
+- 删除带文件的项目时，在事务内将项目目录原子改名为同级的 `.deleting-{project_id}/`。事务提交后清除暂存目录，回滚时恢复原名。若进程中断或事务结果未知，`ProjectRepository.recoverProjectDeletions()` 在启动时遍历项目根目录，将条目名传给 `PathService.projectIdFromDeletingDirectory` 取得项目 ID。SQLite 中有项目记录时恢复原目录，否则清除暂存目录。删除标记的 ID 为空、`.` 或 `..` 时，记录警告、保留该条目并继续处理其余项目。
 - 项目级文稿存于根目录的 `.meta.json`、`.constraint.json`、`.outline.json`。
 - 单页规格和源码按幻灯片 ID 存为根目录的 `{slide_id}.json` 和 `{slide_id}.html`。
 - 文稿回退和返回只处理上述五类文件，其他项目文件保留原状。

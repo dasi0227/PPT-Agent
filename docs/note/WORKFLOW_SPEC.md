@@ -185,7 +185,7 @@ JEV 的 Intent、Prune、Rechristen、Preview 分别由 `IntentHook`、`ToolPrun
 
 ### 启动恢复
 
-桌面客户端的每个工作目录由单个后端进程管理。启动时先根据 SQLite 项目记录处理遗留的删除暂存目录，再逐项目恢复文稿。[目录恢复规则](STRUCTURE_SPEC.md#项目目录)
+桌面客户端的每个工作目录由单个后端进程管理。单例初始化完成后，`StartupRecovery` 先调用 `ProjectRepository.recoverProjectDeletions()`，根据 SQLite 项目记录处理遗留的删除暂存目录，再调用同一仓储的 `recoverPendingFiles()` 逐项目恢复文稿。[目录恢复规则](STRUCTURE_SPEC.md#项目目录)
 
 1. `ProjectRepository` 查询 `file_undo` 中的项目。在项目写锁内先检查全部目标文件名，再按旧内容创建、替换或删除文件。全部文件恢复且落盘后删除该项目的记录。重复恢复只校正文稿文件，会话版本保持 SQLite 已提交的值。
 2. 将遗留非终态 Run 和命令标为 `interrupted`，保留已确认的工具结果、文稿修改、用量和 Git 提交。不恢复旧循环，也不重放结果未知的工具或 Git 操作。

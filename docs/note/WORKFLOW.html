@@ -1398,31 +1398,28 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <text class="edge-label normal" x="835" y="1209" text-anchor="middle">发布</text>
 <g id="support-recovery" class="node stopping" transform="translate(24 1342)">
 <rect width="300" height="118" rx="10"/>
+<text class="node-tag" x="16" y="25">bootstrap/startup</text>
+<a class="class-link" href="#class-StartupRecovery" aria-label="查看 StartupRecovery 职责">
+<text class="node-name" x="16" y="50">StartupRecovery</text>
+</a>
+<text class="node-caption" x="16" y="76">单例初始化完成后调用项目仓储</text>
+</g>
+<g id="support-reconcile" class="node plain" transform="translate(460 1342)">
+<rect width="310" height="118" rx="10"/>
+<text class="node-tag" x="16" y="25">infrastructure/repository</text>
+<a class="class-link" href="#class-ProjectRepository" aria-label="查看 ProjectRepository 职责">
+<text class="node-name" x="16" y="50">ProjectRepository</text>
+</a>
+<text class="node-caption" x="16" y="76">先按项目记录恢复或清除删除暂存目录</text>
+<text class="node-caption" x="16" y="96">再按 file_undo 恢复文稿</text>
+</g>
+<g id="support-interrupt" class="node plain" transform="translate(900 1342)">
+<rect width="316" height="118" rx="10"/>
 <text class="node-tag" x="16" y="25">run</text>
 <a class="class-link" href="#class-RunRecoveryService" aria-label="查看 RunRecoveryService 职责">
 <text class="node-name" x="16" y="50">RunRecoveryService</text>
 </a>
-<text class="node-caption" x="16" y="76">启动时扫描未结束执行</text>
-<text class="node-caption" x="16" y="96">不恢复原 Run 或自动重放工具</text>
-</g>
-<g id="support-reconcile" class="node plain" transform="translate(460 1342)">
-<rect width="310" height="118" rx="10"/>
-<text class="node-tag" x="16" y="25">project/service</text>
-<a class="class-link" href="#class-DeckService" aria-label="查看 DeckService 职责">
-<text class="node-name" x="16" y="50">DeckService</text>
-</a>
-<text class="node-caption" x="16" y="76">按项目读取 file_undo</text>
-<text class="node-caption" x="16" y="96">还原旧文件后删除撤销记录</text>
-</g>
-<g id="support-interrupt" class="node plain" transform="translate(900 1342)">
-<rect width="316" height="118" rx="10"/>
-<text class="node-tag" x="16" y="25">repository</text>
-<a class="class-link" href="#class-IRunRepository" aria-label="查看 IRunRepository 职责">
-<text class="node-name" x="16" y="50">IRunRepository</text>
-</a>
-<a class="class-link" href="#class-ICommandRepository" aria-label="查看 ICommandRepository 职责">
-<text class="node-name" x="16" y="73">ICommandRepository</text>
-</a>
+<text class="node-caption" x="16" y="76">处理中断的 Run 和命令</text>
 <text class="node-caption" x="16" y="99">标记 interrupted，保留确认成功项</text>
 </g>
 </svg>
@@ -1841,9 +1838,9 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <th scope="row">
 <code>RunRecoveryService</code>
 </th>
-<td>启动时遗留的活动 Run、命令与文件事务</td>
-<td>完成清理的文件状态；中断状态</td>
-<td>先按 file_undo 还原项目文稿，整批成功后删除记录。随后将无法继续的执行标记为 interrupted，保留已确认的工具与 Git 结果。旧 Loop 和结果未知的工具均不重放。</td>
+<td>启动时遗留的活动 Run 和命令</td>
+<td>Run 和命令的中断状态</td>
+<td>文件恢复后，通过 <code>IRunRepository</code> 和 <code>ICommandRepository</code> 将无法继续的执行标记为 interrupted，保留已确认的工具与 Git 结果。旧 Loop 和结果未知的工具均不重放。</td>
 </tr>
 </tbody>
 <tbody>
@@ -2405,13 +2402,30 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </tbody>
 <tbody>
 <tr class="group-heading">
+<th colspan="4" scope="rowgroup">启动与文件恢复</th>
+</tr>
+<tr id="class-StartupRecovery">
+<th scope="row"><code>StartupRecovery</code></th>
+<td>应用单例初始化完成</td>
+<td>按序执行两项文件恢复</td>
+<td>依次调用项目仓储的 <code>recoverProjectDeletions()</code> 和 <code>recoverPendingFiles()</code>。</td>
+</tr>
+<tr id="class-ProjectRepository">
+<th scope="row"><code>ProjectRepository</code></th>
+<td>删除暂存目录、SQLite 项目记录与 file_undo</td>
+<td>恢复或清除的项目目录、还原后的文稿</td>
+<td>项目记录存在时恢复目录，否则清除暂存目录。文稿在项目锁内逐批还原，每批成功后清除对应的撤销记录。</td>
+</tr>
+</tbody>
+<tbody>
+<tr class="group-heading">
 <th colspan="4" scope="rowgroup">相邻领域 · 调用边界</th>
 </tr>
 <tr id="class-DeckService">
 <th scope="row">
 <code>DeckService</code>
 </th>
-<td>带来源归属的资源修改、读取、渲染结果或遗留事务</td>
+<td>带来源归属的资源修改、读取或渲染结果</td>
 <td>已校验的 <code>DeckEditCandidate</code>、带归属的已提交修改事实或读取到的项目内容</td>
 <td>归 domain/project/service；统一资源规则、Schema / 引用校验、内容基准和文件提交，工具与人工保存复用。真实提交时可靠记录来源和实际修改，候选不计入已提交差异；工具实际写入时协调检查点失效，人工保存保留各会话原有的检查点和版本。明确业务冲突可抛 BusinessException，由调用边界决定 HTTP 错误响应或失败工具结果；本类不返回工具专属 ToolResult，提交不确定等故障向上传递。</td>
 </tr>
