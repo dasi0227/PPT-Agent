@@ -2,14 +2,14 @@
 
 ## 后端目录
 
-- `backend_java/pom.xml` 聚合 `ppt-agent-bootstrap`、`ppt-agent-interfaces`、`ppt-agent-domain`、`ppt-agent-infrastructure` 四个 Maven 模块。
+- `backend/pom.xml` 聚合 `ppt-agent-bootstrap`、`ppt-agent-interfaces`、`ppt-agent-domain`、`ppt-agent-infrastructure` 四个 Maven 模块。
 - 各模块的 Java 源码位于 `src/main/java/com/dasi/ppt/agent/`，模块资源位于各自的 `src/main/resources/`。
 - `ppt-agent-bootstrap` 的启动类为 `com.dasi.ppt.agent.PptAgentApplication`。
 - 应用配置位于 `ppt-agent-bootstrap/src/main/resources/application.yml`。
 - `bootstrap` 的 `configuration/` 存放 Web、JSON、持久化、后台执行器及模型客户端的装配配置。
 - `bootstrap` 的 `startup/StartupRecovery` 在单例初始化完成后依次调用 `ProjectRepository.recoverProjectDeletions()` 和 `recoverPendingFiles()`。
-- `backend_java/sql/schema.sql` 保存 SQLite 建表与索引定义，由应用外部执行。
-- `backend_java/sql/init.sql` 保存预置资产、标签、初始设置及本地模型配置，由 Git 忽略。
+- `backend/sql/schema.sql` 保存 SQLite 建表与索引定义，由应用外部执行。
+- `backend/sql/init.sql` 保存预置资产、标签、初始设置及本地模型配置，由 Git 忽略。
 - `domain` 模块的 `resources/prompts/` 存放 Agent 提示词与工具定义。
 - `domain` 模块的 `resources/schemas/` 存放项目文档的 JSON Schema。
 - `infrastructure/properties/` 存放 `JevProperties` 和 `SandboxProperties`，分别绑定 JEV 与命令沙箱参数。
@@ -142,10 +142,10 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `agent/model/enumeration/ScopeDecision` 取 `approve / refuse / revise`，分别表示合并提议范围、保留已有授权、授权本项目全部页面。
 - `agent/model/enumeration/PlanDecision` 取 `approve / refuse`。批准使同一 Run 从 Plan 切换至 Create，拒绝时继续规划并保留原计划。
 - `agent/model/enumeration/ResourceDecision` 取 `approve / reject`。只有批准时可提交完整 `draft`，省略时采用原提案。[审批答复字段](API.html#interactions)
-- `agent/model/enumeration/ToolName` 取四种运行模式公开工具名的并集，`ToolRegistry` 按名称映射到对应的 `AgentTool` 实现。[Create 工具清单](ASSEMBLE.html#create-tools-title) · [Chat、Ask、Plan 工具清单](ASSEMBLE.html#other-tools-title)
-- `agent/model/LlmRequest` 的消息字段使用 Spring AI 的 `List<org.springframework.ai.chat.messages.Message>`，角色由消息的 `getMessageType()` 提供。
+- `agent/model/enumeration/ToolName` 取四种运行模式公开工具名的并集。每个工具名对应一个独立的 `AgentTool` 实现，`ToolRegistry.resolve(ToolName)` 按名返回该实例。[Create 工具清单](ASSEMBLE.html#create-tools-title) · [Chat、Ask、Plan 工具清单](ASSEMBLE.html#other-tools-title)
+- `ILlmGateway.LlmRequest` 的消息字段使用 Spring AI 的 `List<org.springframework.ai.chat.messages.Message>`，角色由消息的 `getMessageType()` 提供。
 - `LlmRequest` 同时携带本次调用可用的工具定义。
-- `agent/model/LlmResponse` 是 `ILlmGateway` 的领域响应，携带正文、推理内容、有序的 `ToolCall`、各次实际请求可取得的用量及后续请求所需的协议回传数据。
+- `ILlmGateway.LlmResponse` 是 `ILlmGateway` 的领域响应，携带正文、推理内容、有序的 `ToolCall`、各次实际请求可取得的用量及后续请求所需的协议回传数据。
 - `agent/model/ToolCall` 保存模型返回的 `tool_call_id`、原始工具名和参数，供 `ToolExecutor` 记录和执行。
 - `agent/model/enumeration/ToolResultStatus` 标识已记录的工具结果为 `completed / blocked / failed`。结果尚未记录时，工具详情返回 `result=null`。[工具详情](API_SPEC.md#消息)
 - `agent/model/enumeration/PreviewStatus` 对应 `result.preview.status`，取 `completed / unavailable / stale`，分别表示截图评分已完成、不可用或已过期。
@@ -166,7 +166,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `agent/service/command/` 存放 `CommandService` 和 `CommandHandler` 接口。
 - `command/handler/` 存放各命令的 `XxxCommandHandler` 实现。
 - `agent/service/tool/` 存放 `AgentTool` 接口、`ToolRegistry`、`ToolGuard` 和 `ToolExecutor`。
-- `tool/builtin/` 存放内置工具的 `AgentTool` 实现。
+- `tool/builtin/` 存放 16 个内置工具类。每个类以工具名注册为 Spring Bean，例如 `@Component("edit_meta")` 对应 `name()` 返回的 `ToolName.EDIT_META`。五个编辑类复用 `DeckService` 的文稿校验与提交逻辑，两个资产加载类通过 `AssetService` 读取各自的正文。
 
 ## 后端依赖
 
@@ -198,7 +198,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 ### 渲染与导出
 
 - `ThumbnailService` 通过 `IRenderGateway.renderHash` 取得渲染哈希。`RenderGateway` 为缩略图和整稿导出组装相同的页面 HTML、基础及主题 CSS 和装饰参数。文稿装饰标题取 `Meta.title`，章标题取该页所属章，根直属页省略章标题。
-- `RenderGateway` 调用外部 Node worker。开发时在 `backend_java/render-worker/` 执行 `pnpm install --frozen-lockfile`，从 `backend_java/` 启动 Java，默认脚本为 `render-worker/worker.mjs`。`PPT_RENDER_WORKER` 和 `PPT_RENDER_NODE` 可指定脚本和可执行文件。
+- `RenderGateway` 调用外部 Node worker。开发时在 `backend/render-worker/` 执行 `pnpm install --frozen-lockfile`，从 `backend/` 启动 Java，默认脚本为 `render-worker/worker.mjs`。`PPT_RENDER_WORKER` 和 `PPT_RENDER_NODE` 可指定脚本和可执行文件。
 - 单页截图使用 `--job <请求文件>`，worker 按给定的页面输入写入 PNG 并返回版面检查结果。
 - 项目导出使用 `--export`。Java 向标准输入一次写入格式、项目名称、按序排列的页面及共用外观。worker 生成完整文件后向标准输出依次写入四字节大端长度、该长度的 UTF-8 JSON（`filename`、`size`）和原始文件字节。Java 将文件流直接写入本次 HTTP 响应。
 - HTML 由 worker 将页面和装饰嵌入同目录的 `export-player.html`，可直接播放。PNG 和 PDF 复用一次 Chromium 实例逐页截图，依序打包为 ZIP 或合成为 PDF。所需临时文件由 worker 在系统临时目录中创建并在本次调用结束时删除。

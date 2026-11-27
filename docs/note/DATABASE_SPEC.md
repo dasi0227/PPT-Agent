@@ -1,4 +1,4 @@
-[数据库字段表](DATABASE.html#database-heading) · [SQLite 建表脚本](../../backend_java/sql/schema.sql)
+[数据库字段表](DATABASE.html#database-heading) · [SQLite 建表脚本](../../backend/sql/schema.sql)
 
 - 字符串枚举存为 `TEXT`，由写入方校验取值。
 - 布尔值存为 `INTEGER`，由 `CHECK` 限定为 `0` 或 `1`。

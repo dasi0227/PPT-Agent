@@ -14,9 +14,9 @@ cleanup() {
 }
 trap cleanup EXIT
 trap 'exit 130' INT TERM
-(cd "$root/backend_java" && mvn -q -DskipTests package)
+(cd "$root/backend" && mvn -q -DskipTests package)
 cd "$tmp"
-sqlite3 -bail data.db < "$root/backend_java/sql/schema.sql"
+sqlite3 -bail data.db < "$root/backend/sql/schema.sql"
 sqlite3 -bail data.db <<'SQL'
 INSERT INTO settings_fileopen DEFAULT VALUES;
 INSERT INTO settings_shortcut DEFAULT VALUES;
@@ -32,7 +32,7 @@ if curl -s --max-time 1 "http://127.0.0.1:$api_port/api/healthz" >/dev/null; the
   echo "Java test port $api_port already in use" >&2
   exit 1
 fi
-java -jar "$root/backend_java/ppt-agent-bootstrap/target/ppt-agent.jar" --server.port="$api_port" >java.log 2>&1 &
+java -jar "$root/backend/ppt-agent-bootstrap/target/ppt-agent.jar" --server.port="$api_port" >java.log 2>&1 &
 java_pid=$!
 for i in {1..60}; do
   kill -0 "$java_pid" || { tail -40 java.log; exit 1; }

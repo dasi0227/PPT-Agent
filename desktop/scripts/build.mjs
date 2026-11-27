@@ -28,14 +28,14 @@ export async function build() {
   const worker = join(runtime, 'render-worker');
   await mkdir(worker, { recursive: true });
   for (const name of ['worker.mjs', 'render-metrics.mjs', 'export-player.html', 'package.json', 'pnpm-lock.yaml']) {
-    await cp(join(root, 'backend_java', 'render-worker', name), join(worker, name));
+    await cp(join(root, 'backend', 'render-worker', name), join(worker, name));
   }
   run('pnpm', ['install', '--prod', '--frozen-lockfile', '--ignore-scripts', '--node-linker=hoisted'], worker);
-  const commands = join(root, 'backend', 'command-worker');
+  const commands = join(root, 'backend', 'bash-worker');
   // npm's locked, flat dependency tree ships with the application, including
   // upstream licenses. No global install or download occurs at command time.
   run('npm', ['ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], commands);
-  const commandRuntime = join(runtime, 'command-worker');
+  const commandRuntime = join(runtime, 'bash-worker');
   await mkdir(commandRuntime, { recursive: true });
   for (const name of ['worker.mjs', 'policy.mjs', 'package.json', 'package-lock.json', 'THIRD_PARTY_NOTICES.md', 'node_modules']) {
     await cp(join(commands, name), join(commandRuntime, name), { recursive: true, dereference: true });

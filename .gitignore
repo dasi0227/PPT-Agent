@@ -9,16 +9,16 @@
 *.test
 
 # Java 构建产物与缓存
-/backend_java/**/target/
-/backend_java/**/build/
-/backend_java/**/.gradle/
-/backend_java/**/out/
+/backend/**/target/
+/backend/**/build/
+/backend/**/.gradle/
+/backend/**/out/
 *.class
 
 # 本地临时数据与运行时缓存
 /tmp/
 **/.runtime/
-/backend_java/logs/
+/backend/logs/
 
 # 数据库
 *.db
@@ -32,7 +32,7 @@
 
 # 本地配置与初始化数据
 config.yaml
-/backend_java/sql/init.sql
+/backend/sql/init.sql
 
 # 编辑器/系统
 .idea/

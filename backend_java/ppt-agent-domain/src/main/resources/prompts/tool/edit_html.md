@@ -1,1 +1,0 @@
-Create or update an existing slide's HTML. Supply exactly one of `content` (full replacement) or `edits` (targeted replacements). Apply replacements in order; each `old_text` must match exactly once, including whitespace, after earlier replacements.
