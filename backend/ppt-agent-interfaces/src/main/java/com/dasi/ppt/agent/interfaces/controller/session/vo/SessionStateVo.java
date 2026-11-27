@@ -1,6 +1,7 @@
 package com.dasi.ppt.agent.interfaces.controller.session.vo;
 
 import com.dasi.ppt.agent.domain.agent.model.enumeration.PlanStepStatus;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -17,7 +18,8 @@ public final class SessionStateVo {
     private PlanVo plan;
     private ContextWindowVo context;
     private String activeRunId;
-    private List<String> activeCommandIds;
+    @JsonProperty("active_command_ids")
+    private List<String> activeActionIds;
     private List<String> suggestions;
 
     @Builder

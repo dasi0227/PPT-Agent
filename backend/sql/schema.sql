@@ -98,7 +98,7 @@ CREATE TABLE messages (
     CHECK (raw IS NULL OR (json_valid(raw)))
 );
 
-CREATE TABLE commands (
+CREATE TABLE actions (
     id TEXT NOT NULL PRIMARY KEY,
     operation_id TEXT NOT NULL,
     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -239,12 +239,12 @@ CREATE UNIQUE INDEX idx_messages_tool ON messages(run_id, tool_call_id, type)
     WHERE type IN ('tool_call', 'tool_result');
 CREATE UNIQUE INDEX idx_messages_context ON messages(session_id, context_position)
     WHERE context_position IS NOT NULL;
-CREATE UNIQUE INDEX idx_commands_session_seq ON commands(session_id, seq);
-CREATE INDEX idx_commands_run ON commands(run_id);
-CREATE INDEX idx_commands_operation ON commands(operation_id, seq);
-CREATE UNIQUE INDEX idx_commands_active_operation ON commands(operation_id)
+CREATE UNIQUE INDEX idx_actions_session_seq ON actions(session_id, seq);
+CREATE INDEX idx_actions_run ON actions(run_id);
+CREATE INDEX idx_actions_operation ON actions(operation_id, seq);
+CREATE UNIQUE INDEX idx_actions_active_operation ON actions(operation_id)
     WHERE status IN ('pending', 'running', 'cancelling');
-CREATE UNIQUE INDEX idx_commands_manual_compact ON commands(session_id)
+CREATE UNIQUE INDEX idx_actions_manual_compact ON actions(session_id)
     WHERE type = 'compact' AND run_id IS NULL AND status IN ('pending', 'running', 'cancelling');
 CREATE UNIQUE INDEX idx_checkpoints_run ON checkpoints(session_id, run_id)
     WHERE run_id IS NOT NULL;

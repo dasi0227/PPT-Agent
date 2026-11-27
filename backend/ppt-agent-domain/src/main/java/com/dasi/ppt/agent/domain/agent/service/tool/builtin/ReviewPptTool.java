@@ -1,12 +1,11 @@
 package com.dasi.ppt.agent.domain.agent.service.tool.builtin;
 
 import com.dasi.ppt.agent.domain.shared.gateway.ILlmGateway;
-import com.dasi.ppt.agent.domain.agent.model.ToolCall;
-import com.dasi.ppt.agent.domain.agent.model.enumeration.ToolName;
-import com.dasi.ppt.agent.domain.agent.model.result.ToolResult;
+import com.dasi.ppt.agent.domain.agent.model.entity.ToolCall;
+import com.dasi.ppt.agent.domain.agent.model.entity.ToolResult;
 import com.dasi.ppt.agent.domain.agent.service.context.assembler.ReviewPromptAssembler;
 import com.dasi.ppt.agent.domain.agent.service.run.RunState;
-import com.dasi.ppt.agent.domain.agent.service.tool.AgentTool;
+import com.dasi.ppt.agent.domain.agent.service.tool.Tool;
 import com.dasi.ppt.agent.domain.project.model.entity.Deck;
 import com.dasi.ppt.agent.domain.project.service.DeckService;
 import lombok.AllArgsConstructor;
@@ -18,16 +17,11 @@ import org.springframework.stereotype.Component;
 
 @Component("review_ppt")
 @RequiredArgsConstructor
-public class ReviewPptTool implements AgentTool {
+public class ReviewPptTool implements Tool {
 
     private final ReviewPromptAssembler reviewPromptAssembler;
     private final ILlmGateway llmGateway;
     private final DeckService deckService;
-
-    @Override
-    public ToolName getName() {
-        return ToolName.REVIEW_PPT;
-    }
 
     @Override
     public ToolResult execute(ToolCall call, RunState runState) {

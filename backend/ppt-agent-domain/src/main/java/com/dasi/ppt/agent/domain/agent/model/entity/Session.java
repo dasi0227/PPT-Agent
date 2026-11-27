@@ -1,6 +1,5 @@
 package com.dasi.ppt.agent.domain.agent.model.entity;
 
-import com.dasi.ppt.agent.domain.agent.model.Plan;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.RunStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -19,5 +18,5 @@ public final class Session {
     private Plan plan;
     private long updatedAt;
     private RunStatus runStatus;
-    private boolean hasActiveCommands;
+    private boolean hasActiveActions;
 }

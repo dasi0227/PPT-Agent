@@ -72,8 +72,8 @@
             SELECT 1 FROM runs r JOIN sessions s ON s.id = r.session_id
             WHERE s.project_id = #{projectId} AND r.status IN ('pending', 'running', 'waiting', 'cancelling')
         ) OR EXISTS (
-            SELECT 1 FROM commands c JOIN sessions s ON s.id = c.session_id
-            WHERE s.project_id = #{projectId} AND c.type = 'commit' AND c.status IN ('pending', 'running', 'cancelling')
+            SELECT 1 FROM actions a JOIN sessions s ON s.id = a.session_id
+            WHERE s.project_id = #{projectId} AND a.type = 'commit' AND a.status IN ('pending', 'running', 'cancelling')
         )
     </select>
 

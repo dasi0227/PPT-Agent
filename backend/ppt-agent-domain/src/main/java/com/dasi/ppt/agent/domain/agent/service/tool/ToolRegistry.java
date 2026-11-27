@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.domain.agent.service.tool;
 
-import com.dasi.ppt.agent.domain.agent.model.RunScope;
+import com.dasi.ppt.agent.domain.agent.model.entity.RunScope;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.RunMode;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.ToolName;
 import lombok.RequiredArgsConstructor;
@@ -15,10 +15,10 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class ToolRegistry {
 
-    private final Map<String, AgentTool> agentToolMap;
+    private final Map<String, Tool> toolsByName;
 
-    public AgentTool getToolByName(ToolName name) {
-        return agentToolMap.get(name.getValue());
+    public Tool getToolByName(ToolName name) {
+        return toolsByName.get(name.getValue());
     }
 
     public List<ToolName> getToolNames(RunMode runMode, RunScope runScope) {
@@ -28,8 +28,7 @@ public class ToolRegistry {
     public List<ToolDefinition> getToolDefinitions(Set<ToolName> names) {
         return names.stream()
                 .sorted()
-                .map(this::getToolByName)
-                .map(AgentTool::getDefinition)
+                .map(name -> getToolByName(name).getDefinition(name))
                 .toList();
     }
 

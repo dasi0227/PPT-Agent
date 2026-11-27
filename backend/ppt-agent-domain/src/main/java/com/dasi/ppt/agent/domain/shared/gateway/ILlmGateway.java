@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.domain.shared.gateway;
 
-import com.dasi.ppt.agent.domain.agent.model.ToolCall;
+import com.dasi.ppt.agent.domain.agent.model.entity.ToolCall;
 import com.dasi.ppt.agent.domain.setting.model.entity.ModelConfigSettings;
 import com.dasi.ppt.agent.domain.shared.exception.LlmCallException;
 import lombok.AllArgsConstructor;

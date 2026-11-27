@@ -3,7 +3,7 @@ package com.dasi.ppt.agent.infrastructure.repository;
 import com.dasi.ppt.agent.domain.agent.model.entity.Run;
 import com.dasi.ppt.agent.domain.agent.repository.IRunRepository;
 import com.dasi.ppt.agent.infrastructure.persistence.mapper.CheckpointMapper;
-import com.dasi.ppt.agent.infrastructure.persistence.mapper.CommandMapper;
+import com.dasi.ppt.agent.infrastructure.persistence.mapper.ActionMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.mapper.MessageMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.mapper.RunMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.mapper.SessionMapper;
@@ -19,7 +19,7 @@ public class RunRepository implements IRunRepository {
     private final SessionMapper sessionMapper;
     private final MessageMapper messageMapper;
     private final CheckpointMapper checkpointMapper;
-    private final CommandMapper commandMapper;
+    private final ActionMapper actionMapper;
     private final ObjectMapper objectMapper;
 
     @Override

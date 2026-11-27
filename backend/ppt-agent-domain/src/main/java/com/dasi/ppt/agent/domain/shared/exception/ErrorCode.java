@@ -26,7 +26,7 @@ public enum ErrorCode {
     PROJECT_BUSY("PROJECT_BUSY", "项目正在执行其他操作，请稍后重试"),
     SESSION_BUSY("SESSION_BUSY", "会话正在执行其他操作，请稍后重试"),
     RUN_NOT_FOUND("RUN_NOT_FOUND", "运行记录不存在"),
-    COMMAND_NOT_FOUND("COMMAND_NOT_FOUND", "命令记录不存在"),
+    ACTION_NOT_FOUND("COMMAND_NOT_FOUND", "命令记录不存在"),
     STALE_BASE("STALE_BASE", "修订基准已过期"),
     STALE_REVISION("STALE_REVISION", "版本已过期，请刷新后重试"),
     INTERACTION_CLOSED("INTERACTION_CLOSED", "交互事项已关闭或已答复"),

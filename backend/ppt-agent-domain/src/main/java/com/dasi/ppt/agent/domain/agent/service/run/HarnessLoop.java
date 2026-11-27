@@ -1,7 +1,7 @@
 package com.dasi.ppt.agent.domain.agent.service.run;
 
 import com.dasi.ppt.agent.domain.shared.gateway.ILlmGateway;
-import com.dasi.ppt.agent.domain.agent.service.command.handler.CompactCommandHandler;
+import com.dasi.ppt.agent.domain.agent.service.action.builtin.CompactAction;
 import com.dasi.ppt.agent.domain.agent.service.context.ContextService;
 import com.dasi.ppt.agent.domain.agent.service.hook.HookDispatcher;
 import com.dasi.ppt.agent.domain.agent.service.input.InputService;
@@ -20,6 +20,6 @@ public class HarnessLoop {
     private final HookDispatcher hookDispatcher;
     private final ToolRegistry toolRegistry;
     private final ToolExecutor toolExecutor;
-    private final CompactCommandHandler compactCommandHandler;
+    private final CompactAction compactAction;
     private final ILlmGateway llmGateway;
 }

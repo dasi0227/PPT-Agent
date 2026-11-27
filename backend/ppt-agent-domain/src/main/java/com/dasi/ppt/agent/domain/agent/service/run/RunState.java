@@ -1,8 +1,8 @@
 package com.dasi.ppt.agent.domain.agent.service.run;
 
-import com.dasi.ppt.agent.domain.agent.model.ContextEstimate;
-import com.dasi.ppt.agent.domain.agent.model.RunChangeSet;
-import com.dasi.ppt.agent.domain.agent.model.RunConfig;
+import com.dasi.ppt.agent.domain.agent.model.entity.ContextEstimate;
+import com.dasi.ppt.agent.domain.agent.model.entity.RunChangeSet;
+import com.dasi.ppt.agent.domain.agent.model.entity.RunConfig;
 import com.dasi.ppt.agent.domain.agent.model.entity.Run;
 import com.dasi.ppt.agent.domain.setting.model.entity.ModelConfigSettings;
 import lombok.AllArgsConstructor;

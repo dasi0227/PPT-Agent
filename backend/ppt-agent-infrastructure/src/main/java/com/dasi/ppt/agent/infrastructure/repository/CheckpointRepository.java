@@ -3,7 +3,7 @@ package com.dasi.ppt.agent.infrastructure.repository;
 import com.dasi.ppt.agent.domain.agent.model.entity.Checkpoint;
 import com.dasi.ppt.agent.domain.agent.repository.ICheckpointRepository;
 import com.dasi.ppt.agent.infrastructure.persistence.mapper.CheckpointMapper;
-import com.dasi.ppt.agent.infrastructure.persistence.mapper.CommandMapper;
+import com.dasi.ppt.agent.infrastructure.persistence.mapper.ActionMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.mapper.MessageMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.mapper.ProjectMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.mapper.RunMapper;
@@ -22,7 +22,7 @@ public class CheckpointRepository implements ICheckpointRepository {
     private final SessionMapper sessionMapper;
     private final MessageMapper messageMapper;
     private final RunMapper runMapper;
-    private final CommandMapper commandMapper;
+    private final ActionMapper actionMapper;
     private final ProjectMapper projectMapper;
     private final ObjectMapper objectMapper;
 

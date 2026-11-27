@@ -1,12 +1,12 @@
 package com.dasi.ppt.agent.domain.agent.service.hook;
 
-import com.dasi.ppt.agent.domain.agent.model.event.BeforeInputProcessedEvent;
-import com.dasi.ppt.agent.domain.agent.model.event.BeforeModelCallEvent;
-import com.dasi.ppt.agent.domain.agent.model.event.BeforeRunCompletedEvent;
-import com.dasi.ppt.agent.domain.agent.model.event.RunCompletedEvent;
-import com.dasi.ppt.agent.domain.agent.model.result.BeforeInputProcessedResult;
-import com.dasi.ppt.agent.domain.agent.model.result.BeforeModelCallResult;
-import com.dasi.ppt.agent.domain.agent.model.result.BeforeRunCompletedResult;
+import com.dasi.ppt.agent.domain.agent.service.hook.event.BeforeInputProcessedEvent;
+import com.dasi.ppt.agent.domain.agent.service.hook.event.BeforeModelCallEvent;
+import com.dasi.ppt.agent.domain.agent.service.hook.event.BeforeRunCompletedEvent;
+import com.dasi.ppt.agent.domain.agent.service.hook.event.RunCompletedEvent;
+import com.dasi.ppt.agent.domain.agent.model.entity.BeforeInputProcessedResult;
+import com.dasi.ppt.agent.domain.agent.model.entity.BeforeModelCallResult;
+import com.dasi.ppt.agent.domain.agent.model.entity.BeforeRunCompletedResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.stereotype.Component;

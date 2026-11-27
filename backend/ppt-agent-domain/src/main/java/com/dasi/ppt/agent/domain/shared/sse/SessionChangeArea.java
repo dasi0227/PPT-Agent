@@ -11,7 +11,7 @@ import lombok.Getter;
 public enum SessionChangeArea {
     HISTORY("history"),
     RUN("run"),
-    COMMANDS("commands"),
+    ACTIONS("commands"),
     PLAN("plan"),
     SUGGESTIONS("suggestions"),
     CONTEXT("context"),

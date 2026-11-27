@@ -9,7 +9,7 @@
         <result column="plan" property="plan"/>
         <result column="updated_at" property="updatedAt"/>
         <result column="run_status" property="runStatus"/>
-        <result column="has_active_commands" property="hasActiveCommands"/>
+        <result column="has_active_actions" property="hasActiveActions"/>
     </resultMap>
     <select id="exists" resultType="boolean">
         SELECT EXISTS (SELECT 1 FROM sessions WHERE id = #{sessionId})
@@ -25,8 +25,8 @@
 
     <sql id="sessionActivity">
                r.status AS run_status,
-               EXISTS (SELECT 1 FROM commands c WHERE c.session_id = s.id
-                       AND c.status IN ('pending', 'running', 'cancelling')) AS has_active_commands
+               EXISTS (SELECT 1 FROM actions a WHERE a.session_id = s.id
+                       AND a.status IN ('pending', 'running', 'cancelling')) AS has_active_actions
         FROM sessions s LEFT JOIN runs r ON r.session_id = s.id
                 AND r.status IN ('pending', 'running', 'waiting', 'cancelling')
     </sql>

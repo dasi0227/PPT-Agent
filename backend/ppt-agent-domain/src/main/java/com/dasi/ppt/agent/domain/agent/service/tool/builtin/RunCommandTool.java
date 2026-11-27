@@ -1,43 +1,49 @@
 package com.dasi.ppt.agent.domain.agent.service.tool.builtin;
 
-import com.dasi.ppt.agent.domain.shared.gateway.IBashGateway;
-import com.dasi.ppt.agent.domain.shared.constant.SystemConstant;
-import com.dasi.ppt.agent.domain.agent.model.ToolCall;
+import com.dasi.ppt.agent.domain.agent.model.entity.ToolCall;
+import com.dasi.ppt.agent.domain.agent.model.entity.Run;
+import com.dasi.ppt.agent.domain.agent.model.enumeration.PermissionDecision;
+import com.dasi.ppt.agent.domain.agent.model.enumeration.RunMode;
+import com.dasi.ppt.agent.domain.agent.model.enumeration.RunStatus;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.ToolName;
-import com.dasi.ppt.agent.domain.agent.model.result.ToolResult;
+import com.dasi.ppt.agent.domain.agent.model.enumeration.ToolResultStatus;
+import com.dasi.ppt.agent.domain.agent.model.entity.ToolResult;
+import com.dasi.ppt.agent.domain.agent.repository.ISessionRepository;
 import com.dasi.ppt.agent.domain.agent.service.interaction.InteractionService;
 import com.dasi.ppt.agent.domain.agent.service.run.RunState;
-import com.dasi.ppt.agent.domain.agent.service.tool.AgentTool;
-import com.dasi.ppt.agent.domain.project.service.DeckService;
+import com.dasi.ppt.agent.domain.agent.service.tool.Tool;
+import com.dasi.ppt.agent.domain.shared.constant.SystemConstant;
+import com.dasi.ppt.agent.domain.shared.exception.ShellExecutionException;
+import com.dasi.ppt.agent.domain.shared.gateway.IShellGateway;
+import com.dasi.ppt.agent.domain.shared.service.PathService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BooleanSupplier;
 
 @Component("run_command")
 @RequiredArgsConstructor
-public class RunCommandTool implements AgentTool {
+public class RunCommandTool implements Tool {
 
-    private final IBashGateway bashGateway;
-    private final DeckService deckService;
+    private final IShellGateway shellGateway;
+    private final ISessionRepository sessionRepository;
+    private final PathService pathService;
     private final InteractionService interactionService;
     private final ResourceLoader resourceLoader;
     private final ObjectMapper objectMapper;
 
     @Override
-    public ToolName getName() {
-        return ToolName.RUN_COMMAND;
-    }
-
-    @Override
-    public ToolDefinition getDefinition() {
+    public ToolDefinition getDefinition(ToolName name) {
         String shell = SystemConstant.IS_WINDOWS ? "Windows PowerShell 5.1" : "Bash";
         String description = prompt("md", shell);
         String command = objectMapper.readTree(prompt("json", shell)).get("command").asString();
@@ -45,7 +51,7 @@ public class RunCommandTool implements AgentTool {
                 "required", List.of("command"), "properties", Map.of("command",
                         Map.of("type", "string", "minLength", 1, "pattern", "\\S", "description", command)));
         return ToolDefinition.builder()
-                .name(getName().getValue())
+                .name(name.getValue())
                 .description(SystemConstant.IS_WINDOWS
                         ? description + " Write HTML and JSON as UTF-8; PowerShell 5.1 redirection defaults to UTF-16LE."
                         : description)
@@ -64,6 +70,61 @@ public class RunCommandTool implements AgentTool {
 
     @Override
     public ToolResult execute(ToolCall call, RunState runState) {
-        throw new UnsupportedOperationException();
+        Run run = runState.getRun();
+        if (run.getMode() != RunMode.CREATE) {
+            return ToolResult.builder()
+                    .status(ToolResultStatus.BLOCKED)
+                    .text("当前模式只读，无法执行本机命令")
+                    .build();
+        }
+        String command;
+        try {
+            command = objectMapper.readTree(call.getArguments()).path("command").stringValue();
+        } catch (JacksonException invalidArguments) {
+            command = null;
+        }
+        if (command == null || command.isBlank() || command.indexOf(0) >= 0) {
+            return ToolResult.builder()
+                    .status(ToolResultStatus.FAILED)
+                    .code("INVALID_ARGUMENT")
+                    .text("command 必须是非空且不含 NUL 的字符串")
+                    .build();
+        }
+        BooleanSupplier cancelled = () -> Thread.currentThread().isInterrupted()
+                || run.getStatus() == RunStatus.CANCELLING || run.getStatus() == RunStatus.CANCELLED;
+        InteractionService.PermissionAnswer answer = interactionService.awaitCommandPermission(
+                run, call.getToolCallId(), command, cancelled);
+        ObjectNode interaction = objectMapper.createObjectNode();
+        interaction.put("type", "permission");
+        interaction.putObject("request").putObject("permission").put("command", command);
+        ObjectNode decision = interaction.putObject("answer").put("decision", answer.decision().getValue());
+        if (answer.feedback() != null) decision.put("feedback", answer.feedback());
+        ToolResult.ToolResultBuilder result = ToolResult.builder()
+                .interaction(interaction);
+        if (answer.decision() == PermissionDecision.DENY) {
+            return result.status(ToolResultStatus.BLOCKED)
+                    .text("用户拒绝执行命令")
+                    .build();
+        }
+        String projectId = sessionRepository.findProjectId(run.getSessionId());
+        if (projectId == null) {
+            return result.status(ToolResultStatus.FAILED)
+                    .code("SESSION_NOT_FOUND")
+                    .text("会话不存在")
+                    .build();
+        }
+        try {
+            IShellGateway.CommandResult output = shellGateway.execute(pathService.projectDirectory(projectId), command, cancelled);
+            boolean success = output.getExitCode() == 0;
+            return result.status(success ? ToolResultStatus.COMPLETED : ToolResultStatus.FAILED)
+                    .code(success ? null : "COMMAND_EXIT_NONZERO")
+                    .content(objectMapper.valueToTree(output))
+                    .build();
+        } catch (ShellExecutionException ex) {
+            return result.status(ToolResultStatus.FAILED)
+                    .code(ex.getCode())
+                    .text(ex.getMessage())
+                    .build();
+        }
     }
 }

@@ -80,7 +80,6 @@ public final class ToolDetailVo {
     public static final class ToolCommandVo {
         private String text;
         private Integer exitCode;
-        private Long durationMs;
         private String stdoutPreview;
         private String stderrPreview;
     }

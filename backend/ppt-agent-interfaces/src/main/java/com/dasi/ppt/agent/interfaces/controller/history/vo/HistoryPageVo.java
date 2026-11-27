@@ -1,12 +1,13 @@
 package com.dasi.ppt.agent.interfaces.controller.history.vo;
 
-import com.dasi.ppt.agent.domain.agent.model.enumeration.CommandStatus;
-import com.dasi.ppt.agent.domain.agent.model.enumeration.CommandType;
+import com.dasi.ppt.agent.domain.agent.model.enumeration.ActionStatus;
+import com.dasi.ppt.agent.domain.agent.model.enumeration.ActionType;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.InstructionDecision;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.InstructionReferenceType;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.InstructionStatus;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.RunStatus;
 import com.dasi.ppt.agent.domain.project.model.enumeration.ChangeStatus;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -31,7 +32,8 @@ public final class HistoryPageVo {
         private String seq;
         private long createdAt;
         private RunHistoryVo run;
-        private CommandHistoryVo command;
+        @JsonProperty("command")
+        private ActionHistoryVo action;
     }
 
     @Builder
@@ -54,15 +56,15 @@ public final class HistoryPageVo {
     @Getter
     @AllArgsConstructor
     @NoArgsConstructor
-    public static final class CommandHistoryVo {
+    public static final class ActionHistoryVo {
         private String id;
         private String operationId;
-        private CommandType type;
-        private CommandStatus status;
+        private ActionType type;
+        private ActionStatus status;
         private Integer phase;
         private RunDetailVo.ExecutionFailureVo failure;
         private String lastSuccessId;
-        private CommandSummaryResultVo result;
+        private ActionSummaryResultVo result;
     }
 
     @Builder
@@ -106,7 +108,7 @@ public final class HistoryPageVo {
     @Getter
     @AllArgsConstructor
     @NoArgsConstructor
-    public static final class CommandSummaryResultVo {
+    public static final class ActionSummaryResultVo {
         private String title;
         private Long beforeTokens;
         private Long afterTokens;

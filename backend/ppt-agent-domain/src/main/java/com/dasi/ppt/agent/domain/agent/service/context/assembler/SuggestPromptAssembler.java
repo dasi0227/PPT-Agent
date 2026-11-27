@@ -1,7 +1,7 @@
 package com.dasi.ppt.agent.domain.agent.service.context.assembler;
 
 import com.dasi.ppt.agent.domain.shared.gateway.ILlmGateway.LlmRequest;
-import com.dasi.ppt.agent.domain.agent.model.Plan;
+import com.dasi.ppt.agent.domain.agent.model.entity.Plan;
 import com.dasi.ppt.agent.domain.agent.model.entity.Message;
 import com.dasi.ppt.agent.domain.agent.service.context.PromptAssembler;
 import com.dasi.ppt.agent.domain.project.model.entity.Deck;

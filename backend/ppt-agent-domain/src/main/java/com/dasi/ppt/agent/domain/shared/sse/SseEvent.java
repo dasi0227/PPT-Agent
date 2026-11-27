@@ -72,7 +72,7 @@ public interface SseEvent {
     @Getter
     @AllArgsConstructor
     @NoArgsConstructor
-    final class CommandProgress implements SseEvent {
+    final class ActionProgress implements SseEvent {
         private String id;
         private int phase;
 

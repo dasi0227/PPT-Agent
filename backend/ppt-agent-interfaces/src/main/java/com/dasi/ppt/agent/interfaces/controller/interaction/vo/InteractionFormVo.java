@@ -2,7 +2,7 @@ package com.dasi.ppt.agent.interfaces.controller.interaction.vo;
 
 import com.dasi.ppt.agent.domain.agent.model.enumeration.InteractionType;
 import com.dasi.ppt.agent.domain.project.model.enumeration.DeckFileType;
-import com.dasi.ppt.agent.interfaces.controller.history.vo.ToolDetailVo;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -58,9 +58,6 @@ public final class InteractionFormVo {
     @NoArgsConstructor
     public static final class PermissionFormVo {
         private String command;
-        private String stdout;
-        private String stderr;
-        private List<ToolDetailVo.ToolChangedTargetVo> changes;
     }
 
     @Builder
@@ -77,6 +74,7 @@ public final class InteractionFormVo {
     @Getter
     @AllArgsConstructor
     @NoArgsConstructor
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static final class InteractionRequestVo {
         private List<QuestionVo> questions;
         private PlanFormVo plan;

@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.domain.agent.service.context;
 
-import com.dasi.ppt.agent.domain.agent.model.InstructionReference;
+import com.dasi.ppt.agent.domain.agent.model.entity.InstructionReference;
 import com.dasi.ppt.agent.domain.agent.model.entity.Message;
 import com.dasi.ppt.agent.domain.agent.repository.IRunRepository;
 import com.dasi.ppt.agent.domain.agent.repository.ISessionRepository;

@@ -1,6 +1,5 @@
 package com.dasi.ppt.agent.domain.agent.model.entity;
 
-import com.dasi.ppt.agent.domain.agent.model.RunScope;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.RunMode;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.RunStatus;
 import com.dasi.ppt.agent.domain.project.model.entity.DeckChange;
@@ -22,7 +21,7 @@ public final class Run {
     private RunMode mode;
     private String model;
     private RunScope scope;
-    private RunStatus status;
+    private volatile RunStatus status;
     private List<DeckChange> changes;
     private JsonNode error;
     private long inputTokens;

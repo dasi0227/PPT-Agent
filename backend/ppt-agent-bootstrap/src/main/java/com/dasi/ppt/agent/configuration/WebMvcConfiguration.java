@@ -19,7 +19,7 @@ public class WebMvcConfiguration implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(new LocalFileActionInterceptor())
-                .addPathPatterns("/api/files/open", "/api/settings/fileopen/pick", "/api/settings/fileopen/save");
+                .addPathPatterns("/api/interactions/permission", "/api/files/open", "/api/settings/fileopen/pick", "/api/settings/fileopen/save");
     }
 
     @Override

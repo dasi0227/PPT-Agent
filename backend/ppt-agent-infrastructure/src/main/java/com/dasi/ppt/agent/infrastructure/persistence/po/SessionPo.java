@@ -20,5 +20,5 @@ public class SessionPo {
     private String plan;
     private long updatedAt;
     private String runStatus;
-    private boolean hasActiveCommands;
+    private boolean hasActiveActions;
 }

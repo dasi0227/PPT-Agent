@@ -1,12 +1,11 @@
 package com.dasi.ppt.agent.domain.agent.service.tool.builtin;
 
 import com.dasi.ppt.agent.domain.shared.gateway.IJevGateway;
-import com.dasi.ppt.agent.domain.agent.model.ToolCall;
-import com.dasi.ppt.agent.domain.agent.model.enumeration.ToolName;
-import com.dasi.ppt.agent.domain.agent.model.result.ToolResult;
+import com.dasi.ppt.agent.domain.agent.model.entity.ToolCall;
+import com.dasi.ppt.agent.domain.agent.model.entity.ToolResult;
 import com.dasi.ppt.agent.domain.agent.service.context.assembler.PreviewPromptAssembler;
 import com.dasi.ppt.agent.domain.agent.service.run.RunState;
-import com.dasi.ppt.agent.domain.agent.service.tool.AgentTool;
+import com.dasi.ppt.agent.domain.agent.service.tool.Tool;
 import com.dasi.ppt.agent.domain.project.model.entity.Constraint;
 import com.dasi.ppt.agent.domain.project.model.entity.Meta;
 import com.dasi.ppt.agent.domain.project.model.entity.Spec;
@@ -20,16 +19,11 @@ import org.springframework.stereotype.Component;
 
 @Component("render_slide")
 @RequiredArgsConstructor
-public class RenderSlideTool implements AgentTool {
+public class RenderSlideTool implements Tool {
 
     private final ThumbnailService thumbnailService;
     private final IJevGateway jevGateway;
     private final PreviewPromptAssembler previewPromptAssembler;
-
-    @Override
-    public ToolName getName() {
-        return ToolName.RENDER_SLIDE;
-    }
 
     @Override
     public ToolResult execute(ToolCall call, RunState runState) {

@@ -1,12 +1,12 @@
 package com.dasi.ppt.agent.infrastructure.repository;
 
-import com.dasi.ppt.agent.domain.agent.model.Plan;
+import com.dasi.ppt.agent.domain.agent.model.entity.Plan;
 import com.dasi.ppt.agent.domain.agent.model.entity.Message;
 import com.dasi.ppt.agent.domain.agent.model.entity.Session;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.RunStatus;
 import com.dasi.ppt.agent.domain.agent.repository.ISessionRepository;
 import com.dasi.ppt.agent.infrastructure.persistence.mapper.CheckpointMapper;
-import com.dasi.ppt.agent.infrastructure.persistence.mapper.CommandMapper;
+import com.dasi.ppt.agent.infrastructure.persistence.mapper.ActionMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.mapper.MessageMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.mapper.RunMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.mapper.SessionMapper;
@@ -24,7 +24,7 @@ public class SessionRepository implements ISessionRepository {
     private final SessionMapper sessionMapper;
     private final MessageMapper messageMapper;
     private final RunMapper runMapper;
-    private final CommandMapper commandMapper;
+    private final ActionMapper actionMapper;
     private final CheckpointMapper checkpointMapper;
     private final ObjectMapper objectMapper;
 
@@ -85,7 +85,7 @@ public class SessionRepository implements ISessionRepository {
                 .title(po.getTitle())
                 .updatedAt(po.getUpdatedAt())
                 .runStatus(po.getRunStatus() == null ? null : RunStatus.fromValue(po.getRunStatus()))
-                .hasActiveCommands(po.isHasActiveCommands())
+                .hasActiveActions(po.isHasActiveActions())
                 .build();
     }
 }
