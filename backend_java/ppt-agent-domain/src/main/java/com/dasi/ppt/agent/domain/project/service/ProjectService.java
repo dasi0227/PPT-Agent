@@ -8,6 +8,7 @@ import com.dasi.ppt.agent.domain.project.model.enumeration.DecorationPosition;
 import com.dasi.ppt.agent.domain.project.repository.IProjectRepository;
 import com.dasi.ppt.agent.domain.shared.exception.ErrorCode;
 import com.dasi.ppt.agent.domain.shared.service.NotifyService;
+import com.dasi.ppt.agent.domain.shared.service.LockService;
 import com.dasi.ppt.agent.domain.shared.sse.EventPublisher;
 import com.dasi.ppt.agent.domain.shared.sse.ProjectChangeArea;
 import com.dasi.ppt.agent.domain.shared.util.IdUtil;
@@ -29,7 +30,7 @@ public class ProjectService {
     private final IProjectRepository projectRepository;
     private final IAssetRepository assetRepository;
     private final TransactionTemplate transaction;
-    private final ProjectWriteLock projectWriteLock;
+    private final LockService lockService;
     private final EventPublisher eventPublisher;
     private final NotifyService notifyService;
 
@@ -46,7 +47,7 @@ public class ProjectService {
     }
 
     public void updateProject(String projectId, String title) {
-        synchronized (projectWriteLock.lockFor(projectId)) {
+        synchronized (lockService.projectLock(projectId)) {
             if (projectRepository.hasPendingFileOperation(projectId)) {
                 throw conflict(ErrorCode.PROJECT_BUSY);
             }
@@ -58,7 +59,7 @@ public class ProjectService {
 
     public void deleteProject(String projectId) {
         // 1. 上锁
-        synchronized (projectWriteLock.lockFor(projectId)) {
+        synchronized (lockService.projectLock(projectId)) {
             List<String> deletedSessionIds = transaction.execute(status -> {
                 // 2. 判断是否有正在执行的操作
                 if (projectRepository.hasPendingFileOperation(projectId)) {
@@ -129,7 +130,7 @@ public class ProjectService {
     }
 
     private void updateProjectAppearance(String projectId, IntSupplier update) {
-        synchronized (projectWriteLock.lockFor(projectId)) {
+        synchronized (lockService.projectLock(projectId)) {
             List<String> sessionIds = transaction.execute(status -> {
                 if (projectRepository.hasPendingFileOperation(projectId)) {
                     throw conflict(ErrorCode.PROJECT_BUSY);

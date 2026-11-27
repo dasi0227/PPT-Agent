@@ -18,22 +18,22 @@ import java.util.Map;
 public final class ExportSnapshot {
     private String projectName;
     private String deckTitle;
-    private List<Page> pages;
+    private List<Slide> slides;
     private String themeCss;
     private Map<DecorationType, DecorationPosition> positions;
     private byte[] logo;
 
     public IRenderGateway.RenderMaterial renderInput(int index) {
-        Page page = pages.get(index);
+        Slide slide = slides.get(index);
         return IRenderGateway.RenderMaterial.builder()
-                .slideId(page.getSlideId())
-                .html(page.getHtml())
+                .slideId(slide.getSlideId())
+                .html(slide.getHtml())
                 .themeCss(themeCss)
                 .positions(positions)
                 .deckTitle(deckTitle)
-                .chapterTitle(page.getChapterTitle())
+                .chapterTitle(slide.getChapterTitle())
                 .pageNumber(index + 1)
-                .totalPages(pages.size())
+                .totalPages(slides.size())
                 .logo(logo)
                 .build();
     }
@@ -42,7 +42,7 @@ public final class ExportSnapshot {
     @Getter
     @AllArgsConstructor
     @NoArgsConstructor
-    public static final class Page {
+    public static final class Slide {
         private String slideId;
         private String title;
         private String html;

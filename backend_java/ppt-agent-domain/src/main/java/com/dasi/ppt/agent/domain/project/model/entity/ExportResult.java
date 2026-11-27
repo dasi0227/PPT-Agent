@@ -7,7 +7,7 @@ import java.io.InputStream;
 
 @Data
 @Builder
-public final class ExportFile {
+public final class ExportResult {
     private String filename;
     private long size;
     private InputStream content;

@@ -11,6 +11,14 @@ public final class SystemConstant {
     public static final String CONSTRAINT_FILE_NAME = ".constraint.json";
     public static final String OUTLINE_FILE_NAME = ".outline.json";
 
+    public static final String SLIDE_SPEC_FILE_NAME_FORMAT = "%s.json";
+    public static final String SLIDE_HTML_FILE_NAME_FORMAT = "%s.html";
+
+    private static final String RUNTIME_DIR = ".runtime/";
+    public static final String ATTACHMENT_PATH_PREFIX = RUNTIME_DIR + "attachments/";
+    public static final String SCREENSHOT_PATH_FORMAT = RUNTIME_DIR + "screenshots/%s.png";
+    public static final String THUMBNAIL_DIRECTORY_FORMAT = RUNTIME_DIR + "thumbnails/%s";
+
     public static final String SYSTEM_OPEN = "system";
     public static final String INHERIT_OPEN = "inherit";
 }

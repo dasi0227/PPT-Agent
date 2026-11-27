@@ -1,15 +1,20 @@
 package com.dasi.ppt.agent.domain.shared.service;
 
+import com.dasi.ppt.agent.domain.shared.exception.ErrorCode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.*;
-import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.illegal;
+import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.*;
 
 @Component
 public class PathService {
@@ -29,32 +34,12 @@ public class PathService {
         return projectsRoot().resolve(projectId).normalize();
     }
 
-    public Path metaPath(String projectId) {
-        return projectDirectory(projectId).resolve(META_FILE_NAME).normalize();
-    }
-
-    public Path constraintPath(String projectId) {
-        return projectDirectory(projectId).resolve(CONSTRAINT_FILE_NAME).normalize();
-    }
-
-    public Path outlinePath(String projectId) {
-        return projectDirectory(projectId).resolve(OUTLINE_FILE_NAME).normalize();
-    }
-
-    public Path specPath(String projectId, String slideId) {
-        return projectDirectory(projectId).resolve(slideId + ".json").normalize();
-    }
-
-    public Path htmlPath(String projectId, String slideId) {
-        return projectDirectory(projectId).resolve(slideId + ".html").normalize();
-    }
-
     public Path deletingDirectory(String projectId) {
         return projectsRoot().resolve(DELETING + projectId).normalize();
     }
 
-    public String slideIdFromFileName(String name) {
-        Matcher match = SLIDE_FILE.matcher(name);
+    public String slideIdFromFileName(String fileName) {
+        Matcher match = SLIDE_FILE.matcher(fileName);
         return match.matches() ? match.group(1) : null;
     }
 
@@ -77,5 +62,24 @@ public class PathService {
 
     public Path filePathByFileName(String projectId, String fileName) {
         return projectDirectory(projectId).resolve(fileName).normalize();
+    }
+
+    public Path resolveDocumentForOpen(String projectId, String fileName) {
+        if (!isProjectFile(fileName)) {
+            throw invalid("只能打开项目根目录下的文稿文件");
+        }
+        try {
+            Path directory = projectsRoot().toRealPath().resolve(projectId);
+            Path file = directory.resolve(fileName).toRealPath();
+            if (!directory.equals(file.getParent()) || !isProjectFile(file.getFileName().toString())
+                    || !Files.readAttributes(file, BasicFileAttributes.class).isRegularFile()) {
+                throw invalid("只能打开项目根目录下的普通文稿文件");
+            }
+            return file;
+        } catch (NoSuchFileException e) {
+            throw notFound(ErrorCode.FILE_NOT_FOUND);
+        } catch (IOException e) {
+            throw failed(ErrorCode.FILE_OPEN_FAILED, e.getMessage());
+        }
     }
 }

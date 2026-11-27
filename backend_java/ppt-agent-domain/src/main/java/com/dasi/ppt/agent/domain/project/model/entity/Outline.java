@@ -1,21 +1,24 @@
 package com.dasi.ppt.agent.domain.project.model.entity;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.function.BiConsumer;
 
 @Builder
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
 public final class Outline {
-    private List<Page> slides;
+    @JsonProperty("slides")
+    private List<Page> pages;
     private List<Chapter> chapters;
 
     @Builder
@@ -25,7 +28,8 @@ public final class Outline {
     public static final class Chapter {
         private String id;
         private String title;
-        private List<Page> slides;
+        @JsonProperty("slides")
+        private List<Page> pages;
         private List<Section> sections;
     }
 
@@ -36,7 +40,8 @@ public final class Outline {
     public static final class Section {
         private String id;
         private String title;
-        private List<Page> slides;
+        @JsonProperty("slides")
+        private List<Page> pages;
     }
 
     @Builder
@@ -48,17 +53,53 @@ public final class Outline {
         private String title;
     }
 
-    public Set<String> slideIds() {
-        Set<String> ids = new LinkedHashSet<>();
-        forEachPage((page, chapterTitle) -> ids.add(page.id));
-        return ids;
+    public PagePosition findPagePosition(String slideId) {
+        PagePosition position = PagePosition.builder()
+                .build();
+        position.countPages(pages, slideId, null);
+        for (Chapter chapter : chapters) {
+            position.countPages(chapter.pages, slideId, chapter.title);
+            for (Section section : chapter.sections) {
+                position.countPages(section.pages, slideId, chapter.title);
+            }
+        }
+        return position.pageNumber == 0 ? null : position;
     }
 
-    public void forEachPage(BiConsumer<Page, String> consumer) {
-        slides.forEach(page -> consumer.accept(page, null));
-        for (Chapter chapter : chapters) {
-            chapter.slides.forEach(page -> consumer.accept(page, chapter.title));
-            chapter.sections.forEach(section -> section.slides.forEach(page -> consumer.accept(page, chapter.title)));
+    @Getter
+    @Builder(access = AccessLevel.PRIVATE)
+    public static final class PagePosition {
+        private int pageNumber;
+        private int totalPages;
+        private String chapterTitle;
+
+        private void countPages(List<Page> pages, String slideId, String chapterTitle) {
+            for (Page page : pages) {
+                totalPages++;
+                if (pageNumber == 0 && slideId.equals(page.id)) {
+                    pageNumber = totalPages;
+                    this.chapterTitle = chapterTitle;
+                }
+            }
         }
     }
+
+    public Set<String> slideIds() {
+        Set<String> slideIds = new LinkedHashSet<>();
+        for (Page page : pages) {
+            slideIds.add(page.id);
+        }
+        for (Chapter chapter : chapters) {
+            for (Page page : chapter.pages) {
+                slideIds.add(page.id);
+            }
+            for (Section section : chapter.sections) {
+                for (Page page : section.pages) {
+                    slideIds.add(page.id);
+                }
+            }
+        }
+        return slideIds;
+    }
+
 }

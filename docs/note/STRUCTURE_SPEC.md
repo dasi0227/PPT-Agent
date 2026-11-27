@@ -23,9 +23,9 @@
 - Mapper XML 位于 `ppt-agent-infrastructure/src/main/resources/mapper/`。
 - SQLite `TEXT` 列在 PO、Mapper 参数及结果映射中统一使用 `String`，包括状态、类型、模式和协议。
 - JSON 存储列按 `String` 读写，仓储负责与领域对象转换。
-- `infrastructure/persistence/filesystem/FileStorer` 负责文件的读取、仅新建、原子替换、列举和删除，按数据库提交结果恢复或清除项目删除暂存目录。
-- `domain/shared/service/PathResolver` 统一定位五类文稿文件和项目删除暂存目录。`DeckService` 直接调用 `PathResolver` 的 `metaPath`、`constraintPath`、`outlinePath`、`specPath`、`htmlPath`。前三个方法只需项目 ID，两个页面路径还需页面 ID。
-- 打开文稿时，`PlatformGateway` 使用 `PathResolver.filePathByFileName(projectId, fileName)` 定位文件，校验文件名和解析后的实际目标。文稿保存允许首次创建文件。
+- `infrastructure/persistence/filesystem/FileStorer` 负责项目删除目录的暂存、状态检查和恢复，按数据库提交结果恢复或清除暂存目录。
+- `domain/shared/service/PathService` 定位项目目录、项目内文件和删除暂存目录，并识别文稿文件名。文稿读写使用 `SystemConstant` 中的项目级文稿文件名和页面文件名格式。
+- 打开文稿时，`DeckService` 调用 `PathService.resolveDocumentForOpen(projectId, fileName)` 校验请求文件名并解析符号链接。实际目标必须是该项目根目录下符合文稿命名规则的普通文件。文稿保存允许首次创建文件。
 - `infrastructure` 模块将 `base.css`、`decorations.js` 和 `theme-bridge.js` 直接存放在 `resources/runtime/` 下。基础样式定义系统字体、颜色、字号和间距等默认值，预览和导出都先应用基础样式，再应用已选主题和单页样式。
 
 - `interfaces/controller/` 按功能分为 `project`、`asset`、`setting`、`export`、`file`、`session`、`history`、`execution`、`interaction`、`checkpoint` 和 `system`。
@@ -114,8 +114,8 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `project/model/enumeration/DecorationType` 标识装饰种类，取 `slide_pagination / deck_title / chapter_title / logo`，项目外观与 DOM 选区共用。每种装饰的位置由 `DecorationPosition` 表示。[项目外观](API.html#projects) · [DOM 引用](API.html#runs)
 - `project/model/entity/ExportSnapshot` 是在项目锁内采集的渲染输入，保存项目管理名称、文稿标题、按页序排列的页面标题与 HTML、每页所属章的标题、可为空的主题 CSS、装饰位置和 Logo 字节。`ExportFile` 携带 worker 返回的成品文件名、字节数和输入流。[导出契约](API_SPEC.md#导出)
 - `IProjectRepository` 负责项目查询与创建、改名、删除，文稿提交及恢复由文稿仓储负责。
-- `domain/shared/gateway/IFileGateway` 供 `AttachmentService` 和 `ThumbnailService` 存取各自的项目运行文件。[项目文件布局](#项目目录)
-- `infrastructure/gateway/FileGateway` 实现 `IFileGateway`，通过 `PathResolver` 解析项目路径，通过 `FileStorer` 创建、读取、替换和删除文件。
+- `domain/shared/gateway/IFileGateway` 接收调用方解析好的文件或目录 `Path`，写入时另传 `byte[] content`。文稿、附件和缩略图共用此接口。列举返回目录直属的普通文件名。`DeckService` 保存大纲时按文件名顺序识别并删除已移出大纲的页面文件，`ThumbnailService` 选择需要清理的旧 WebP。[项目文件布局](#项目目录)
+- `infrastructure/gateway/FileGateway` 新建和替换都先完整写入同目录临时文件并刷盘。新建以硬链接创建正式文件名，目标已存在或文件系统不支持硬链接时失败。替换通过原子移动发布。写入完成后清理临时文件名并同步父目录。
 - `agent/model/entity/` 下的持久化实体有 `Session`、`Run`、`Message`、`Command` 和 `Checkpoint`。
 - `agent/model/entity/PendingInteraction` 是由 `InteractionService` 管理的内存实体，以 `run_id + tool_call_id` 标识一项待答交互，持有 `InteractionType`、当前表单及其 `version`。[待答与答复](API_SPEC.md#人工)
 - `agent/model/` 存放会话的 `Plan` 和 `PlanStep`。
@@ -132,8 +132,8 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `IAssetRepository` 负责资产、标签及关联的持久化。
 - `setting/model/` 存放模型配置和各组全局设置。
 - `ISettingRepository` 负责分组设置的持久化。
-- `domain/gateway/IPlatformGateway` 提供本地应用选择与项目文件打开能力，由 `infrastructure/gateway/PlatformGateway` 实现。
-- `DeckService.openFile` 从 `SettingService` 读取偏好，按文件后缀和继承规则确定打开方式，向 `PlatformGateway` 传入应用路径或用 `null` 指定系统默认应用。网关确认实际目标是该项目根目录下的普通文稿文件后调用桌面应用。设置页通过 `SettingService.pickApplication` 调用同一网关选择应用。[文件打开契约](API_SPEC.md#其它)
+- `domain/shared/gateway/IPlatformGateway` 提供本地应用选择和按路径打开文件的能力，由 `infrastructure/gateway/PlatformGateway` 实现。
+- `DeckService.openFile` 从 `SettingService` 读取偏好，按文件后缀和继承规则确定打开方式。`IPlatformGateway.openFile(path, application)` 接收已校验的文件路径和应用路径，`application` 为 `null` 时使用系统默认应用。`SettingController` 直接调用 `IPlatformGateway.pickApp()` 选择应用。[文件打开契约](API_SPEC.md#其它)
 - `domain/gateway/IBashGateway` 由 `infrastructure/gateway/BashGateway` 实现。
 - `agent/model/enumeration/` 存放工具与 Harness 的专属错误码。
 - `agent/model/enumeration/InstructionDecision` 表示输入判定结果。有效结果为 `task / gossip / disclosure / bypass / irrelevant`，未判定或检测失败时字段为空。[指令判定字段](DATABASE.html#messages-instruction-decision)
@@ -186,17 +186,13 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - 项目主题正文和 Logo 存在数据库中，项目目录不另存永久副本。
 - `.git/` 存放项目 Git 仓库，`.runtime/` 存放项目运行文件。
 - 人工保存由 `DeckService` 受理，通过 `IProjectRepository.commitFiles` 提交文稿变更。项目锁覆盖基准校验、记录旧内容、修改文件和业务事务。内存中的 `project/model/entity/FileChange` 包含文件名和前后字节，用于落盘及计算实际差异。后续接入 Agent 写入时须在项目锁内复核授权和文件基准，接入历史恢复时须在锁内复核目标和会话版本。[工作流规范](WORKFLOW_SPEC.md)
-- `ProjectRepository` 通过 `FileUndoMapper` 把整批旧内容写入 SQLite 的 `file_undo`，然后由 `FileStorer` 原子替换或删除文稿。业务结果与删除该项目撤销记录在同一事务提交。
+- `ProjectRepository` 通过 `FileUndoMapper` 把整批旧内容写入 SQLite 的 `file_undo`，然后调用 `IFileGateway` 原子替换或删除文稿。业务结果与删除该项目撤销记录在同一事务提交。
 - 启动时按 `file_undo.project_id` 查找待恢复项目，在项目写锁内还原整批文件。恢复失败的项目保留记录并暂停写入，其他项目可继续使用。[撤销表](DATABASE_SPEC.md#file_undo) · [启动恢复](WORKFLOW_SPEC.md#启动恢复)
 - `.runtime/attachments/{attachment_id}.png` 保存附件原图，同名 `.webp` 保存附件缩略图。
 - `.runtime/screenshots/{screenshot_id}.png` 保存调用当时的截图，截图 ID 全局唯一，已有文件不覆盖。
 - 附件原图、附件缩略图和历史截图保留至项目删除，已上传但未发送的附件适用同一规则。
-- `.runtime/render-slides.json` 按 `slide_id` 保存最新的 `{screenshot_id, hash}`，无记录的页面省略该键。
-- 渲染哈希覆盖 HTML、主题、装饰、Logo 及影响画面的内置资源。
-- 渲染索引按项目串行更新，以原子替换发布新文件。缩略图缺失但对应截图仍在时，从已保存的 PNG 重建 WebP。同页渲染串行，调用 worker 期间释放项目锁，发布前复核当前页面的渲染哈希。
-- `.runtime/thumbnails/{slide_id}.webp` 只保存该页当前缩略图，从与当前渲染哈希匹配的截图生成。
-- 同一页的缩略图生成与索引切换串行执行，缩略图文件采用原子替换。
-- 切换最新截图前先删除旧缩略图，删除失败时保留原索引。
+- `.runtime/thumbnails/{slide_id}/{render_hash}.webp` 保存页面预览。哈希覆盖 HTML、主题、装饰、Logo 及影响画面的内置资源。命中时直接读取 WebP，缺失时渲染并从内存中的 PNG 生成 WebP。
+- 同页预览串行处理，缓存命中即返回。渲染期间释放项目锁。对仍存在的项目，持项目锁按取样时的哈希原子保存 WebP，再清理同页旧版本。
 - 截图评分及复用所需的基准存入数据库的工具结果，评估中的临时状态仅保留在内存。
 
 ### 渲染与导出

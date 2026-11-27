@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.domain.shared.gateway;
 
-import com.dasi.ppt.agent.domain.project.model.entity.ExportFile;
+import com.dasi.ppt.agent.domain.project.model.entity.ExportResult;
 import com.dasi.ppt.agent.domain.project.model.entity.ExportSnapshot;
 import com.dasi.ppt.agent.domain.project.model.enumeration.DecorationPosition;
 import com.dasi.ppt.agent.domain.project.model.enumeration.DecorationType;
@@ -12,15 +12,14 @@ import lombok.NoArgsConstructor;
 
 import java.util.List;
 import java.util.Map;
-import java.util.function.BooleanSupplier;
 
 public interface IRenderGateway {
 
     String renderHash(RenderMaterial renderMaterial);
 
-    RenderResult render(RenderMaterial renderMaterial, BooleanSupplier cancelled);
+    RenderResult render(RenderMaterial renderMaterial);
 
-    ExportFile exportDeck(ExportSnapshot snapshot, ExportFormat format);
+    ExportResult export(ExportSnapshot snapshot, ExportFormat format);
 
     @Builder
     @Getter

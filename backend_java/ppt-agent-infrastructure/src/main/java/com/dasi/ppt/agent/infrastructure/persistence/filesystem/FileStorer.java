@@ -12,15 +12,12 @@ import org.springframework.util.FileSystemUtils;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
-import java.nio.channels.FileChannel;
-import java.nio.channels.SeekableByteChannel;
-import java.nio.file.*;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import static java.nio.file.LinkOption.NOFOLLOW_LINKS;
 import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
-import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 
 @Slf4j
 @Component
@@ -29,9 +26,6 @@ public class FileStorer {
 
     private final PathService pathService;
     private final ProjectMapper projectMapper;
-
-    private static final String WRITING_PREFIX = ".writing-";
-    private static final String TEMP_SUFFIX = ".tmp";
 
     @PostConstruct
     void recoverProjectDeletions() {
@@ -56,96 +50,6 @@ public class FileStorer {
             }
         } catch (IOException ex) {
             throw new UncheckedIOException(ex);
-        }
-    }
-
-    public byte[] readFile(Path file) {
-        try (SeekableByteChannel channel = Files.newByteChannel(file, StandardOpenOption.READ, NOFOLLOW_LINKS)) {
-            return Channels.newInputStream(channel).readAllBytes();
-        } catch (NoSuchFileException ex) {
-            return null;
-        } catch (IOException ex) {
-            throw new UncheckedIOException(ex);
-        }
-    }
-
-    public void createFile(Path path, byte[] bytes) {
-        try {
-            Files.createDirectories(path.getParent());
-            FileChannel fileChannel = FileChannel.open(path, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
-            try (fileChannel) {
-                writeBytes(fileChannel, bytes);
-            } catch (IOException ex) {
-                Files.deleteIfExists(path);
-                throw ex;
-            }
-            syncDirectory(path.getParent());
-        } catch (IOException ex) {
-            throw new UncheckedIOException(ex);
-        }
-    }
-
-    public void deleteFile(Path path) {
-        try {
-            Files.deleteIfExists(path);
-            syncDirectory(path.getParent());
-        } catch (NoSuchFileException ignored) {
-            // 项目目录尚未创建时，文件已经是所需的缺失状态
-        } catch (IOException ex) {
-            throw new UncheckedIOException(ex);
-        }
-    }
-
-    public void applyFileChange(Path path, byte[] bytes) {
-        // 1. 如果是 null，说明是删除文件
-        if (bytes == null) {
-            deleteFile(path);
-            return;
-        }
-        try {
-            // 2. 确保所有目录都是存在的
-            Path directory = path.getParent();
-            createDirectories(directory);
-            // 3. 创建好一个临时文件
-            Path temp = Files.createTempFile(directory, WRITING_PREFIX, TEMP_SUFFIX);
-            try {
-                // 4. 把内容都先写到临时文件
-                try (FileChannel fileChannel = FileChannel.open(temp, StandardOpenOption.WRITE)) {
-                    writeBytes(fileChannel, bytes);
-                }
-                // 5. 最后用临时文件原子替换目标文件
-                Files.move(temp, path, ATOMIC_MOVE, REPLACE_EXISTING);
-            } finally {
-                // 6. 清除临时文件
-                Files.deleteIfExists(temp);
-            }
-            // 7. 同步目录项
-            syncDirectory(directory);
-        } catch (IOException ex) {
-            throw new UncheckedIOException(ex);
-        }
-    }
-
-    private void createDirectories(Path directory) throws IOException {
-        if (Files.isDirectory(directory)) return;
-        Path parent = directory.toAbsolutePath().getParent();
-        // 递归创建完整路径
-        createDirectories(parent);
-        Files.createDirectories(directory);
-        syncDirectory(parent);
-    }
-
-    private void writeBytes(FileChannel channel, byte[] bytes) throws IOException {
-        ByteBuffer buffer = ByteBuffer.wrap(bytes);
-        while (buffer.hasRemaining()) {
-            channel.write(buffer);
-        }
-        channel.force(true);
-    }
-
-    private void syncDirectory(Path directory) throws IOException {
-        try (FileChannel fileChannel = FileChannel.open(directory, StandardOpenOption.READ)) {
-            fileChannel.force(true);
         }
     }
 

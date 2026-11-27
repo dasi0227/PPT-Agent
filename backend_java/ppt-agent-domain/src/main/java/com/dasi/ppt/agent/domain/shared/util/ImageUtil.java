@@ -16,10 +16,11 @@ import java.io.UncheckedIOException;
 
 import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.invalid;
 
+@SuppressWarnings("unused")
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class ImageUtil {
 
-    public final static byte[] pngThumbnail(byte[] png) {
+    public static byte[] compressPng(byte[] png) {
         ImageReader reader = ImageIO.getImageReadersByFormatName("png").next();
         BufferedImage original;
         try (MemoryCacheImageInputStream input = new MemoryCacheImageInputStream(new ByteArrayInputStream(png))) {

@@ -137,7 +137,7 @@ JEV 的 Intent、Prune、Rechristen、Preview 分别由 `IntentHook`、`ToolPrun
 
 `JevGateway` 统一通过 HTTP 向 `POST /v1/systemone` 发送判定请求。纯文本使用 `application/json`。含截图的 Preview 使用 `multipart/form-data`，第一部分 `request` 是 JSON，`assets` 按分段名引用后面的截图文件，请求头携带 `TypeSafe-Danger-Zone-Images: true`。[JEV 图片协议](https://docs.typesafe.ai/images)
 
-`ThumbnailService` 在项目锁内读取页面与外观，在锁外调用 `IRenderGateway` 获取截图，再持锁复核渲染哈希。期间页面或外观发生变化时重新读取。哈希匹配时通过 `IFileGateway` 保存历史截图，删除旧缩略图，原子替换渲染索引并发布 WebP。删除失败时保留原索引，已有匹配截图可直接生成缩略图。[预览文件约定](STRUCTURE_SPEC.md#项目目录)
+`ThumbnailService.readPage` 在项目锁内独立组装单页渲染输入。它从大纲取得目标页的页码、总页数和所属章标题，读取目标页 HTML 和文稿标题，并在同一数据库读事务中取得主题 CSS、装饰位置和 Logo。服务按页面 ID 和本次渲染输入的哈希读取 WebP，命中即返回。缓存缺失时在项目锁外渲染一次并缩放。若项目已删除则返回 404，否则持项目锁按本次哈希原子保存 WebP，再清理同页旧版本。渲染期间对单页的编辑或删除在下次请求时反映。[预览文件约定](STRUCTURE_SPEC.md#项目目录)
 
 ## 5. 收尾、历史与实时通知
 
@@ -177,7 +177,7 @@ JEV 的 Intent、Prune、Rechristen、Preview 分别由 `IntentHook`、`ToolPrun
 
 历史位置新开 Run、发起非 `polish` 命令或修订 `handoff`，须在受理事务中核对 `branch_revision` 并清理返回行及脱离当前历史的检查点。`polish` 保留返回入口。手动改名和删除计划使用 `expected_revision`。实际改名或删除计划成功后放弃返回入口，同名或失败时保留。人工保存共享文稿时，各会话保留原有检查点、返回行和版本，提交后仅通知项目文稿变更。[检查点事务](DATABASE_SPEC.md#checkpoints)
 
-`ExportService` 在项目写锁内检查项目占用情况，再通过 `findRenderSnapshot` 读取大纲及各页 HTML，并在同一数据库读事务中固定项目名称、装饰位置、Logo 和所选主题 CSS。缩略图调用同一方法时只读取目标页 HTML，并保留大纲页序。文稿装饰标题取 `Meta.title`，根直属页省略章标题。释放锁后，Java 将完整快照一次交给 worker，取得成品后直接响应当前请求。[导出接口](API_SPEC.md#导出) · [项目读取约束](DATABASE_SPEC.md#projects)
+`ExportService` 在项目写锁内检查项目占用情况，再通过 `findExportSnapshot` 读取大纲及各页 HTML，并在同一数据库读事务中固定项目名称、装饰位置、Logo 和所选主题 CSS。文稿装饰标题取 `Meta.title`，根直属页省略章标题。释放锁后，Java 将完整快照一次交给 worker，取得成品后直接响应当前请求。[导出接口](API_SPEC.md#导出) · [项目读取约束](DATABASE_SPEC.md#projects)
 
 ### 启动恢复
 

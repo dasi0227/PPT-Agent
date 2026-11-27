@@ -4,7 +4,8 @@ import com.dasi.ppt.agent.domain.project.model.entity.FileChange;
 import com.dasi.ppt.agent.domain.project.model.entity.Project;
 import com.dasi.ppt.agent.domain.project.model.enumeration.DecorationPosition;
 import com.dasi.ppt.agent.domain.project.repository.IProjectRepository;
-import com.dasi.ppt.agent.domain.project.service.ProjectWriteLock;
+import com.dasi.ppt.agent.domain.shared.gateway.IFileGateway;
+import com.dasi.ppt.agent.domain.shared.service.LockService;
 import com.dasi.ppt.agent.domain.shared.service.PathService;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.FileUndoMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.ProjectMapper;
@@ -20,16 +21,10 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.file.Files;
-import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.stream.Stream;
 
 import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.illegal;
-import static java.nio.file.LinkOption.NOFOLLOW_LINKS;
 
 @Slf4j
 @Repository
@@ -40,14 +35,15 @@ public class ProjectRepository implements IProjectRepository, SmartInitializingS
     private final SessionMapper sessionMapper;
     private final FileUndoMapper fileUndoMapper;
     private final FileStorer fileStorer;
+    private final IFileGateway fileGateway;
     private final PathService pathService;
     private final TransactionTemplate transaction;
-    private final ProjectWriteLock projectWriteLock;
+    private final LockService lockService;
 
     @Override
     public void afterSingletonsInstantiated() {
         for (String projectId : fileUndoMapper.listPendingProjectIds()) {
-            synchronized (projectWriteLock.lockFor(projectId)) {
+            synchronized (lockService.projectLock(projectId)) {
                 try {
                     List<FileUndoPo> fileUndoList = fileUndoMapper.listFileUndo(projectId);
                     if (fileUndoList.isEmpty()) {
@@ -59,8 +55,7 @@ public class ProjectRepository implements IProjectRepository, SmartInitializingS
                         }
                     }
                     for (FileUndoPo fileUndo : fileUndoList) {
-                        Path filePath = pathService.filePathByFileName(projectId, fileUndo.getFileName());
-                        fileStorer.applyFileChange(filePath, fileUndo.getBeforeContent());
+                        applyFileContent(projectId, fileUndo.getFileName(), fileUndo.getBeforeContent());
                     }
                     fileUndoMapper.deleteFileUndo(projectId);
                 } catch (RuntimeException ex) {
@@ -144,26 +139,6 @@ public class ProjectRepository implements IProjectRepository, SmartInitializingS
     }
 
     @Override
-    public byte[] readFile(Path path) {
-        return fileStorer.readFile(path);
-    }
-
-    @Override
-    public List<String> listProjectFilesNames(String projectId) {
-        try (Stream<Path> files = Files.list(pathService.projectDirectory(projectId))) {
-            return files.filter(path -> Files.isRegularFile(path, NOFOLLOW_LINKS))
-                    .map(path -> path.getFileName().toString())
-                    .filter(pathService::isProjectFile)
-                    .sorted()
-                    .toList();
-        } catch (NoSuchFileException ex) {
-            return List.of();
-        } catch (IOException ex) {
-            throw new UncheckedIOException(ex);
-        }
-    }
-
-    @Override
     @Transactional(propagation = Propagation.NEVER)
     public void commitFiles(String projectId, List<FileChange> fileChanges) {
         // 1. 插入撤回记录
@@ -175,8 +150,7 @@ public class ProjectRepository implements IProjectRepository, SmartInitializingS
         try {
             // 2. 逐一更改磁盘
             for (FileChange fileChange : fileChanges) {
-                Path filePath = pathService.filePathByFileName(projectId, fileChange.getFileName());
-                fileStorer.applyFileChange(filePath, fileChange.getAfter());
+                applyFileContent(projectId, fileChange.getFileName(), fileChange.getAfter());
             }
             // 3. 删除撤回记录
             transaction.executeWithoutResult(status -> {
@@ -197,8 +171,7 @@ public class ProjectRepository implements IProjectRepository, SmartInitializingS
                     }
                 }
                 for (FileUndoPo fileUndo : fileUndoList) {
-                    Path filePath = pathService.filePathByFileName(projectId, fileUndo.getFileName());
-                    fileStorer.applyFileChange(filePath, fileUndo.getBeforeContent());
+                    applyFileContent(projectId, fileUndo.getFileName(), fileUndo.getBeforeContent());
                 }
                 // 6. 清除记录
                 fileUndoMapper.deleteFileUndo(projectId);
@@ -206,6 +179,15 @@ public class ProjectRepository implements IProjectRepository, SmartInitializingS
                 ex.addSuppressed(recoveryFailure);
             }
             throw ex;
+        }
+    }
+
+    private void applyFileContent(String projectId, String fileName, byte[] content) {
+        Path file = pathService.filePathByFileName(projectId, fileName);
+        if (content == null) {
+            fileGateway.deleteFile(file);
+        } else {
+            fileGateway.replaceFile(file, content);
         }
     }
 

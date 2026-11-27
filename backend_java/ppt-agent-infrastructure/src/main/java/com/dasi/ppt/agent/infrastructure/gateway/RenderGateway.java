@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.infrastructure.gateway;
 
-import com.dasi.ppt.agent.domain.project.model.entity.ExportFile;
+import com.dasi.ppt.agent.domain.project.model.entity.ExportResult;
 import com.dasi.ppt.agent.domain.project.model.entity.ExportSnapshot;
 import com.dasi.ppt.agent.domain.project.model.enumeration.ExportFormat;
 import com.dasi.ppt.agent.domain.shared.exception.RenderUnavailableException;
@@ -34,9 +34,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.TimeUnit;
-import java.util.function.BooleanSupplier;
 import java.util.regex.Pattern;
 
+import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.ATTACHMENT_PATH_PREFIX;
 import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.invalid;
 
 @Component
@@ -45,7 +45,7 @@ public class RenderGateway implements IRenderGateway {
 
     private static final Pattern CSS_REFERENCE = Pattern.compile("(?i)(?:url\\(\\s*|@import\\s+)[\"']?([^\"')\\s]+)");
     private static final Pattern SRCSET_REFERENCE = Pattern.compile("(?:^|,\\s*)(data:[^\\s]+|[^,\\s]+)", Pattern.CASE_INSENSITIVE);
-    private static final Pattern ATTACHMENT = Pattern.compile("(?i)(?:^|/)(?:\\.runtime/attachments/|api/(?:v1/)?projects/[^/]+/attachments/|attachments/att_)");
+    private static final Pattern ATTACHMENT = Pattern.compile("(?i)(?:^|/)(?:" + Pattern.quote(ATTACHMENT_PATH_PREFIX) + "|api/(?:v1/)?projects/[^/]+/attachments/|attachments/att_)");
     private static final Pattern SCHEME = Pattern.compile("^[a-zA-Z][a-zA-Z0-9+.-]*:");
 
     private final ObjectMapper objectMapper;
@@ -63,7 +63,7 @@ public class RenderGateway implements IRenderGateway {
     }
 
     @Override
-    public RenderResult render(RenderMaterial renderMaterial, BooleanSupplier cancelled) {
+    public RenderResult render(RenderMaterial renderMaterial) {
         Path directory = temporaryDirectory();
         try {
             Path output = directory.resolve("slide.png");
@@ -73,7 +73,7 @@ public class RenderGateway implements IRenderGateway {
                     "styles", styles(renderMaterial.getThemeCss()),
                     "decorations_js", decorations,
                     "screenshot_path", output.toString());
-            JsonNode diagnostics = execute(directory, job, cancelled);
+            JsonNode diagnostics = execute(directory, job);
             List<String> issues = new ArrayList<>();
             for (String field : List.of("out_of_bounds", "text_clipping", "failed_resources", "console_errors")) {
                 for (JsonNode item : diagnostics.path(field)) {
@@ -92,13 +92,13 @@ public class RenderGateway implements IRenderGateway {
     }
 
     @Override
-    public ExportFile exportDeck(ExportSnapshot snapshot, ExportFormat format) {
+    public ExportResult export(ExportSnapshot snapshot, ExportFormat format) {
         List<Map<String, Object>> pages = new ArrayList<>();
-        for (int index = 0; index < snapshot.getPages().size(); index++) {
+        for (int index = 0; index < snapshot.getSlides().size(); index++) {
             RenderMaterial renderMaterial = snapshot.renderInput(index);
             Map<String, Object> page = new LinkedHashMap<>();
             page.put("id", renderMaterial.getSlideId());
-            page.put("title", snapshot.getPages().get(index).getTitle());
+            page.put("title", snapshot.getSlides().get(index).getTitle());
             page.put("chapter", renderMaterial.getChapterTitle());
             page.put("html", html(renderMaterial));
             pages.add(page);
@@ -115,7 +115,7 @@ public class RenderGateway implements IRenderGateway {
             // worker 完成生成后，先发送四字节长度和 JSON 文件信息，随后直接发送成品。
             DataInputStream content = new DataInputStream(new BufferedInputStream(process.getInputStream()));
             JsonNode header = objectMapper.readTree(content.readNBytes(content.readInt()));
-            return ExportFile.builder()
+            return ExportResult.builder()
                     .filename(header.required("filename").asString())
                     .size(header.required("size").asLong())
                     .content(content)
@@ -200,16 +200,14 @@ public class RenderGateway implements IRenderGateway {
         }
     }
 
-    private JsonNode execute(Path directory, Map<String, Object> job, BooleanSupplier cancelled) throws IOException {
+    private JsonNode execute(Path directory, Map<String, Object> job) throws IOException {
         Path request = directory.resolve("request.json");
         Path response = directory.resolve("response.json");
         Files.write(request, objectMapper.writeValueAsBytes(job));
         Process process = workerProcess("--job", request.toString()).redirectOutput(response.toFile()).start();
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(60);
         try {
-            while (!process.waitFor(150, TimeUnit.MILLISECONDS)) {
-                if (cancelled.getAsBoolean()) throw new CancellationException();
-                if (System.nanoTime() >= deadline) throw new IOException("渲染进程超时");
+            if (!process.waitFor(60, TimeUnit.SECONDS)) {
+                throw new IOException("渲染进程超时");
             }
             if (Files.size(response) == 0) throw new IOException("渲染进程未返回结果");
             JsonNode result;

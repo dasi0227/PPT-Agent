@@ -2,25 +2,17 @@ package com.dasi.ppt.agent.infrastructure.gateway;
 
 import com.dasi.ppt.agent.domain.shared.gateway.IPlatformGateway;
 import com.dasi.ppt.agent.domain.shared.exception.ErrorCode;
-import com.dasi.ppt.agent.domain.shared.service.PathService;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
-import java.nio.file.attribute.BasicFileAttributes;
 
 import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.IS_MAC;
 import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.IS_WINDOWS;
 import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.failed;
-import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.invalid;
-import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.notFound;
 
 @Component
-@RequiredArgsConstructor
 public class PlatformGateway implements IPlatformGateway {
 
     private static final String MAC_PICK_APPLICATION = """
@@ -48,10 +40,8 @@ public class PlatformGateway implements IPlatformGateway {
             [void][System.Diagnostics.Process]::Start($info)
             """;
 
-    private final PathService pathService;
-
     @Override
-    public Path pickApplication() {
+    public Path pickApp() {
         try {
             String selected;
             if (IS_MAC) {
@@ -71,35 +61,20 @@ public class PlatformGateway implements IPlatformGateway {
     }
 
     @Override
-    public void openFile(String projectId, String fileName, Path application) {
-        if (!pathService.isProjectFile(fileName)) {
-            throw invalid("只能打开项目根目录下的文稿文件");
-        }
-        Path file;
-        try {
-            Path directory = pathService.projectsRoot().toRealPath().resolve(projectId);
-            file = pathService.filePathByFileName(projectId, fileName).toRealPath();
-            if (!directory.equals(file.getParent()) || !pathService.isProjectFile(file.getFileName().toString()) || !Files.readAttributes(file, BasicFileAttributes.class).isRegularFile()) {
-                throw invalid("只能打开项目根目录下的普通文稿文件");
-            }
-        } catch (NoSuchFileException e) {
-            throw notFound(ErrorCode.FILE_NOT_FOUND);
-        } catch (IOException e) {
-            throw failed(ErrorCode.FILE_OPEN_FAILED, e.getMessage());
-        }
+    public void openFile(Path path, Path application) {
         try {
             if (IS_MAC) {
                 ProcessBuilder opener = application == null
-                        ? new ProcessBuilder("open", file.toString())
-                        : new ProcessBuilder("open", "-a", application.toString(), file.toString());
+                        ? new ProcessBuilder("open", path.toString())
+                        : new ProcessBuilder("open", "-a", application.toString(), path.toString());
                 run(opener);
             } else if (IS_WINDOWS) {
                 if (application == null) {
                     ProcessBuilder opener = powerShell(WINDOWS_OPEN_DOCUMENT);
-                    opener.environment().put("PPT_AGENT_DOCUMENT", file.toString());
+                    opener.environment().put("PPT_AGENT_DOCUMENT", path.toString());
                     run(opener);
                 } else {
-                    new ProcessBuilder(application.toString(), file.toString())
+                    new ProcessBuilder(application.toString(), path.toString())
                             .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                             .redirectError(ProcessBuilder.Redirect.DISCARD)
                             .start();

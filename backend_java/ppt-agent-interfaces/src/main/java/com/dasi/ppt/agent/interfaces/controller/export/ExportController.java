@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.interfaces.controller.export;
 
-import com.dasi.ppt.agent.domain.project.model.entity.ExportFile;
+import com.dasi.ppt.agent.domain.project.model.entity.ExportResult;
 import com.dasi.ppt.agent.domain.project.service.ExportService;
 import com.dasi.ppt.agent.interfaces.controller.export.dto.CreateExportDto;
 import jakarta.validation.Valid;
@@ -25,18 +25,18 @@ public class ExportController {
 
     @PostMapping("/exports/create")
     public ResponseEntity<InputStreamResource> exportProject(@Valid @RequestBody CreateExportDto request) {
-        ExportFile exportFile = exportService.exportProject(request.getProjectId(), request.getFormat());
+        ExportResult exportResult = exportService.exportProject(request.getProjectId(), request.getFormat());
         MediaType contentType = switch (request.getFormat()) {
             case HTML -> MediaType.parseMediaType("text/html;charset=UTF-8");
             case PDF -> MediaType.APPLICATION_PDF;
             case PNG -> MediaType.parseMediaType("application/zip");
         };
-        String disposition = ContentDisposition.attachment().filename(exportFile.getFilename(), StandardCharsets.UTF_8).build().toString();
+        String disposition = ContentDisposition.attachment().filename(exportResult.getFilename(), StandardCharsets.UTF_8).build().toString();
         return ResponseEntity.ok()
                 .contentType(contentType)
-                .contentLength(exportFile.getSize())
+                .contentLength(exportResult.getSize())
                 .cacheControl(CacheControl.noStore())
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition)
-                .body(new InputStreamResource(exportFile.getContent()));
+                .body(new InputStreamResource(exportResult.getContent()));
     }
 }

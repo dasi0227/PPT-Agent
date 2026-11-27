@@ -4,7 +4,8 @@ import java.nio.file.Path;
 
 public interface IPlatformGateway {
 
-    Path pickApplication();
+    Path pickApp();
 
-    void openFile(String projectId, String fileName, Path application);
+    void openFile(Path path, Path application);
+
 }

@@ -3,7 +3,6 @@ package com.dasi.ppt.agent.domain.project.repository;
 import com.dasi.ppt.agent.domain.project.model.entity.FileChange;
 import com.dasi.ppt.agent.domain.project.model.entity.Project;
 
-import java.nio.file.Path;
 import java.util.List;
 
 public interface IProjectRepository {
@@ -33,10 +32,6 @@ public interface IProjectRepository {
     byte[] findProjectLogo(String projectId);
 
     int updateProjectLogo(Project project);
-
-    byte[] readFile(Path path);
-
-    List<String> listProjectFilesNames(String projectId);
 
     void commitFiles(String projectId, List<FileChange> fileChanges);
 }
