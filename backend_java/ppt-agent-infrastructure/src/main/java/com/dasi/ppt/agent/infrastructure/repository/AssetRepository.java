@@ -4,11 +4,11 @@ import com.dasi.ppt.agent.domain.asset.model.entity.Asset;
 import com.dasi.ppt.agent.domain.asset.model.entity.Tag;
 import com.dasi.ppt.agent.domain.asset.model.enumeration.AssetType;
 import com.dasi.ppt.agent.domain.asset.repository.IAssetRepository;
-import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.AssetMapper;
-import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.AssetTagMapper;
-import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.TagMapper;
-import com.dasi.ppt.agent.infrastructure.persistence.database.po.AssetPo;
-import com.dasi.ppt.agent.infrastructure.persistence.database.po.TagPo;
+import com.dasi.ppt.agent.infrastructure.persistence.mapper.AssetMapper;
+import com.dasi.ppt.agent.infrastructure.persistence.mapper.AssetTagMapper;
+import com.dasi.ppt.agent.infrastructure.persistence.mapper.TagMapper;
+import com.dasi.ppt.agent.infrastructure.persistence.po.AssetPo;
+import com.dasi.ppt.agent.infrastructure.persistence.po.TagPo;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 

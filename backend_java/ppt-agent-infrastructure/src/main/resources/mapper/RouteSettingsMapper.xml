@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.dasi.ppt.agent.infrastructure.persistence.database.mapper.RouteSettingsMapper">
-    <resultMap id="routeSettingsPo" type="com.dasi.ppt.agent.infrastructure.persistence.database.po.RouteSettingsPo">
+<mapper namespace="com.dasi.ppt.agent.infrastructure.persistence.mapper.RouteSettingsMapper">
+    <resultMap id="routeSettingsPo" type="com.dasi.ppt.agent.infrastructure.persistence.po.RouteSettingsPo">
         <id column="id" property="id"/>
         <result column="main_default" property="mainDefault"/>
         <result column="main_fallback" property="mainFallback"/>

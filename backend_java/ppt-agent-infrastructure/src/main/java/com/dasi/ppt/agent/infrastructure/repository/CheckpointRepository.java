@@ -2,12 +2,12 @@ package com.dasi.ppt.agent.infrastructure.repository;
 
 import com.dasi.ppt.agent.domain.agent.model.entity.Checkpoint;
 import com.dasi.ppt.agent.domain.agent.repository.ICheckpointRepository;
-import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.CheckpointMapper;
-import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.CommandMapper;
-import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.MessageMapper;
-import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.ProjectMapper;
-import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.RunMapper;
-import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.SessionMapper;
+import com.dasi.ppt.agent.infrastructure.persistence.mapper.CheckpointMapper;
+import com.dasi.ppt.agent.infrastructure.persistence.mapper.CommandMapper;
+import com.dasi.ppt.agent.infrastructure.persistence.mapper.MessageMapper;
+import com.dasi.ppt.agent.infrastructure.persistence.mapper.ProjectMapper;
+import com.dasi.ppt.agent.infrastructure.persistence.mapper.RunMapper;
+import com.dasi.ppt.agent.infrastructure.persistence.mapper.SessionMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 import tools.jackson.databind.ObjectMapper;

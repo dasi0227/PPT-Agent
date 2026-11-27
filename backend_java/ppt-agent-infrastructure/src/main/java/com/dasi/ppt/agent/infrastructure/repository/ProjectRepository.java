@@ -7,42 +7,69 @@ import com.dasi.ppt.agent.domain.project.repository.IProjectRepository;
 import com.dasi.ppt.agent.domain.shared.gateway.IFileGateway;
 import com.dasi.ppt.agent.domain.shared.service.LockService;
 import com.dasi.ppt.agent.domain.shared.service.PathService;
-import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.FileUndoMapper;
-import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.ProjectMapper;
-import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.SessionMapper;
-import com.dasi.ppt.agent.infrastructure.persistence.database.po.FileUndoPo;
-import com.dasi.ppt.agent.infrastructure.persistence.database.po.ProjectPo;
-import com.dasi.ppt.agent.infrastructure.persistence.filesystem.FileStorer;
+import com.dasi.ppt.agent.infrastructure.persistence.mapper.FileUndoMapper;
+import com.dasi.ppt.agent.infrastructure.persistence.mapper.ProjectMapper;
+import com.dasi.ppt.agent.infrastructure.persistence.mapper.SessionMapper;
+import com.dasi.ppt.agent.infrastructure.persistence.po.FileUndoPo;
+import com.dasi.ppt.agent.infrastructure.persistence.po.ProjectPo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.util.FileSystemUtils;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.List;
 
 import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.illegal;
+import static java.nio.file.LinkOption.NOFOLLOW_LINKS;
+import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
 
 @Slf4j
 @Repository
 @RequiredArgsConstructor
-public class ProjectRepository implements IProjectRepository, SmartInitializingSingleton {
+public class ProjectRepository implements IProjectRepository {
 
     private final ProjectMapper projectMapper;
     private final SessionMapper sessionMapper;
     private final FileUndoMapper fileUndoMapper;
-    private final FileStorer fileStorer;
     private final IFileGateway fileGateway;
     private final PathService pathService;
     private final TransactionTemplate transaction;
     private final LockService lockService;
 
-    @Override
-    public void afterSingletonsInstantiated() {
+    public void recoverProjectDeletions() {
+        Path projectsRoot = pathService.projectsRoot();
+        if (Files.notExists(projectsRoot)) {
+            return;
+        }
+        try (DirectoryStream<Path> entries = Files.newDirectoryStream(projectsRoot)) {
+            for (Path entry : entries) {
+                String projectId = pathService.projectIdFromDeletingDirectory(entry.getFileName().toString());
+                if (projectId == null) continue;
+                if (projectMapper.existsProject(projectId)) {
+                    // 恢复未提交删除的项目
+                    Files.move(entry, pathService.projectDirectory(projectId), ATOMIC_MOVE);
+                } else {
+                    // 清理已删除项目的暂存目录
+                    FileSystemUtils.deleteRecursively(entry);
+                }
+            }
+        } catch (IOException ex) {
+            throw new UncheckedIOException(ex);
+        }
+    }
+
+    public void recoverPendingFiles() {
         for (String projectId : fileUndoMapper.listPendingProjectIds()) {
             synchronized (lockService.projectLock(projectId)) {
                 try {
@@ -79,17 +106,44 @@ public class ProjectRepository implements IProjectRepository, SmartInitializingS
     }
 
     @Override
+    @Transactional(propagation = Propagation.MANDATORY)
     public int deleteProject(String projectId) {
         int deleted = projectMapper.deleteProject(projectId);
         if (deleted > 0) {
-            fileStorer.stageProjectDeletion(projectId);
+            // 1. 拿到两个路径
+            Path projectDirectory = pathService.projectDirectory(projectId);
+            Path deletingDirectory = pathService.deletingDirectory(projectId);
+            if (Files.notExists(projectDirectory, NOFOLLOW_LINKS)) {
+                return deleted;
+            }
+            // 2. 将项目目录原子重命名为暂存目录
+            try {
+                Files.move(projectDirectory, deletingDirectory, ATOMIC_MOVE);
+            } catch (IOException ex) {
+                throw new UncheckedIOException(ex);
+            }
+            // 3. 给事务注册一个回调方法
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCompletion(int status) {
+                    try {
+                        if (status == STATUS_ROLLED_BACK) {
+                            Files.move(deletingDirectory, projectDirectory, ATOMIC_MOVE);
+                        } else if (status == STATUS_COMMITTED) {
+                            FileSystemUtils.deleteRecursively(deletingDirectory);
+                        }
+                    } catch (IOException ex) {
+                        log.error("项目删除暂存目录处理失败，将在下次启动时重试：{}", deletingDirectory, ex);
+                    }
+                }
+            });
         }
         return deleted;
     }
 
     @Override
     public boolean hasPendingFileOperation(String projectId) {
-        return fileStorer.hasDeletingDirectory(projectId) || fileUndoMapper.hasFileUndo(projectId);
+        return Files.exists(pathService.deletingDirectory(projectId), NOFOLLOW_LINKS) || fileUndoMapper.hasFileUndo(projectId);
     }
 
     @Override

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.dasi.ppt.agent.infrastructure.persistence.database.mapper.ProjectMapper">
-    <resultMap id="projectPo" type="com.dasi.ppt.agent.infrastructure.persistence.database.po.ProjectPo">
+<mapper namespace="com.dasi.ppt.agent.infrastructure.persistence.mapper.ProjectMapper">
+    <resultMap id="projectPo" type="com.dasi.ppt.agent.infrastructure.persistence.po.ProjectPo">
         <id column="id" property="id"/>
         <result column="title" property="title"/>
         <result column="theme" property="theme"/>

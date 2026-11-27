@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.dasi.ppt.agent.infrastructure.persistence.database.mapper.MessageMapper">
-    <resultMap id="messagePo" type="com.dasi.ppt.agent.infrastructure.persistence.database.po.MessagePo">
+<mapper namespace="com.dasi.ppt.agent.infrastructure.persistence.mapper.MessageMapper">
+    <resultMap id="messagePo" type="com.dasi.ppt.agent.infrastructure.persistence.po.MessagePo">
         <id column="id" property="id"/>
         <result column="session_id" property="sessionId"/>
         <result column="run_id" property="runId"/>
