@@ -45,7 +45,8 @@ public class RenderGateway implements IRenderGateway {
 
     private static final Pattern CSS_REFERENCE = Pattern.compile("(?i)(?:url\\(\\s*|@import\\s+)[\"']?([^\"')\\s]+)");
     private static final Pattern SRCSET_REFERENCE = Pattern.compile("(?:^|,\\s*)(data:[^\\s]+|[^,\\s]+)", Pattern.CASE_INSENSITIVE);
-    private static final Pattern ATTACHMENT = Pattern.compile("(?i)(?:^|/)(?:" + Pattern.quote(ATTACHMENT_PATH_PREFIX) + "|api/(?:v1/)?projects/[^/]+/attachments/|attachments/att_)");
+    private static final Pattern ATTACHMENT = Pattern.compile("(?i)(?:^|/)(?:" + Pattern.quote(ATTACHMENT_PATH_PREFIX)
+            + "|api/(?:v1/)?projects/[^/]+/attachments/|attachments/[0-9a-f]{32}\\b)");
     private static final Pattern SCHEME = Pattern.compile("^[a-zA-Z][a-zA-Z0-9+.-]*:");
 
     private final ObjectMapper objectMapper;

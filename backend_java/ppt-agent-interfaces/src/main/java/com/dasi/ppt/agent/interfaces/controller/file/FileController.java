@@ -48,8 +48,7 @@ public class FileController {
     }
 
     @GetMapping("/projects/{projectId}/attachments/{attachmentId:[a-zA-Z0-9_-]+}")
-    public ResponseEntity<byte[]> readAttachment(@PathVariable String projectId, @PathVariable String attachmentId,
-                                                @RequestParam(defaultValue = "thumbnail") String variant) {
+    public ResponseEntity<byte[]> readAttachment(@PathVariable String projectId, @PathVariable String attachmentId, @RequestParam(defaultValue = "thumbnail") String variant) {
         boolean original = switch (variant) {
             case "original" -> true;
             case "thumbnail" -> false;

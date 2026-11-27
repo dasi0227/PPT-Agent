@@ -26,10 +26,8 @@ public class AttachmentService {
     public byte[] readAttachment(String projectId, String attachmentId, boolean original) {
         synchronized (lockService.projectLock(projectId)) {
             if (!projectRepository.existsProject(projectId)) return null;
-            Path file = original
-                    ? pathService.attachmentOriginal(projectId, attachmentId)
-                    : pathService.attachmentThumbnail(projectId, attachmentId);
-            return fileGateway.readFile(file);
+            Path path = original ? pathService.attachmentOriginal(projectId, attachmentId) : pathService.attachmentThumbnail(projectId, attachmentId);
+            return fileGateway.readFile(path);
         }
     }
 
@@ -39,16 +37,20 @@ public class AttachmentService {
             if (!projectRepository.existsProject(projectId)) {
                 throw notFound(ErrorCode.PROJECT_NOT_FOUND);
             }
-            String id = IdUtil.genAttachmentId();
-            Path originalFile = pathService.attachmentOriginal(projectId, id);
-            fileGateway.createFile(originalFile, png);
+            String attachmentId = IdUtil.genAttachmentId();
+            Path original = pathService.attachmentOriginal(projectId, attachmentId);
+            fileGateway.createFile(original, png);
             try {
-                fileGateway.createFile(pathService.attachmentThumbnail(projectId, id), thumbnail);
+                fileGateway.createFile(pathService.attachmentThumbnail(projectId, attachmentId), thumbnail);
             } catch (RuntimeException ex) {
-                fileGateway.deleteFile(originalFile);
+                try {
+                    fileGateway.deleteFile(original);
+                } catch (RuntimeException cleanupFailure) {
+                    ex.addSuppressed(cleanupFailure);
+                }
                 throw ex;
             }
-            return id;
+            return attachmentId;
         }
     }
 }

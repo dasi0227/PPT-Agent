@@ -121,7 +121,6 @@ public class ProjectService {
         });
     }
 
-    // logo 为 null 时清除项目 Logo。
     public void saveProjectLogo(Project project) {
         updateProjectAppearance(project.getId(), () -> {
             project.setUpdatedAt(System.currentTimeMillis());

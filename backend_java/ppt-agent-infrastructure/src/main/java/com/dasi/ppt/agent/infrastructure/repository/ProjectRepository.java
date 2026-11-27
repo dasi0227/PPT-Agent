@@ -170,8 +170,8 @@ public class ProjectRepository implements IProjectRepository, SmartInitializingS
         for (FileUndoPo fileUndo : fileUndoList) {
             String fileName = fileUndo.getFileName();
             try {
-                Path file = directory.resolve(fileName);
-                if (!pathService.isProjectFile(directory, file) || !fileName.equals(file.getFileName().toString())) {
+                Path path = directory.resolve(fileName);
+                if (!pathService.isProjectFile(directory, path) || !fileName.equals(path.getFileName().toString())) {
                     throw illegal("撤销记录中的文稿文件名无效：" + fileName);
                 }
             } catch (InvalidPathException ex) {

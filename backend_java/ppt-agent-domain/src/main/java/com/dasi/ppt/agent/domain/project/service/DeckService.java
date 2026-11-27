@@ -63,12 +63,12 @@ public class DeckService {
 
     private Path resolveDocumentForOpen(String projectId, String fileName) {
         try {
-            Path directory = pathService.projectsRoot().toRealPath().resolve(projectId);
-            Path file = directory.resolve(fileName).toRealPath();
-            if (!pathService.isProjectFile(directory, file) || !Files.readAttributes(file, BasicFileAttributes.class).isRegularFile()) {
+            Path directory = pathService.projectsRoot().resolve(projectId);
+            Path path = directory.resolve(fileName);
+            if (!pathService.isProjectFile(directory, path) || !Files.readAttributes(path, BasicFileAttributes.class).isRegularFile()) {
                 throw invalid("只能打开项目根目录下的普通文稿文件");
             }
-            return file;
+            return path;
         } catch (NoSuchFileException e) {
             throw notFound(ErrorCode.FILE_NOT_FOUND);
         } catch (IOException e) {

@@ -11,7 +11,7 @@ public interface IFileGateway {
     /** 文件缺失时返回 null。 */
     byte[] readFile(Path path);
 
-    /** 完整写入后才发布文件，目标已存在时失败。 */
+    /** 完整写入后才发布文件，目标已存在时失败。发布后的收尾操作失败时尝试删除本次新建的文件。 */
     void createFile(Path path, byte[] content);
 
     /** 原子写入完整内容，目标可以是新文件或已有文件。 */

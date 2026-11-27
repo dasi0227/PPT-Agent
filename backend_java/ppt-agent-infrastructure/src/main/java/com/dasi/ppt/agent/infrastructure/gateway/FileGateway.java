@@ -72,8 +72,9 @@ public class FileGateway implements IFileGateway {
         }
     }
 
-    private void writeFile(Path file, byte[] content, boolean replaceExisting) {
-        Path directory = file.toAbsolutePath().getParent();
+    private void writeFile(Path path, byte[] content, boolean replaceExisting) {
+        Path directory = path.toAbsolutePath().getParent();
+        boolean created = false;
         try {
             createDirectories(directory);
             Path temp = Files.createTempFile(directory, WRITING_PREFIX, TEMP_SUFFIX);
@@ -86,17 +87,25 @@ public class FileGateway implements IFileGateway {
                     fileChannel.force(true);
                 }
                 if (replaceExisting) {
-                    Files.move(temp, file, ATOMIC_MOVE, REPLACE_EXISTING);
+                    Files.move(temp, path, ATOMIC_MOVE, REPLACE_EXISTING);
                 } else {
-                    // 原子创建正式文件名，同名时由文件系统拒绝。
-                    Files.createLink(file, temp);
+                    Files.createLink(path, temp);
+                    created = true;
                 }
             } finally {
                 Files.deleteIfExists(temp);
             }
             syncDirectory(directory);
-        } catch (IOException ex) {
-            throw new UncheckedIOException(ex);
+        } catch (IOException | RuntimeException ex) {
+            if (created) {
+                try {
+                    deleteFile(path);
+                } catch (RuntimeException cleanupFailure) {
+                    ex.addSuppressed(cleanupFailure);
+                }
+            }
+            if (ex instanceof IOException ioFailure) throw new UncheckedIOException(ioFailure);
+            throw (RuntimeException) ex;
         }
     }
 

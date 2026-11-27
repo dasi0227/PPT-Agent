@@ -14,12 +14,12 @@ public final class IdUtil {
     private static final String ID_CHARACTERS = "abcdefghijklmnopqrstuvwxyz0123456789";
     private static final int ID_LENGTH = 8;
 
-    public final static String genAttachmentId() {
-        return genUuid("att_");
+    public static String genAttachmentId() {
+        return genUuid();
     }
 
-    public final static String genScreenshotId() {
-        return genUuid("scr_");
+    public static String genScreenshotId() {
+        return genUuid();
     }
 
     public static String genSessionId() {
@@ -46,10 +46,6 @@ public final class IdUtil {
         return UUID.randomUUID().toString().replace("-", "");
     }
 
-    private static String genUuid(String prefix) {
-        return prefix + genUuid();
-    }
-
     private static String genRandomId() {
         StringBuilder id = new StringBuilder(ID_LENGTH);
         for (int i = 0; i < ID_LENGTH; i++) {
@@ -57,9 +53,5 @@ public final class IdUtil {
             id.append(ID_CHARACTERS.charAt(index));
         }
         return id.toString();
-    }
-
-    private static String genRandomId(String prefix) {
-        return prefix + genRandomId();
     }
 }
