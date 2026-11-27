@@ -18,6 +18,8 @@ public final class Project {
     private DecorationPosition deckTitlePosition;
     private DecorationPosition chapterTitlePosition;
     private DecorationPosition logoPosition;
+    // 写入 Logo 时携带 PNG 字节，外观查询只填充 logoPresent。
+    private byte[] logo;
     private boolean logoPresent;
     private long updatedAt;
 }

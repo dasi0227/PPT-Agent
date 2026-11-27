@@ -81,7 +81,7 @@ public class ProjectController {
 
     @PostMapping("/projects/theme/save")
     public void saveProjectTheme(@Valid @RequestBody SaveProjectThemeDto request) {
-        projectService.saveProjectTheme(request.getProjectId(), request.getThemeId());
+        projectService.saveProjectTheme(request.toEntity());
     }
 
     @PostMapping("/projects/positions/save")
@@ -104,12 +104,12 @@ public class ProjectController {
 
     @PostMapping(value = "/projects/logo/save", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public void saveProjectLogo(@Valid @ModelAttribute SaveProjectLogoDto request) throws IOException {
-        projectService.saveProjectLogo(request.getProjectId(), request.readPng());
+        projectService.saveProjectLogo(request.toEntity());
     }
 
     @PostMapping("/projects/logo/delete")
     public void deleteProjectLogo(@Valid @RequestBody DeleteProjectLogoDto request) {
-        projectService.deleteProjectLogo(request.getProjectId());
+        projectService.saveProjectLogo(request.toEntity());
     }
 
     @PostMapping("/projects/meta/save")

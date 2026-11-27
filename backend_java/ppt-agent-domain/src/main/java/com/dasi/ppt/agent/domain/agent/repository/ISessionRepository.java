@@ -9,6 +9,8 @@ public interface ISessionRepository {
 
     boolean exists(String sessionId);
 
+    String findProjectId(String sessionId);
+
     Session findSession(String sessionId);
 
     List<Message> listMessages(String sessionId);
@@ -16,4 +18,6 @@ public interface ISessionRepository {
     List<Session> listProjectSessions(String projectId);
 
     void insertSession(Session session);
+
+    void updateSessionTitle(String sessionId, String title, long updatedAt);
 }

@@ -5,7 +5,7 @@ import com.dasi.ppt.agent.domain.project.model.entity.Project;
 import com.dasi.ppt.agent.domain.project.model.enumeration.DecorationPosition;
 import com.dasi.ppt.agent.domain.project.repository.IProjectRepository;
 import com.dasi.ppt.agent.domain.project.service.ProjectWriteLock;
-import com.dasi.ppt.agent.domain.shared.service.PathResolver;
+import com.dasi.ppt.agent.domain.shared.service.PathService;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.FileUndoMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.ProjectMapper;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.SessionMapper;
@@ -40,7 +40,7 @@ public class ProjectRepository implements IProjectRepository, SmartInitializingS
     private final SessionMapper sessionMapper;
     private final FileUndoMapper fileUndoMapper;
     private final FileStorer fileStorer;
-    private final PathResolver pathResolver;
+    private final PathService pathService;
     private final TransactionTemplate transaction;
     private final ProjectWriteLock projectWriteLock;
 
@@ -49,7 +49,20 @@ public class ProjectRepository implements IProjectRepository, SmartInitializingS
         for (String projectId : fileUndoMapper.listPendingProjectIds()) {
             synchronized (projectWriteLock.lockFor(projectId)) {
                 try {
-                    restoreFiles(projectId);
+                    List<FileUndoPo> fileUndoList = fileUndoMapper.listFileUndo(projectId);
+                    if (fileUndoList.isEmpty()) {
+                        continue;
+                    }
+                    for (FileUndoPo fileUndo : fileUndoList) {
+                        if (!pathService.isProjectFile(fileUndo.getFileName())) {
+                            throw illegal("撤销记录中的文稿文件名无效：" + fileUndo.getFileName());
+                        }
+                    }
+                    for (FileUndoPo fileUndo : fileUndoList) {
+                        Path filePath = pathService.filePathByFileName(projectId, fileUndo.getFileName());
+                        fileStorer.applyFileChange(filePath, fileUndo.getBeforeContent());
+                    }
+                    fileUndoMapper.deleteFileUndo(projectId);
                 } catch (RuntimeException ex) {
                     log.error("文稿恢复失败，项目保留撤销记录：{}", projectId, ex);
                 }
@@ -73,11 +86,6 @@ public class ProjectRepository implements IProjectRepository, SmartInitializingS
     @Override
     public int updateProjectTitle(String projectId, String title, long updatedAt) {
         return projectMapper.updateProjectTitle(projectId, title, updatedAt);
-    }
-
-    @Override
-    public void updateProjectTime(String projectId, long updatedAt) {
-        projectMapper.updateProjectTime(projectId, updatedAt);
     }
 
     @Override
@@ -115,8 +123,8 @@ public class ProjectRepository implements IProjectRepository, SmartInitializingS
     }
 
     @Override
-    public int updateProjectTheme(String projectId, String themeId, long updatedAt) {
-        return projectMapper.updateProjectTheme(projectId, themeId, updatedAt);
+    public int updateProjectTheme(Project project) {
+        return projectMapper.updateProjectTheme(project.getId(), project.getTheme(), project.getUpdatedAt());
     }
 
     @Override
@@ -131,8 +139,8 @@ public class ProjectRepository implements IProjectRepository, SmartInitializingS
     }
 
     @Override
-    public int updateProjectLogo(String projectId, byte[] logo, long updatedAt) {
-        return projectMapper.updateProjectLogo(projectId, logo, updatedAt);
+    public int updateProjectLogo(Project project) {
+        return projectMapper.updateProjectLogo(project.getId(), project.getLogo(), project.getUpdatedAt());
     }
 
     @Override
@@ -141,11 +149,11 @@ public class ProjectRepository implements IProjectRepository, SmartInitializingS
     }
 
     @Override
-    public List<String> listDocumentFileNames(String projectId) {
-        try (Stream<Path> files = Files.list(pathResolver.projectDirectory(projectId))) {
+    public List<String> listProjectFilesNames(String projectId) {
+        try (Stream<Path> files = Files.list(pathService.projectDirectory(projectId))) {
             return files.filter(path -> Files.isRegularFile(path, NOFOLLOW_LINKS))
                     .map(path -> path.getFileName().toString())
-                    .filter(pathResolver::isDocumentFileName)
+                    .filter(pathService::isProjectFile)
                     .sorted()
                     .toList();
         } catch (NoSuchFileException ex) {
@@ -157,49 +165,48 @@ public class ProjectRepository implements IProjectRepository, SmartInitializingS
 
     @Override
     @Transactional(propagation = Propagation.NEVER)
-    public void commitFiles(String projectId, List<FileChange> changes, Runnable saveBusiness) {
-        if (changes.isEmpty()) {
-            transaction.executeWithoutResult(status -> saveBusiness.run());
-            return;
-        }
+    public void commitFiles(String projectId, List<FileChange> fileChanges) {
+        // 1. 插入撤回记录
         transaction.executeWithoutResult(status -> {
-            for (FileChange change : changes) {
-                fileUndoMapper.insertFileUndo(toPo(projectId, change));
+            for (FileChange fileChange : fileChanges) {
+                fileUndoMapper.insertFileUndo(toPo(projectId, fileChange));
             }
         });
         try {
-            for (FileChange change : changes) {
-                fileStorer.applyFileChange(pathResolver.filePathByFileName(projectId, change.getFileName()), change.getAfter());
+            // 2. 逐一更改磁盘
+            for (FileChange fileChange : fileChanges) {
+                Path filePath = pathService.filePathByFileName(projectId, fileChange.getFileName());
+                fileStorer.applyFileChange(filePath, fileChange.getAfter());
             }
+            // 3. 删除撤回记录
             transaction.executeWithoutResult(status -> {
-                saveBusiness.run();
+                projectMapper.updateProjectTime(projectId, System.currentTimeMillis());
                 fileUndoMapper.deleteFileUndo(projectId);
             });
         } catch (RuntimeException ex) {
-            // 提交结果不确定时重读 SQLite。若已提交，查询结果为空，磁盘上的新版应保留。
             try {
-                if (!restoreFiles(projectId)) return;
+                // 4. 如果找不到撤回记录，说明文件更改已经完成，保留磁盘更改
+                List<FileUndoPo> fileUndoList = fileUndoMapper.listFileUndo(projectId);
+                if (fileUndoList.isEmpty()) {
+                    return;
+                }
+                // 5. 验证整批文件名后逐一还原文件
+                for (FileUndoPo fileUndo : fileUndoList) {
+                    if (!pathService.isProjectFile(fileUndo.getFileName())) {
+                        throw illegal("撤销记录中的文稿文件名无效：" + fileUndo.getFileName());
+                    }
+                }
+                for (FileUndoPo fileUndo : fileUndoList) {
+                    Path filePath = pathService.filePathByFileName(projectId, fileUndo.getFileName());
+                    fileStorer.applyFileChange(filePath, fileUndo.getBeforeContent());
+                }
+                // 6. 清除记录
+                fileUndoMapper.deleteFileUndo(projectId);
             } catch (RuntimeException recoveryFailure) {
                 ex.addSuppressed(recoveryFailure);
             }
             throw ex;
         }
-    }
-
-    private boolean restoreFiles(String projectId) {
-        List<FileUndoPo> files = fileUndoMapper.listFileUndo(projectId);
-        if (files.isEmpty()) return false;
-        for (FileUndoPo file : files) {
-            if (!pathResolver.isDocumentFileName(file.getFileName())) {
-                throw illegal("撤销记录中的文稿文件名无效：" + file.getFileName());
-            }
-        }
-        for (FileUndoPo file : files) {
-            Path path = pathResolver.filePathByFileName(projectId, file.getFileName());
-            fileStorer.applyFileChange(path, file.getBeforeContent());
-        }
-        fileUndoMapper.deleteFileUndo(projectId);
-        return true;
     }
 
     private static FileUndoPo toPo(String projectId, FileChange change) {

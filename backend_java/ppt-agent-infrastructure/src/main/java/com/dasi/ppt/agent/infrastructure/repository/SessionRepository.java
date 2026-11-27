@@ -34,6 +34,11 @@ public class SessionRepository implements ISessionRepository {
     }
 
     @Override
+    public String findProjectId(String sessionId) {
+        return sessionMapper.findProjectId(sessionId);
+    }
+
+    @Override
     public Session findSession(String sessionId) {
         return toEntity(sessionMapper.findSession(sessionId));
     }
@@ -54,6 +59,11 @@ public class SessionRepository implements ISessionRepository {
     @Override
     public void insertSession(Session session) {
         sessionMapper.insertSession(toPo(session));
+    }
+
+    @Override
+    public void updateSessionTitle(String sessionId, String title, long updatedAt) {
+        sessionMapper.updateSessionTitle(sessionId, title, updatedAt);
     }
 
     private static SessionPo toPo(Session session) {

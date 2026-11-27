@@ -108,7 +108,7 @@ public class AssetService {
 
     @Transactional
     public void deleteTag(String tagId) {
-        if (assetRepository.deleteTag(tagId) == 0) {
+        if (assetRepository.deleteTag(tagId, System.currentTimeMillis()) == 0) {
             throw notFound(ErrorCode.TAG_NOT_FOUND);
         }
     }

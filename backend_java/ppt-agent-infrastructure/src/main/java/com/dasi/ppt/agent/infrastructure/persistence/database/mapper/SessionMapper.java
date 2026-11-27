@@ -10,6 +10,8 @@ public interface SessionMapper {
 
     boolean exists(String sessionId);
 
+    String findProjectId(String sessionId);
+
     List<String> listProjectSessionIds(String projectId);
 
     SessionPo findSession(String sessionId);
@@ -17,6 +19,8 @@ public interface SessionMapper {
     List<SessionPo> listProjectSessions(String projectId);
 
     void insertSession(SessionPo session);
+
+    void updateSessionTitle(@Param("sessionId") String sessionId, @Param("title") String title, @Param("updatedAt") long updatedAt);
 
     int advanceSessionRevision(@Param("sessionId") String sessionId, @Param("expectedRevision") long expectedRevision);
 }

@@ -15,6 +15,10 @@
         SELECT EXISTS (SELECT 1 FROM sessions WHERE id = #{sessionId})
     </select>
 
+    <select id="findProjectId" resultType="string">
+        SELECT project_id FROM sessions WHERE id = #{sessionId}
+    </select>
+
     <select id="listProjectSessionIds" resultType="string">
         SELECT id FROM sessions WHERE project_id = #{projectId}
     </select>
@@ -40,6 +44,10 @@
     <insert id="insertSession">
         INSERT INTO sessions (id, project_id, title, updated_at) VALUES (#{id}, #{projectId}, #{title}, #{updatedAt})
     </insert>
+    <update id="updateSessionTitle">
+        UPDATE sessions SET title = #{title}, updated_at = MAX(updated_at + 1, #{updatedAt})
+        WHERE id = #{sessionId}
+    </update>
     <update id="advanceSessionRevision">
         UPDATE sessions SET revision = revision + 1 WHERE id = #{sessionId} AND revision = #{expectedRevision}
     </update>

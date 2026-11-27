@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.infrastructure.persistence.filesystem;
 
-import com.dasi.ppt.agent.domain.shared.service.PathResolver;
+import com.dasi.ppt.agent.domain.shared.service.PathService;
 import com.dasi.ppt.agent.infrastructure.persistence.database.mapper.ProjectMapper;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -16,11 +16,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.SeekableByteChannel;
-import java.nio.file.DirectoryStream;
-import java.nio.file.Files;
-import java.nio.file.NoSuchFileException;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
+import java.nio.file.*;
 
 import static java.nio.file.LinkOption.NOFOLLOW_LINKS;
 import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
@@ -31,8 +27,37 @@ import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 @RequiredArgsConstructor
 public class FileStorer {
 
-    private final PathResolver pathResolver;
+    private final PathService pathService;
     private final ProjectMapper projectMapper;
+
+    private static final String WRITING_PREFIX = ".writing-";
+    private static final String TEMP_SUFFIX = ".tmp";
+
+    @PostConstruct
+    void recoverProjectDeletions() {
+        // 1. 判断是否存在项目
+        Path projectsRoot = pathService.projectsRoot();
+        if (Files.notExists(projectsRoot)) {
+            return;
+        }
+        // 2. 遍历所有项目，拿到存在的删除标记
+        try (DirectoryStream<Path> entries = Files.newDirectoryStream(projectsRoot, pathService::isDeletingDirectory)) {
+            for (Path deletingDirectory : entries) {
+                // 3. 从标记中解析出项目
+                Path projectDirectory = pathService.projectDirectoryFromDeletion(deletingDirectory);
+                String projectId = projectDirectory.getFileName().toString();
+                if (projectMapper.existsProject(projectId)) {
+                    // 4.1 恢复未提交删除的项目
+                    Files.move(deletingDirectory, projectDirectory, ATOMIC_MOVE);
+                } else {
+                    // 4.2 清理已删除项目的暂存目录
+                    FileSystemUtils.deleteRecursively(deletingDirectory);
+                }
+            }
+        } catch (IOException ex) {
+            throw new UncheckedIOException(ex);
+        }
+    }
 
     public byte[] readFile(Path file) {
         try (SeekableByteChannel channel = Files.newByteChannel(file, StandardOpenOption.READ, NOFOLLOW_LINKS)) {
@@ -47,9 +72,9 @@ public class FileStorer {
     public void createFile(Path path, byte[] bytes) {
         try {
             Files.createDirectories(path.getParent());
-            FileChannel channel = FileChannel.open(path, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
-            try (channel) {
-                writeBytes(channel, bytes);
+            FileChannel fileChannel = FileChannel.open(path, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+            try (fileChannel) {
+                writeBytes(fileChannel, bytes);
             } catch (IOException ex) {
                 Files.deleteIfExists(path);
                 throw ex;
@@ -65,40 +90,46 @@ public class FileStorer {
             Files.deleteIfExists(path);
             syncDirectory(path.getParent());
         } catch (NoSuchFileException ignored) {
-            // 项目目录尚未创建时，文件已经是所需的缺失状态。
+            // 项目目录尚未创建时，文件已经是所需的缺失状态
         } catch (IOException ex) {
             throw new UncheckedIOException(ex);
         }
     }
 
-    // 先写到临时文件，再做一次原子替换
     public void applyFileChange(Path path, byte[] bytes) {
+        // 1. 如果是 null，说明是删除文件
         if (bytes == null) {
             deleteFile(path);
             return;
         }
-        Path directory = path.getParent();
         try {
+            // 2. 确保所有目录都是存在的
+            Path directory = path.getParent();
             createDirectories(directory);
-            Path temp = Files.createTempFile(directory, ".writing-", ".tmp");
+            // 3. 创建好一个临时文件
+            Path temp = Files.createTempFile(directory, WRITING_PREFIX, TEMP_SUFFIX);
             try {
-                try (FileChannel channel = FileChannel.open(temp, StandardOpenOption.WRITE)) {
-                    writeBytes(channel, bytes);
+                // 4. 把内容都先写到临时文件
+                try (FileChannel fileChannel = FileChannel.open(temp, StandardOpenOption.WRITE)) {
+                    writeBytes(fileChannel, bytes);
                 }
+                // 5. 最后用临时文件原子替换目标文件
                 Files.move(temp, path, ATOMIC_MOVE, REPLACE_EXISTING);
             } finally {
+                // 6. 清除临时文件
                 Files.deleteIfExists(temp);
             }
+            // 7. 同步目录项
             syncDirectory(directory);
         } catch (IOException ex) {
             throw new UncheckedIOException(ex);
         }
     }
 
-    // 首次写文稿时项目目录可能尚不存在。新目录在父目录中的条目也要先落盘。
     private void createDirectories(Path directory) throws IOException {
         if (Files.isDirectory(directory)) return;
         Path parent = directory.toAbsolutePath().getParent();
+        // 递归创建完整路径
         createDirectories(parent);
         Files.createDirectories(directory);
         syncDirectory(parent);
@@ -113,58 +144,46 @@ public class FileStorer {
     }
 
     private void syncDirectory(Path directory) throws IOException {
-        try (FileChannel channel = FileChannel.open(directory, StandardOpenOption.READ)) {
-            channel.force(true);
+        try (FileChannel fileChannel = FileChannel.open(directory, StandardOpenOption.READ)) {
+            fileChannel.force(true);
         }
     }
 
     public boolean hasDeletingDirectory(String projectId) {
-        return Files.exists(pathResolver.deletingDirectory(projectId), NOFOLLOW_LINKS);
-    }
-
-    @PostConstruct
-    void recoverProjectDeletions() {
-        Path projectsRoot = pathResolver.projectsRoot();
-        if (Files.notExists(projectsRoot)) return;
-        try (DirectoryStream<Path> entries = Files.newDirectoryStream(projectsRoot, pathResolver::isDeletingDirectory)) {
-            for (Path deletingDirectory : entries) {
-                Path projectDirectory = pathResolver.projectDirectoryFromDeletion(deletingDirectory);
-                String projectId = projectDirectory.getFileName().toString();
-                finishProjectDeletion(projectDirectory, deletingDirectory, projectMapper.existsProject(projectId));
-            }
-        } catch (IOException ex) {
-            throw new UncheckedIOException(ex);
-        }
+        return Files.exists(pathService.deletingDirectory(projectId), NOFOLLOW_LINKS);
     }
 
     public void stageProjectDeletion(String projectId) {
-        Path projectDirectory = pathResolver.projectDirectory(projectId);
-        Path deletingDirectory = pathResolver.deletingDirectory(projectId);
+        // 1. 拿到两个路径
+        Path projectDirectory = pathService.projectDirectory(projectId);
+        Path deletingDirectory = pathService.deletingDirectory(projectId);
         if (Files.notExists(projectDirectory, NOFOLLOW_LINKS)) return;
+        // 2. 先把原项目做一次备份
         try {
             Files.move(projectDirectory, deletingDirectory, ATOMIC_MOVE);
         } catch (IOException ex) {
             throw new UncheckedIOException(ex);
         }
-
+        // 3. 给事务注册一个回调方法
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCompletion(int status) {
-                if (status == STATUS_UNKNOWN) return;
+                if (status == STATUS_UNKNOWN) {
+                    return;
+                }
                 try {
-                    finishProjectDeletion(projectDirectory, deletingDirectory, status == STATUS_ROLLED_BACK);
+                    // 3.1 事务回滚则恢复项目
+                    if (status == STATUS_ROLLED_BACK) {
+                        Files.move(deletingDirectory, projectDirectory, ATOMIC_MOVE);
+                    }
+                    // 3.2 事务提交则删除备份
+                    if (status == STATUS_COMMITTED) {
+                        FileSystemUtils.deleteRecursively(deletingDirectory);
+                    }
                 } catch (IOException ex) {
                     log.error("项目删除暂存目录处理失败，将在下次启动时重试：{}", deletingDirectory, ex);
                 }
             }
         });
-    }
-
-    private void finishProjectDeletion(Path projectDirectory, Path deletingDirectory, boolean restoreProject) throws IOException {
-        if (restoreProject) {
-            Files.move(deletingDirectory, projectDirectory, ATOMIC_MOVE);
-        } else {
-            FileSystemUtils.deleteRecursively(deletingDirectory);
-        }
     }
 }

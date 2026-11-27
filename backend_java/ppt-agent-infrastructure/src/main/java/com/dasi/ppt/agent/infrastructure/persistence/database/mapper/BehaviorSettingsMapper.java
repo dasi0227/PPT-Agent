@@ -4,7 +4,7 @@ import com.dasi.ppt.agent.infrastructure.persistence.database.po.BehaviorSetting
 
 public interface BehaviorSettingsMapper {
 
-    BehaviorSettingsPo getBehaviorSettings();
+    BehaviorSettingsPo findBehaviorSettings();
 
     int saveBehaviorSettings(BehaviorSettingsPo settings);
 }

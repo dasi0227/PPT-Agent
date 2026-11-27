@@ -12,7 +12,7 @@ import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.*;
 import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.illegal;
 
 @Component
-public class PathResolver {
+public class PathService {
 
     private static final String DELETING = ".deleting-";
     private static final Set<String> PROJECT_DOCUMENTS = Set.of(META_FILE_NAME, CONSTRAINT_FILE_NAME, OUTLINE_FILE_NAME);
@@ -58,7 +58,7 @@ public class PathResolver {
         return match.matches() ? match.group(1) : null;
     }
 
-    public boolean isDocumentFileName(String fileName) {
+    public boolean isProjectFile(String fileName) {
         return fileName != null && (PROJECT_DOCUMENTS.contains(fileName) || SLIDE_FILE.matcher(fileName).matches());
     }
 

@@ -4,7 +4,7 @@ import com.dasi.ppt.agent.infrastructure.persistence.database.po.ShortcutSetting
 
 public interface ShortcutSettingsMapper {
 
-    ShortcutSettingsPo getShortcutSettings();
+    ShortcutSettingsPo findShortcutSettings();
 
     void saveShortcutSettings(ShortcutSettingsPo settings);
 }

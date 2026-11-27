@@ -1,5 +1,6 @@
 package com.dasi.ppt.agent.interfaces.controller.project.dto;
 
+import com.dasi.ppt.agent.domain.project.model.entity.Project;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AccessLevel;
@@ -29,7 +30,7 @@ public final class SaveProjectLogoDto {
     @NotNull
     private MultipartFile file;
 
-    public byte[] readPng() throws IOException {
+    public Project toEntity() throws IOException {
         if (file.getSize() > 2_000_000) {
             throw invalid("Logo 不能超过 2 MB");
         }
@@ -37,6 +38,9 @@ public final class SaveProjectLogoDto {
         if (bytes.length <= PNG_SIGNATURE.length || !Arrays.equals(PNG_SIGNATURE, Arrays.copyOf(bytes, PNG_SIGNATURE.length))) {
             throw invalid("Logo 需为 PNG 图片");
         }
-        return bytes;
+        return Project.builder()
+                .id(projectId)
+                .logo(bytes)
+                .build();
     }
 }

@@ -10,7 +10,7 @@
         <result column="require_high_risk_approval" property="requireHighRiskApproval"/>
     </resultMap>
 
-    <select id="getBehaviorSettings" resultMap="behaviorSettingsPo">
+    <select id="findBehaviorSettings" resultMap="behaviorSettingsPo">
         SELECT * FROM settings_behavior WHERE id = 1
     </select>
 

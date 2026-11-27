@@ -1,7 +1,7 @@
 package com.dasi.ppt.agent.interfaces.controller.file;
 
 import com.dasi.ppt.agent.domain.project.service.AttachmentService;
-import com.dasi.ppt.agent.domain.project.service.ProjectService;
+import com.dasi.ppt.agent.domain.project.service.DeckService;
 import com.dasi.ppt.agent.domain.project.service.ThumbnailService;
 import com.dasi.ppt.agent.domain.shared.exception.RenderUnavailableException;
 import com.dasi.ppt.agent.interfaces.controller.IdVo;
@@ -29,7 +29,7 @@ public class FileController {
     private static final MediaType WEBP = MediaType.parseMediaType("image/webp");
     private final AttachmentService attachmentService;
     private final ThumbnailService thumbnailService;
-    private final ProjectService projectService;
+    private final DeckService deckService;
 
     @GetMapping("/projects/{projectId}/slides/{slideId}/thumbnail")
     public ResponseEntity<byte[]> readThumbnail(@PathVariable String projectId, @PathVariable String slideId) {
@@ -69,6 +69,6 @@ public class FileController {
 
     @PostMapping("/files/open")
     public void open(@Valid @RequestBody OpenProjectFileDto request) {
-        projectService.openFile(request.getProjectId(), request.getFileName());
+        deckService.openFile(request.getProjectId(), request.getFileName());
     }
 }

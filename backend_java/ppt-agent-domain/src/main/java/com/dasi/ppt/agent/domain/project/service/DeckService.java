@@ -1,74 +1,57 @@
 package com.dasi.ppt.agent.domain.project.service;
 
-import com.dasi.ppt.agent.domain.asset.service.AssetService;
 import com.dasi.ppt.agent.domain.project.model.entity.*;
 import com.dasi.ppt.agent.domain.project.model.enumeration.DeckFileType;
-import com.dasi.ppt.agent.domain.project.model.enumeration.DecorationPosition;
-import com.dasi.ppt.agent.domain.project.model.enumeration.DecorationType;
 import com.dasi.ppt.agent.domain.project.repository.IProjectRepository;
+import com.dasi.ppt.agent.domain.setting.model.entity.FileOpenSettings;
+import com.dasi.ppt.agent.domain.setting.service.SettingService;
 import com.dasi.ppt.agent.domain.shared.exception.ErrorCode;
-import com.dasi.ppt.agent.domain.shared.service.PathResolver;
-import com.dasi.ppt.agent.domain.shared.sse.EventPublisher;
+import com.dasi.ppt.agent.domain.shared.gateway.IPlatformGateway;
+import com.dasi.ppt.agent.domain.shared.service.NotifyService;
+import com.dasi.ppt.agent.domain.shared.service.PathService;
+import com.dasi.ppt.agent.domain.shared.service.SchemaService;
 import com.dasi.ppt.agent.domain.shared.sse.ProjectChangeArea;
-import com.dasi.ppt.agent.domain.shared.sse.SseEvent;
 import com.dasi.ppt.agent.domain.shared.util.HashUtil;
-import com.networknt.schema.Error;
-import com.networknt.schema.Schema;
-import com.networknt.schema.SchemaRegistry;
-import com.networknt.schema.SpecificationVersion;
 import lombok.RequiredArgsConstructor;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.support.TransactionTemplate;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.function.Consumer;
 
+import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.INHERIT_OPEN;
+import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.SYSTEM_OPEN;
 import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.*;
 
 @Service
 @RequiredArgsConstructor
 public class DeckService {
 
-    private final TransactionTemplate transactionTemplate;
     private final ObjectMapper objectMapper;
+    private final SchemaService schemaService;
     private final IProjectRepository projectRepository;
-    private final PathResolver pathResolver;
+    private final PathService pathService;
     private final ProjectWriteLock projectWriteLock;
-    private final EventPublisher eventPublisher;
-    private final AssetService assetService;
+    private final NotifyService notifyService;
+    private final SettingService settingService;
+    private final IPlatformGateway platformGateway;
 
-    private final Map<DeckFileType, Schema> schemas = loadSchemas();
-
-    // 启动时加载 meta、constraint、outline、spec 这四份 JSON Schema
-    private static Map<DeckFileType, Schema> loadSchemas() {
-        Map<DeckFileType, Schema> schemas = new EnumMap<>(DeckFileType.class);
-        SchemaRegistry registry = SchemaRegistry.withDefaultDialect(SpecificationVersion.DRAFT_2020_12);
-        for (DeckFileType fileType : List.of(DeckFileType.META, DeckFileType.CONSTRAINT, DeckFileType.OUTLINE, DeckFileType.SPEC)) {
-            String path = "schemas/" + fileType.getValue() + ".schema.json";
-            try (InputStream input = new ClassPathResource(path).getInputStream()) {
-                schemas.put(fileType, registry.getSchema(input));
-            } catch (IOException ex) {
-                throw new UncheckedIOException(ex);
-            }
+    // 利用操作系统根据对应的应用程序打开文件
+    public void openFile(String projectId, String fileName) {
+        // 1. 检查项目是否存在
+        if (!projectRepository.existsProject(projectId)) {
+            throw notFound(ErrorCode.FILE_NOT_FOUND);
         }
-        return schemas;
-    }
-
-    private byte[] readAndCheckBase(Path path, String baseHash) {
-        byte[] before = projectRepository.readFile(path);
-        if (!Objects.equals(baseHash, HashUtil.contentHash(before))) {
-            throw conflict(ErrorCode.CONTENT_CONFLICT);
+        // 2. 获取设置的应用程序
+        FileOpenSettings fileOpenSettings = settingService.getFileOpenSettings();
+        String choice = fileName.endsWith(".json") ? fileOpenSettings.getJsonOpen() : fileOpenSettings.getHtmlOpen();
+        if (INHERIT_OPEN.equals(choice)) {
+            choice = fileOpenSettings.getDefaultOpen();
         }
-        return before;
+        Path application = SYSTEM_OPEN.equals(choice) ? null : Path.of(choice);
+        // 3. 调用底层打开
+        platformGateway.openFile(projectId, fileName, application);
     }
 
     public Deck readDeck(String projectId) {
@@ -76,22 +59,22 @@ public class DeckService {
             throw notFound(ErrorCode.PROJECT_NOT_FOUND);
         }
 
-        byte[] metaBytes = projectRepository.readFile(pathResolver.metaPath(projectId));
-        byte[] constraintBytes = projectRepository.readFile(pathResolver.constraintPath(projectId));
-        byte[] outlineBytes = projectRepository.readFile(pathResolver.outlinePath(projectId));
+        byte[] metaBytes = projectRepository.readFile(pathService.metaPath(projectId));
+        byte[] constraintBytes = projectRepository.readFile(pathService.constraintPath(projectId));
+        byte[] outlineBytes = projectRepository.readFile(pathService.outlinePath(projectId));
 
-        Meta meta = decode(DeckFileType.META, metaBytes, Meta.class);
-        Constraint constraint = decode(DeckFileType.CONSTRAINT, constraintBytes, Constraint.class);
-        Outline outline = decode(DeckFileType.OUTLINE, outlineBytes, Outline.class);
+        Meta meta = schemaService.decode(DeckFileType.META, metaBytes, Meta.class);
+        Constraint constraint = schemaService.decode(DeckFileType.CONSTRAINT, constraintBytes, Constraint.class);
+        Outline outline = schemaService.decode(DeckFileType.OUTLINE, outlineBytes, Outline.class);
 
         List<Slide> slides = new ArrayList<>();
         if (outline != null) {
             for (String slideId : outline.slideIds()) {
-                byte[] spec = projectRepository.readFile(pathResolver.specPath(projectId, slideId));
-                byte[] html = projectRepository.readFile(pathResolver.htmlPath(projectId, slideId));
+                byte[] spec = projectRepository.readFile(pathService.specPath(projectId, slideId));
+                byte[] html = projectRepository.readFile(pathService.htmlPath(projectId, slideId));
                 Slide slide = Slide.builder()
                         .slideId(slideId)
-                        .spec(decode(DeckFileType.SPEC, spec, Spec.class))
+                        .spec(schemaService.decode(DeckFileType.SPEC, spec, Spec.class))
                         .html(html == null ? null : new String(html, StandardCharsets.UTF_8))
                         .specHash(HashUtil.contentHash(spec))
                         .htmlHash(HashUtil.contentHash(html))
@@ -139,11 +122,11 @@ public class DeckService {
     private String saveDocument(String projectId, String baseHash, byte[] content, DeckFileType fileType, String slideId, Outline outline) {
         // 1. 根据文件类型解析得到文件路径
         Path path = switch (fileType) {
-            case META -> pathResolver.metaPath(projectId);
-            case CONSTRAINT -> pathResolver.constraintPath(projectId);
-            case OUTLINE -> pathResolver.outlinePath(projectId);
-            case SPEC -> pathResolver.specPath(projectId, slideId);
-            case HTML -> pathResolver.htmlPath(projectId, slideId);
+            case META -> pathService.metaPath(projectId);
+            case CONSTRAINT -> pathService.constraintPath(projectId);
+            case OUTLINE -> pathService.outlinePath(projectId);
+            case SPEC -> pathService.specPath(projectId, slideId);
+            case HTML -> pathService.htmlPath(projectId, slideId);
         };
         String hash;
 
@@ -157,133 +140,72 @@ public class DeckService {
             if (projectRepository.hasPendingFileOperation(projectId) || projectRepository.isProjectBusy(projectId)) {
                 throw conflict(ErrorCode.PROJECT_BUSY);
             }
-            byte[] before = readAndCheckBase(path, baseHash);
+            // 3.3 校验当前文件内容与哈希一致
+            byte[] before = projectRepository.readFile(path);
+            if (!Objects.equals(baseHash, HashUtil.contentHash(before))) {
+                throw conflict(ErrorCode.CONTENT_CONFLICT);
+            }
+            // 3.4 校验 JSON 文件格式
             if (fileType != DeckFileType.HTML) {
-                List<Error> errors = schemas.get(fileType).validate(objectMapper.readTree(content));
-                if (!errors.isEmpty()) throw invalid(errors.get(0).toString());
+                schemaService.validate(fileType, content);
             }
+            // 3.5 校验 slideId 真实存在
             if (fileType == DeckFileType.SPEC || fileType == DeckFileType.HTML) {
-                requireSlideInOutline(projectId, slideId);
+                byte[] outlineBytes = projectRepository.readFile(pathService.outlinePath(projectId));
+                Outline currentOutline = schemaService.decode(DeckFileType.OUTLINE, outlineBytes, Outline.class);
+                if (currentOutline == null || !currentOutline.slideIds().contains(slideId)) {
+                    throw invalid("幻灯片不在当前大纲中");
+                }
             }
-            hash = HashUtil.contentHash(content);
-            List<FileChange> changes = new ArrayList<>();
-            addChange(changes, path.getFileName().toString(), before, content);
+            // 3.6 校验 outline 符合格式
             if (outline != null) {
-                validateOutline(outline);
-                Set<String> slideIds = outline.slideIds();
-                for (String name : projectRepository.listDocumentFileNames(projectId)) {
-                    String fileSlideId = pathResolver.slideIdFromFileName(name);
-                    if (fileSlideId != null && !slideIds.contains(fileSlideId)) {
-                        addChange(changes, name, projectRepository.readFile(pathResolver.filePathByFileName(projectId, name)), null);
+                if (!outline.getSlides().isEmpty() && !outline.getChapters().isEmpty()) {
+                    throw invalid("大纲根节点不能同时包含直属幻灯片和章");
+                }
+                for (Outline.Chapter chapter : outline.getChapters()) {
+                    if (!chapter.getSlides().isEmpty() && !chapter.getSections().isEmpty()) {
+                        throw invalid("章不能同时包含直属幻灯片和节");
                     }
                 }
             }
-            if (changes.isEmpty()) return hash;
-            projectRepository.commitFiles(projectId, changes, () -> projectRepository.updateProjectTime(projectId, System.currentTimeMillis()));
-        }
-        notifyContentChanged(projectId);
-        return hash;
-    }
 
-    // 需要让所有 slideId 都出现在 outline 里面
-    private void requireSlideInOutline(String projectId, String slideId) {
-        byte[] outlineBytes = projectRepository.readFile(pathResolver.outlinePath(projectId));
-        Outline outline = decode(DeckFileType.OUTLINE, outlineBytes, Outline.class);
-        if (outline == null || !outline.slideIds().contains(slideId)) {
-            throw invalid("幻灯片不在当前大纲中");
-        }
-    }
-
-    // 专属于 outline 的业务逻辑
-    private void validateOutline(Outline outline) {
-        if (!outline.getSlides().isEmpty() && !outline.getChapters().isEmpty()) {
-            throw invalid("大纲根节点不能同时包含直属幻灯片和章");
-        }
-        for (Outline.Chapter chapter : outline.getChapters()) {
-            if (!chapter.getSlides().isEmpty() && !chapter.getSections().isEmpty()) {
-                throw invalid("章不能同时包含直属幻灯片和节");
+            // 4. 记录文件变更
+            hash = HashUtil.contentHash(content);
+            List<FileChange> fileChanges = new ArrayList<>();
+            if (!Arrays.equals(before, content)) {
+                FileChange fileChange = FileChange.builder()
+                        .fileName(path.getFileName().toString())
+                        .before(before)
+                        .after(content)
+                        .build();
+                fileChanges.add(fileChange);
             }
-        }
-    }
 
-    public void notifyContentChanged(String projectId) {
-        SseEvent.ProjectChanged event = SseEvent.ProjectChanged.builder()
-                .areas(List.of(ProjectChangeArea.CONTENT))
-                .build();
-        projectRepository.listProjectSessionIds(projectId).forEach(id -> eventPublisher.publish(id, event));
-    }
-
-    // 调用方在同一项目锁内复核授权或检查点；保存业务结果的回调在最终事务中执行。
-    public boolean commitDocumentFiles(String projectId, Map<String, byte[]> replacements, Map<String, String> baseHashes, Consumer<List<FileChange>> saveBusiness) {
-        List<FileChange> changes = new ArrayList<>();
-        replacements.forEach((name, after) -> {
-            if (!pathResolver.isDocumentFileName(name)) throw invalid("无效的文稿文件名：" + name);
-            Path path = pathResolver.filePathByFileName(projectId, name);
-            byte[] before = baseHashes.containsKey(name) ? readAndCheckBase(path, baseHashes.get(name)) : projectRepository.readFile(path);
-            addChange(changes, name, before, after);
-        });
-        projectRepository.commitFiles(projectId, changes, () -> saveBusiness.accept(changes));
-        return !changes.isEmpty();
-    }
-
-    private void addChange(List<FileChange> changes, String name, byte[] before, byte[] after) {
-        if (!Arrays.equals(before, after)) {
-            changes.add(FileChange.builder()
-                    .fileName(name)
-                    .before(before)
-                    .after(after)
-                    .build());
-        }
-    }
-
-    private <T> T decode(DeckFileType part, byte[] bytes, Class<T> type) {
-        if (bytes == null) return null;
-        try {
-            JsonNode json = objectMapper.readTree(bytes);
-            if (!schemas.get(part).validate(json).isEmpty()) {
-                throw illegal("文稿文件格式无效：" + part.getValue());
-            }
-            return objectMapper.treeToValue(json, type);
-        } catch (JacksonException ex) {
-            throw illegal("文稿文件格式无效：" + part.getValue());
-        }
-    }
-
-
-    // 调用方持有项目锁。缩略图只读取目标页源码，同时保留完整页序以确定页码。
-    public ExportSnapshot readRenderSnapshot(String projectId, String targetSlideId) {
-        return transactionTemplate.execute(status -> {
-            Project project = projectRepository.findProjectAppearance(projectId);
-            if (project == null) return null;
-            Meta meta = decode(DeckFileType.META, projectRepository.readFile(pathResolver.metaPath(projectId)), Meta.class);
-            Outline outline = decode(DeckFileType.OUTLINE, projectRepository.readFile(pathResolver.outlinePath(projectId)), Outline.class);
-            List<ExportSnapshot.Page> pages = new ArrayList<>();
+            // 5. 记录被删除的页面
             if (outline != null) {
-                validateOutline(outline);
-                outline.forEachPage((page, chapterTitle) -> {
-                    byte[] html = targetSlideId == null || targetSlideId.equals(page.getId())
-                            ? projectRepository.readFile(pathResolver.htmlPath(projectId, page.getId())) : null;
-                    pages.add(ExportSnapshot.Page.builder()
-                            .slideId(page.getId())
-                            .title(page.getTitle())
-                            .chapterTitle(chapterTitle)
-                            .html(html == null ? null : new String(html, StandardCharsets.UTF_8))
-                            .build());
-                });
+                Set<String> slideIds = outline.slideIds();
+                for (String fileName : projectRepository.listProjectFilesNames(projectId)) {
+                    String id = pathService.slideIdFromFileName(fileName);
+                    if (id != null && !slideIds.contains(id)) {
+                        FileChange fileChange = FileChange.builder()
+                                .fileName(fileName)
+                                .before(projectRepository.readFile(pathService.filePathByFileName(projectId, fileName)))
+                                .after(null)
+                                .build();
+                        fileChanges.add(fileChange);
+                    }
+                }
             }
-            Map<DecorationType, DecorationPosition> positions = new EnumMap<>(DecorationType.class);
-            positions.put(DecorationType.SLIDE_PAGINATION, project.getSlidePaginationPosition());
-            positions.put(DecorationType.DECK_TITLE, project.getDeckTitlePosition());
-            positions.put(DecorationType.CHAPTER_TITLE, project.getChapterTitlePosition());
-            positions.put(DecorationType.LOGO, project.getLogoPosition());
-            return ExportSnapshot.builder()
-                    .projectName(project.getTitle())
-                    .deckTitle(meta == null ? null : meta.getTitle())
-                    .pages(List.copyOf(pages))
-                    .themeCss(project.getTheme() == null ? null : assetService.getAssetDetail(project.getTheme()).getContent())
-                    .positions(Collections.unmodifiableMap(positions))
-                    .logo(project.isLogoPresent() ? projectRepository.findProjectLogo(projectId) : null)
-                    .build();
-        });
+
+            // 6. 执行变更
+            if (fileChanges.isEmpty()) {
+                return hash;
+            }
+            projectRepository.commitFiles(projectId, fileChanges);
+        }
+
+        // 7. 通知项目
+        notifyService.notifyProjectChanged(projectId, ProjectChangeArea.CONTENT);
+        return hash;
     }
 }

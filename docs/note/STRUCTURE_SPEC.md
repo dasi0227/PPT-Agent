@@ -82,6 +82,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `domain/` 下的业务包为 `project/`、`agent/`、`asset/` 和 `setting/`。
 - `domain/gateway/` 与业务包平级，集中存放领域层调用外部能力的接口，实现类位于 `infrastructure/gateway/`。
 - `domain/shared/` 与业务包平级，`exception/` 存放共用异常与错误码，`constant/` 和 `util/` 存放跨领域常量和辅助函数。
+- `domain/shared/service/NotifyService` 按项目 ID 或已取得的会话 ID 列表广播项目内容、外观及会话列表的变更。
 - `domain/shared/sse/EventPublisher` 接收投递目标和 `SseEvent`，供项目与 Agent 服务发布订阅通知。
 - `domain/shared/sse/SseEvent` 是普通 Java 接口，六个实现均在接口内声明为嵌套类，分别为 `ProjectChanged`、`SessionChanged`、`RunProgress`、`InteractionChanged`、`CommandProgress` 和 `Reset`。[事件名与字段](API.html#history)
 - `domain/shared/sse/ProjectChangeArea` 对应 `project_changed.areas`，取 `content / appearance / sessions`。`domain/shared/sse/SessionChangeArea` 对应 `session_changed.areas`，取 `history / run / commands / plan / suggestions / context / checkpoints`。[重读范围](API_SPEC.md#消息)
@@ -90,7 +91,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - 领域仓储接口位于各自的 `repository/`，外部能力接口位于各自的 `gateway/`。
 - `project/model/entity/` 存放项目实体 `Project` 和页面实体 `Slide`。
 - `Slide` 以稳定的 `slide_id` 标识一页，关联该页的 `Spec` 和 HTML 源码。
-- `DeckService` 在初始化时加载资料、约束、大纲和页面规格的 JSON Schema。读取时从仓储取得文件字节，校验并解码正文，用同一份字节计算哈希，再组装 `Deck`。保存时校验并编码提交的 JSON 正文。
+- `SchemaService` 在初始化时加载资料、约束、大纲和页面规格的 JSON Schema。`DeckService` 读取文稿时通过 `SchemaService.decode` 校验并解码正文，用同一份文件字节计算哈希，再组装 `Deck`。保存时将 JSON 正文编码为字节并调用 `SchemaService.validate`。`ExportService` 读取渲染快照时复用 `decode` 解析资料和大纲。
 - `project/model/Deck` 按所属项目聚合 `Meta`、`Constraint`、`Outline` 及按大纲页序排列的 `List<Slide>`。`DeckInfoVo` 按每页的 `slide_id` 组装响应中的 `slides` 和 `hashes.slides`。[项目读取契约](API.html#projects)
 - `project/model/Meta` 对应 `.meta.json`，保存文稿标题、语言、页数要求、受众和目标。
 - `project/model/Spec` 对应 `{slide_id}.json`，描述单页的用途、核心信息、内容元素和布局。
@@ -132,7 +133,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - `setting/model/` 存放模型配置和各组全局设置。
 - `ISettingRepository` 负责分组设置的持久化。
 - `domain/gateway/IPlatformGateway` 提供本地应用选择与项目文件打开能力，由 `infrastructure/gateway/PlatformGateway` 实现。
-- `ProjectService.openFile` 从 `SettingService` 读取偏好，按文件后缀和继承规则确定打开方式，向 `PlatformGateway` 传入应用路径或用 `null` 指定系统默认应用。网关确认实际目标是该项目根目录下的普通文稿文件后调用桌面应用。设置页通过 `SettingService.pickApplication` 调用同一网关选择应用。[文件打开契约](API_SPEC.md#其它)
+- `DeckService.openFile` 从 `SettingService` 读取偏好，按文件后缀和继承规则确定打开方式，向 `PlatformGateway` 传入应用路径或用 `null` 指定系统默认应用。网关确认实际目标是该项目根目录下的普通文稿文件后调用桌面应用。设置页通过 `SettingService.pickApplication` 调用同一网关选择应用。[文件打开契约](API_SPEC.md#其它)
 - `domain/gateway/IBashGateway` 由 `infrastructure/gateway/BashGateway` 实现。
 - `agent/model/enumeration/` 存放工具与 Harness 的专属错误码。
 - `agent/model/enumeration/InstructionDecision` 表示输入判定结果。有效结果为 `task / gossip / disclosure / bypass / irrelevant`，未判定或检测失败时字段为空。[指令判定字段](DATABASE.html#messages-instruction-decision)
@@ -184,7 +185,7 @@ Java 后端的数据类型使用普通类，禁止使用 `record`。下表中的
 - 文稿回退和返回只处理上述五类文件，其他项目文件保留原状。
 - 项目主题正文和 Logo 存在数据库中，项目目录不另存永久副本。
 - `.git/` 存放项目 Git 仓库，`.runtime/` 存放项目运行文件。
-- 人工保存由 `DeckService` 受理，Agent 已获批的候选文件由 `ToolExecutor.commitApprovedFiles` 提交，历史文件由 `CheckpointService.restoreCheckpointFiles` 恢复。三者共用 `IProjectRepository.commitFiles`。项目锁覆盖基准校验、记录旧内容、修改文件和业务事务。内存中的 `project/model/entity/FileChange` 包含文件名和前后字节，用于落盘及计算实际差异。
+- 人工保存由 `DeckService` 受理，通过 `IProjectRepository.commitFiles` 提交文稿变更。项目锁覆盖基准校验、记录旧内容、修改文件和业务事务。内存中的 `project/model/entity/FileChange` 包含文件名和前后字节，用于落盘及计算实际差异。后续接入 Agent 写入时须在项目锁内复核授权和文件基准，接入历史恢复时须在锁内复核目标和会话版本。[工作流规范](WORKFLOW_SPEC.md)
 - `ProjectRepository` 通过 `FileUndoMapper` 把整批旧内容写入 SQLite 的 `file_undo`，然后由 `FileStorer` 原子替换或删除文稿。业务结果与删除该项目撤销记录在同一事务提交。
 - 启动时按 `file_undo.project_id` 查找待恢复项目，在项目写锁内还原整批文件。恢复失败的项目保留记录并暂停写入，其他项目可继续使用。[撤销表](DATABASE_SPEC.md#file_undo) · [启动恢复](WORKFLOW_SPEC.md#启动恢复)
 - `.runtime/attachments/{attachment_id}.png` 保存附件原图，同名 `.webp` 保存附件缩略图。

@@ -8,5 +8,9 @@ public interface ICheckpointRepository {
 
     List<Checkpoint> listCheckpoints(String sessionId);
 
+    boolean hasReturnCheckpoint(String sessionId);
+
+    void deleteReturnAndDetachedCheckpoints(String sessionId);
+
     int advanceSessionRevision(String sessionId, long expectedRevision);
 }

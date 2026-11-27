@@ -83,8 +83,8 @@ public class AssetRepository implements IAssetRepository {
     }
 
     @Override
-    public int deleteTag(String tagId) {
-        assetMapper.updateAssetTimestampsByTagId(tagId, System.currentTimeMillis());
+    public int deleteTag(String tagId, long updatedAt) {
+        assetMapper.updateAssetTimestampsByTagId(tagId, updatedAt);
         return tagMapper.deleteTag(tagId);
     }
 

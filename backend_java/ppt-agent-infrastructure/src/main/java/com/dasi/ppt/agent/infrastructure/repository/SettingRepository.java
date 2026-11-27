@@ -41,7 +41,11 @@ public class SettingRepository implements ISettingRepository {
 
     @Override
     public FileOpenSettings getFileOpenSettings() {
-        return toEntity(fileOpenSettingsMapper.getFileOpenSettings());
+        FileOpenSettings settings = toEntity(fileOpenSettingsMapper.findFileOpenSettings());
+        if (settings == null) {
+            throw new DataRetrievalFailureException("缺少 settings_fileopen 初始化记录");
+        }
+        return settings;
     }
 
     @Override
@@ -51,7 +55,11 @@ public class SettingRepository implements ISettingRepository {
 
     @Override
     public ShortcutSettings getShortcutSettings() {
-        return toEntity(shortcutSettingsMapper.getShortcutSettings());
+        ShortcutSettings settings = toEntity(shortcutSettingsMapper.findShortcutSettings());
+        if (settings == null) {
+            throw new DataRetrievalFailureException("缺少 settings_shortcut 初始化记录");
+        }
+        return settings;
     }
 
     @Override
@@ -61,7 +69,11 @@ public class SettingRepository implements ISettingRepository {
 
     @Override
     public BehaviorSettings getBehaviorSettings() {
-        return toEntity(behaviorSettingsMapper.getBehaviorSettings());
+        BehaviorSettings settings = toEntity(behaviorSettingsMapper.findBehaviorSettings());
+        if (settings == null) {
+            throw new DataRetrievalFailureException("缺少 settings_behavior 初始化记录");
+        }
+        return settings;
     }
 
     @Override
@@ -87,7 +99,11 @@ public class SettingRepository implements ISettingRepository {
 
     @Override
     public ModelRouteSettings getModelRoutes() {
-        return toEntity(routeSettingsMapper.getModelRoutes());
+        ModelRouteSettings routes = toEntity(routeSettingsMapper.findModelRoutes());
+        if (routes == null) {
+            throw new DataRetrievalFailureException("缺少 settings_route 初始化记录");
+        }
+        return routes;
     }
 
     @Override

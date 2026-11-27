@@ -20,7 +20,7 @@ public class ThumbnailService {
     private static final String INDEX = ".runtime/render-slides.json";
     private final IFileGateway fileGateway;
     private final IRenderGateway renderGateway;
-    private final DeckService deckService;
+    private final ExportService exportService;
     private final ObjectMapper objectMapper;
     private final ProjectWriteLock projectWriteLock;
     private final ProjectWriteLock renderLocks = new ProjectWriteLock();
@@ -67,7 +67,7 @@ public class ThumbnailService {
     }
 
     private IRenderGateway.RenderMaterial readPage(String projectId, String slideId) {
-        ExportSnapshot snapshot = deckService.readRenderSnapshot(projectId, slideId);
+        ExportSnapshot snapshot = exportService.findRenderSnapshot(projectId, slideId);
         if (snapshot != null) {
             for (int index = 0; index < snapshot.getPages().size(); index++) {
                 ExportSnapshot.Page page = snapshot.getPages().get(index);

@@ -15,7 +15,7 @@
         <result column="suggest" property="suggest"/>
     </resultMap>
 
-    <select id="getModelRoutes" resultMap="routeSettingsPo">
+    <select id="findModelRoutes" resultMap="routeSettingsPo">
         SELECT * FROM settings_route WHERE id = 1
     </select>
 

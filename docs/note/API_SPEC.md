@@ -130,7 +130,7 @@
 ## 会话
 
 - `POST /api/sessions/create` 需提供所属项目的 `project_id`，可省略 `title` 以使用「新会话」。
-- `POST /api/sessions/update` 改名时需提供 `session_id` 和去首尾空白后非空的 `title`。
+- `POST /api/sessions/update` 改名时需提供 `session_id` 和去首尾空白后非空的 `title`。会话不存在时返回 `SESSION_NOT_FOUND`。
 - 创建成功返回 `{"id":"…"}`，改名成功返回空响应体。每次成功改名都严格递增 `updated_at`，包括提交原名。标题与更新时间从会话列表读取。
 - `can_return=true` 且标题实际改变时，改名须提交检查点列表的 `revision` 作为 `expected_revision`。缺少必填版本返回 `INVALID_ARGUMENT`。
 - 改名请求只要携带 `expected_revision` 就校验版本，过期返回 `STALE_REVISION`。

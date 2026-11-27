@@ -6,4 +6,17 @@
         <id column="run_id" property="runId"/>
         <result column="snapshot" property="snapshot"/>
     </resultMap>
+
+    <select id="hasReturnCheckpoint" resultType="boolean">
+        SELECT EXISTS (SELECT 1 FROM checkpoints WHERE session_id = #{sessionId} AND run_id IS NULL)
+    </select>
+
+    <delete id="deleteReturnAndDetachedCheckpoints">
+        DELETE FROM checkpoints
+        WHERE session_id = #{sessionId} AND (
+            run_id IS NULL OR NOT EXISTS (
+                SELECT 1 FROM runs WHERE runs.session_id = checkpoints.session_id AND runs.id = checkpoints.run_id
+            )
+        )
+    </delete>
 </mapper>

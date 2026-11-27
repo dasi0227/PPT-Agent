@@ -2,7 +2,7 @@ package com.dasi.ppt.agent.infrastructure.gateway;
 
 import com.dasi.ppt.agent.domain.shared.gateway.IPlatformGateway;
 import com.dasi.ppt.agent.domain.shared.exception.ErrorCode;
-import com.dasi.ppt.agent.domain.shared.service.PathResolver;
+import com.dasi.ppt.agent.domain.shared.service.PathService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -48,7 +48,7 @@ public class PlatformGateway implements IPlatformGateway {
             [void][System.Diagnostics.Process]::Start($info)
             """;
 
-    private final PathResolver pathResolver;
+    private final PathService pathService;
 
     @Override
     public Path pickApplication() {
@@ -72,14 +72,14 @@ public class PlatformGateway implements IPlatformGateway {
 
     @Override
     public void openFile(String projectId, String fileName, Path application) {
-        if (!pathResolver.isDocumentFileName(fileName)) {
+        if (!pathService.isProjectFile(fileName)) {
             throw invalid("只能打开项目根目录下的文稿文件");
         }
         Path file;
         try {
-            Path directory = pathResolver.projectsRoot().toRealPath().resolve(projectId);
-            file = pathResolver.filePathByFileName(projectId, fileName).toRealPath();
-            if (!directory.equals(file.getParent()) || !pathResolver.isDocumentFileName(file.getFileName().toString()) || !Files.readAttributes(file, BasicFileAttributes.class).isRegularFile()) {
+            Path directory = pathService.projectsRoot().toRealPath().resolve(projectId);
+            file = pathService.filePathByFileName(projectId, fileName).toRealPath();
+            if (!directory.equals(file.getParent()) || !pathService.isProjectFile(file.getFileName().toString()) || !Files.readAttributes(file, BasicFileAttributes.class).isRegularFile()) {
                 throw invalid("只能打开项目根目录下的普通文稿文件");
             }
         } catch (NoSuchFileException e) {

@@ -26,7 +26,7 @@ public interface IAssetRepository {
 
     int updateTagName(String tagId, String name);
 
-    int deleteTag(String tagId);
+    int deleteTag(String tagId, long updatedAt);
 
     boolean existsAssetByTypeAndName(AssetType type, String name, String excludeAssetId);
 

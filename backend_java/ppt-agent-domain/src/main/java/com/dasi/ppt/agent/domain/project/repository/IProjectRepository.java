@@ -14,34 +14,29 @@ public interface IProjectRepository {
 
     int updateProjectTitle(String projectId, String title, long updatedAt);
 
-    void updateProjectTime(String projectId, long updatedAt);
-
     List<String> listProjectSessionIds(String projectId);
 
     int deleteProject(String projectId);
 
-    // 项目删除暂存目录或文稿撤销记录仍然存在。
     boolean hasPendingFileOperation(String projectId);
 
-    // 项目有活跃的 Run 或 commit 命令。
     boolean isProjectBusy(String projectId);
 
     boolean existsProject(String projectId);
 
     Project findProjectAppearance(String projectId);
 
-    int updateProjectTheme(String projectId, String themeId, long updatedAt);
+    int updateProjectTheme(Project project);
 
     int updateProjectPositions(Project project);
 
     byte[] findProjectLogo(String projectId);
 
-    int updateProjectLogo(String projectId, byte[] logo, long updatedAt);
+    int updateProjectLogo(Project project);
 
     byte[] readFile(Path path);
 
-    List<String> listDocumentFileNames(String projectId);
+    List<String> listProjectFilesNames(String projectId);
 
-    // 调用方持有项目写锁。业务写入与删除撤销记录在同一 SQLite 事务完成。
-    void commitFiles(String projectId, List<FileChange> changes, Runnable saveBusiness);
+    void commitFiles(String projectId, List<FileChange> fileChanges);
 }

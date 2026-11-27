@@ -6,28 +6,21 @@ import com.dasi.ppt.agent.domain.asset.repository.IAssetRepository;
 import com.dasi.ppt.agent.domain.project.model.entity.Project;
 import com.dasi.ppt.agent.domain.project.model.enumeration.DecorationPosition;
 import com.dasi.ppt.agent.domain.project.repository.IProjectRepository;
-import com.dasi.ppt.agent.domain.setting.model.entity.FileOpenSettings;
-import com.dasi.ppt.agent.domain.setting.service.SettingService;
 import com.dasi.ppt.agent.domain.shared.exception.ErrorCode;
-import com.dasi.ppt.agent.domain.shared.gateway.IPlatformGateway;
+import com.dasi.ppt.agent.domain.shared.service.NotifyService;
 import com.dasi.ppt.agent.domain.shared.sse.EventPublisher;
 import com.dasi.ppt.agent.domain.shared.sse.ProjectChangeArea;
-import com.dasi.ppt.agent.domain.shared.sse.SseEvent;
 import com.dasi.ppt.agent.domain.shared.util.IdUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.nio.file.Path;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.function.IntSupplier;
 
-import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.SYSTEM_OPEN;
-import static com.dasi.ppt.agent.domain.shared.constant.SystemConstant.INHERIT_OPEN;
-import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.conflict;
-import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.invalid;
-import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.notFound;
+import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.*;
 
 @Service
 @RequiredArgsConstructor
@@ -38,8 +31,7 @@ public class ProjectService {
     private final TransactionTemplate transaction;
     private final ProjectWriteLock projectWriteLock;
     private final EventPublisher eventPublisher;
-    private final SettingService settingService;
-    private final IPlatformGateway platformGateway;
+    private final NotifyService notifyService;
 
     public List<Project> listProjects() {
         return projectRepository.listProjects();
@@ -64,19 +56,23 @@ public class ProjectService {
         }
     }
 
-    // 1.上锁 2.判断是否可更改 3.拿到所有会话id 4.删除整个项目 5.关闭所有会话的连接
     public void deleteProject(String projectId) {
+        // 1. 上锁
         synchronized (projectWriteLock.lockFor(projectId)) {
             List<String> deletedSessionIds = transaction.execute(status -> {
+                // 2. 判断是否有正在执行的操作
                 if (projectRepository.hasPendingFileOperation(projectId)) {
                     throw conflict(ErrorCode.PROJECT_BUSY);
                 }
+                // 3. 拿到所有会话 id
                 List<String> sessionIds = projectRepository.listProjectSessionIds(projectId);
+                // 4. 删除项目
                 if (projectRepository.deleteProject(projectId) == 0) {
                     throw notFound(ErrorCode.PROJECT_NOT_FOUND);
                 }
                 return sessionIds;
             });
+            // 5. 关闭所有会话的连接
             deletedSessionIds.forEach(eventPublisher::close);
         }
     }
@@ -89,63 +85,50 @@ public class ProjectService {
         return project;
     }
 
-    // 1.上锁 2.判断是否可更改 3.检查主题可用 4.拿到所有会话id 5.通知项目已经改变
-    public void saveProjectTheme(String projectId, String themeId) {
-        synchronized (projectWriteLock.lockFor(projectId)) {
-            List<String> sessionIds = transaction.execute(status -> {
-                if (projectRepository.hasPendingFileOperation(projectId)) {
-                    throw conflict(ErrorCode.PROJECT_BUSY);
-                }
-                if (!projectRepository.existsProject(projectId)) {
-                    throw notFound(ErrorCode.PROJECT_NOT_FOUND);
-                }
-
-                Asset theme = assetRepository.findAssetById(themeId);
-                if (theme == null) {
-                    throw notFound(ErrorCode.ASSET_NOT_FOUND);
-                }
-                if (theme.getType() != AssetType.THEME || !theme.getEnabled() || theme.getContent().isBlank()) {
-                    throw invalid("需选择已启用且正文有效的主题");
-                }
-
-                int updatedRows = projectRepository.updateProjectTheme(projectId, themeId, System.currentTimeMillis());
-                return updatedRows == 0 ? List.of() : projectRepository.listProjectSessionIds(projectId);
-            });
-            publishAppearanceChange(sessionIds);
-        }
-    }
-
-    public void saveProjectPositions(Project project) {
-        String projectId = project.getId();
-        synchronized (projectWriteLock.lockFor(projectId)) {
-            List<String> sessionIds = transaction.execute(status -> {
-                if (projectRepository.hasPendingFileOperation(projectId)) {
-                    throw conflict(ErrorCode.PROJECT_BUSY);
-                }
-                if (!projectRepository.existsProject(projectId)) {
-                    throw notFound(ErrorCode.PROJECT_NOT_FOUND);
-                }
-
-                EnumSet<DecorationPosition> occupied = EnumSet.noneOf(DecorationPosition.class);
-                for (DecorationPosition position : List.of(project.getSlidePaginationPosition(), project.getDeckTitlePosition(), project.getChapterTitlePosition(), project.getLogoPosition())) {
-                    if (position != DecorationPosition.NONE && !occupied.add(position)) {
-                        throw invalid("显示的装饰位置不能重叠");
-                    }
-                }
-                project.setUpdatedAt(System.currentTimeMillis());
-
-                int updatedRows = projectRepository.updateProjectPositions(project);
-                return updatedRows == 0 ? List.of() : projectRepository.listProjectSessionIds(projectId);
-            });
-            publishAppearanceChange(sessionIds);
-        }
-    }
-
     public byte[] findProjectLogo(String projectId) {
         return projectRepository.findProjectLogo(projectId);
     }
 
-    public void saveProjectLogo(String projectId, byte[] logo) {
+    public void saveProjectTheme(Project project) {
+        updateProjectAppearance(project.getId(), () -> {
+            Asset theme = assetRepository.findAssetById(project.getTheme());
+            if (theme == null) {
+                throw notFound(ErrorCode.ASSET_NOT_FOUND);
+            }
+            if (theme.getType() != AssetType.THEME || !theme.getEnabled() || theme.getContent().isBlank()) {
+                throw invalid("需选择已启用且正文有效的主题");
+            }
+            project.setUpdatedAt(System.currentTimeMillis());
+            return projectRepository.updateProjectTheme(project);
+        });
+    }
+
+    public void saveProjectPositions(Project project) {
+        updateProjectAppearance(project.getId(), () -> {
+            EnumSet<DecorationPosition> occupied = EnumSet.noneOf(DecorationPosition.class);
+            for (DecorationPosition position : List.of(
+                    project.getSlidePaginationPosition(),
+                    project.getDeckTitlePosition(),
+                    project.getChapterTitlePosition(),
+                    project.getLogoPosition())) {
+                if (position != DecorationPosition.NONE && !occupied.add(position)) {
+                    throw invalid("显示的装饰位置不能重叠");
+                }
+            }
+            project.setUpdatedAt(System.currentTimeMillis());
+            return projectRepository.updateProjectPositions(project);
+        });
+    }
+
+    // logo 为 null 时清除项目 Logo。
+    public void saveProjectLogo(Project project) {
+        updateProjectAppearance(project.getId(), () -> {
+            project.setUpdatedAt(System.currentTimeMillis());
+            return projectRepository.updateProjectLogo(project);
+        });
+    }
+
+    private void updateProjectAppearance(String projectId, IntSupplier update) {
         synchronized (projectWriteLock.lockFor(projectId)) {
             List<String> sessionIds = transaction.execute(status -> {
                 if (projectRepository.hasPendingFileOperation(projectId)) {
@@ -154,46 +137,10 @@ public class ProjectService {
                 if (!projectRepository.existsProject(projectId)) {
                     throw notFound(ErrorCode.PROJECT_NOT_FOUND);
                 }
-                int updatedRows = projectRepository.updateProjectLogo(projectId, logo, System.currentTimeMillis());
+                int updatedRows = update.getAsInt();
                 return updatedRows == 0 ? List.of() : projectRepository.listProjectSessionIds(projectId);
             });
-            publishAppearanceChange(sessionIds);
+            notifyService.notifyProjectChanged(sessionIds, ProjectChangeArea.APPEARANCE);
         }
-    }
-
-    public void deleteProjectLogo(String projectId) {
-        synchronized (projectWriteLock.lockFor(projectId)) {
-            List<String> sessionIds = transaction.execute(status -> {
-                if (projectRepository.hasPendingFileOperation(projectId)) {
-                    throw conflict(ErrorCode.PROJECT_BUSY);
-                }
-                if (!projectRepository.existsProject(projectId)) {
-                    throw notFound(ErrorCode.PROJECT_NOT_FOUND);
-                }
-                int updatedRows = projectRepository.updateProjectLogo(projectId, null, System.currentTimeMillis());
-                return updatedRows == 0 ? List.of() : projectRepository.listProjectSessionIds(projectId);
-            });
-            publishAppearanceChange(sessionIds);
-        }
-    }
-
-    private void publishAppearanceChange(List<String> sessionIds) {
-        SseEvent.ProjectChanged event = SseEvent.ProjectChanged.builder()
-                .areas(List.of(ProjectChangeArea.APPEARANCE))
-                .build();
-        sessionIds.forEach(sessionId -> eventPublisher.publish(sessionId, event));
-    }
-
-    public void openFile(String projectId, String fileName) {
-        if (!projectRepository.existsProject(projectId)) {
-            throw notFound(ErrorCode.FILE_NOT_FOUND);
-        }
-        FileOpenSettings settings = settingService.getFileOpenSettings();
-        String choice = fileName.endsWith(".json") ? settings.getJsonOpen() : settings.getHtmlOpen();
-        if (INHERIT_OPEN.equals(choice)) {
-            choice = settings.getDefaultOpen();
-        }
-        Path application = SYSTEM_OPEN.equals(choice) ? null : Path.of(choice);
-        platformGateway.openFile(projectId, fileName, application);
     }
 }

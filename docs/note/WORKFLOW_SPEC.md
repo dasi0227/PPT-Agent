@@ -177,7 +177,7 @@ JEV 的 Intent、Prune、Rechristen、Preview 分别由 `IntentHook`、`ToolPrun
 
 历史位置新开 Run、发起非 `polish` 命令或修订 `handoff`，须在受理事务中核对 `branch_revision` 并清理返回行及脱离当前历史的检查点。`polish` 保留返回入口。手动改名和删除计划使用 `expected_revision`。实际改名或删除计划成功后放弃返回入口，同名或失败时保留。人工保存共享文稿时，各会话保留原有检查点、返回行和版本，提交后仅通知项目文稿变更。[检查点事务](DATABASE_SPEC.md#checkpoints)
 
-`ExportService` 在项目写锁内检查项目占用情况，再调用 `DeckService` 读取有效大纲和按页序排列的 HTML，并在同一数据库读事务中固定项目名称、装饰位置、Logo 和所选主题 CSS。文稿装饰标题取 `Meta.title`，根直属页省略章标题。释放锁后，Java 将完整快照一次交给 worker，取得成品后直接响应当前请求。[导出接口](API_SPEC.md#导出) · [项目读取约束](DATABASE_SPEC.md#projects)
+`ExportService` 在项目写锁内检查项目占用情况，再通过 `findRenderSnapshot` 读取大纲及各页 HTML，并在同一数据库读事务中固定项目名称、装饰位置、Logo 和所选主题 CSS。缩略图调用同一方法时只读取目标页 HTML，并保留大纲页序。文稿装饰标题取 `Meta.title`，根直属页省略章标题。释放锁后，Java 将完整快照一次交给 worker，取得成品后直接响应当前请求。[导出接口](API_SPEC.md#导出) · [项目读取约束](DATABASE_SPEC.md#projects)
 
 ### 启动恢复
 

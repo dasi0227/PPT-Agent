@@ -3,6 +3,7 @@ package com.dasi.ppt.agent.interfaces.controller.session;
 import com.dasi.ppt.agent.domain.agent.service.session.SessionService;
 import com.dasi.ppt.agent.interfaces.controller.IdVo;
 import com.dasi.ppt.agent.interfaces.controller.session.dto.CreateSessionDto;
+import com.dasi.ppt.agent.interfaces.controller.session.dto.UpdateSessionDto;
 import com.dasi.ppt.agent.interfaces.controller.session.vo.SessionListVo;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -33,5 +34,10 @@ public class SessionController {
         return IdVo.builder()
                 .id(sessionService.createSession(request.toEntity()))
                 .build();
+    }
+
+    @PostMapping("/sessions/update")
+    public void updateSession(@Valid @RequestBody UpdateSessionDto request) {
+        sessionService.updateSession(request.getSessionId(), request.getTitle(), request.readExpectedRevision());
     }
 }

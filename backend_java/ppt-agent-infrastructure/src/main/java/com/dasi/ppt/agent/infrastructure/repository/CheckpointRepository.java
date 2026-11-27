@@ -27,6 +27,16 @@ public class CheckpointRepository implements ICheckpointRepository {
     private final ObjectMapper objectMapper;
 
     @Override
+    public boolean hasReturnCheckpoint(String sessionId) {
+        return checkpointMapper.hasReturnCheckpoint(sessionId);
+    }
+
+    @Override
+    public void deleteReturnAndDetachedCheckpoints(String sessionId) {
+        checkpointMapper.deleteReturnAndDetachedCheckpoints(sessionId);
+    }
+
+    @Override
     public int advanceSessionRevision(String sessionId, long expectedRevision) {
         return sessionMapper.advanceSessionRevision(sessionId, expectedRevision);
     }

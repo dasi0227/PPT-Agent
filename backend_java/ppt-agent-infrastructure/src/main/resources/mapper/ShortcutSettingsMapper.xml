@@ -21,7 +21,7 @@
         <result column="select_suggestion" property="selectSuggestion"/>
     </resultMap>
 
-    <select id="getShortcutSettings" resultMap="shortcutSettingsPo">
+    <select id="findShortcutSettings" resultMap="shortcutSettingsPo">
         SELECT * FROM settings_shortcut WHERE id = 1
     </select>
 
