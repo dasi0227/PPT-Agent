@@ -36,5 +36,7 @@ public interface IAssetRepository {
 
     boolean isUsedAsProjectTheme(String assetId);
 
+    List<String> listSessionIdsForThemeContentChange(String themeId, String content);
+
     int deleteAsset(String assetId);
 }

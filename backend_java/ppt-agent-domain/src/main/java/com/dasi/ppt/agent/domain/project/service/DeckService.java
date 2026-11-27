@@ -177,17 +177,6 @@ public class DeckService {
                     throw invalid("幻灯片不在当前大纲中");
                 }
             }
-            // 2.6 校验 outline 符合格式
-            if (outline != null) {
-                if (!outline.getPages().isEmpty() && !outline.getChapters().isEmpty()) {
-                    throw invalid("大纲根节点不能同时包含直属幻灯片和章");
-                }
-                for (Outline.Chapter chapter : outline.getChapters()) {
-                    if (!chapter.getPages().isEmpty() && !chapter.getSections().isEmpty()) {
-                        throw invalid("章不能同时包含直属幻灯片和节");
-                    }
-                }
-            }
 
             // 3. 记录文件变更
             hash = HashUtil.contentHash(content);

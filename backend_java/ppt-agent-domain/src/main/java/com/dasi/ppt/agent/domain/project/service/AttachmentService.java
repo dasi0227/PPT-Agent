@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 import java.nio.file.Path;
 
+import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.conflict;
 import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.notFound;
 
 @Service
@@ -36,6 +37,9 @@ public class AttachmentService {
         synchronized (lockService.projectLock(projectId)) {
             if (!projectRepository.existsProject(projectId)) {
                 throw notFound(ErrorCode.PROJECT_NOT_FOUND);
+            }
+            if (projectRepository.hasPendingFileOperation(projectId)) {
+                throw conflict(ErrorCode.PROJECT_BUSY);
             }
             String attachmentId = IdUtil.genAttachmentId();
             Path original = pathService.attachmentOriginal(projectId, attachmentId);

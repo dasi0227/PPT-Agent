@@ -23,5 +23,7 @@ public interface AssetMapper {
 
     boolean isUsedAsProjectTheme(String assetId);
 
+    List<String> listSessionIdsForThemeContentChange(@Param("themeId") String themeId, @Param("content") String content);
+
     int deleteAsset(String assetId);
 }

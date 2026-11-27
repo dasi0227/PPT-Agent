@@ -5,10 +5,14 @@ import com.dasi.ppt.agent.domain.asset.model.entity.Tag;
 import com.dasi.ppt.agent.domain.asset.model.enumeration.AssetType;
 import com.dasi.ppt.agent.domain.asset.repository.IAssetRepository;
 import com.dasi.ppt.agent.domain.shared.exception.ErrorCode;
+import com.dasi.ppt.agent.domain.shared.service.NotifyService;
+import com.dasi.ppt.agent.domain.shared.sse.ProjectChangeArea;
 import com.dasi.ppt.agent.domain.shared.util.IdUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 
@@ -19,6 +23,7 @@ import static com.dasi.ppt.agent.domain.shared.exception.BusinessException.*;
 public class AssetService {
 
     private final IAssetRepository assetRepository;
+    private final NotifyService notifyService;
 
     public List<Asset> listAssets(AssetType type, String query) {
         return assetRepository.listAssets(type, query == null ? "" : query);
@@ -64,8 +69,19 @@ public class AssetService {
         if (tagIds != null && !tagIds.isEmpty() && assetRepository.countTagsByTypeAndIds(type, tagIds) != tagIds.size()) {
             throw invalid("标签需存在、同类且不重复");
         }
+        List<String> affectedSessionIds = type == AssetType.THEME && asset.getContent() != null
+                ? assetRepository.listSessionIdsForThemeContentChange(asset.getId(), asset.getContent())
+                : List.of();
         asset.setUpdatedAt(System.currentTimeMillis());
         assetRepository.updateAsset(asset);
+        if (!affectedSessionIds.isEmpty()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    notifyService.notifyProjectChanged(affectedSessionIds, ProjectChangeArea.APPEARANCE);
+                }
+            });
+        }
     }
 
     @Transactional

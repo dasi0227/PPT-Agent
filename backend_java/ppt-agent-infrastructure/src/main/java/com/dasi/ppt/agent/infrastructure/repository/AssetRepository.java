@@ -121,6 +121,11 @@ public class AssetRepository implements IAssetRepository {
     }
 
     @Override
+    public List<String> listSessionIdsForThemeContentChange(String themeId, String content) {
+        return assetMapper.listSessionIdsForThemeContentChange(themeId, content);
+    }
+
+    @Override
     public int deleteAsset(String assetId) {
         return assetMapper.deleteAsset(assetId);
     }

@@ -1,1 +1,63 @@
-{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://ppt-agent.local/schemas/outline.schema.json","title":"PPT Outline","description":"Ordered slides or chapters at the root. The outline owns slide order and title.","type":"object","additionalProperties":false,"required":["slides","chapters"],"properties":{"slides":{"type":"array","maxItems":200,"items":{"$ref":"#/$defs/slide"}},"chapters":{"type":"array","maxItems":32,"items":{"$ref":"#/$defs/chapter"}}},"$defs":{"slide":{"type":"object","additionalProperties":false,"required":["id","title"],"properties":{"id":{"type":"string","pattern":"^sli_[A-Za-z0-9_-]+$","description":"Saved stable identity of this Outline page with the sli_ prefix. Preserve it when editing or moving the page, and pass it as slide_id when referencing the page in tools, runtime frames or events."},"title":{"type":"string","minLength":1,"maxLength":160}}},"section":{"type":"object","additionalProperties":false,"required":["id","title","slides"],"properties":{"id":{"type":"string","pattern":"^sec_[A-Za-z0-9_-]+$"},"title":{"type":"string","minLength":1,"maxLength":160},"slides":{"type":"array","maxItems":200,"items":{"$ref":"#/$defs/slide"}}}},"chapter":{"type":"object","additionalProperties":false,"required":["id","title","slides","sections"],"properties":{"id":{"type":"string","pattern":"^sec_[A-Za-z0-9_-]+$"},"title":{"type":"string","minLength":1,"maxLength":160},"slides":{"type":"array","maxItems":200,"items":{"$ref":"#/$defs/slide"}},"sections":{"type":"array","maxItems":64,"items":{"$ref":"#/$defs/section"}}}}}}
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ppt-agent.local/schemas/outline.schema.json",
+  "title": "PPT Outline",
+  "description": "Ordered slides or chapters at the root. The outline owns slide order and title.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["slides", "chapters"],
+  "properties": {
+    "slides": {"type": "array", "maxItems": 200, "items": {"$ref": "#/$defs/slide"}},
+    "chapters": {"type": "array", "maxItems": 32, "items": {"$ref": "#/$defs/chapter"}}
+  },
+  "not": {
+    "properties": {
+      "slides": {"minItems": 1},
+      "chapters": {"minItems": 1}
+    }
+  },
+  "errorMessage": {"not": "大纲根节点不能同时包含直属幻灯片和章"},
+  "$defs": {
+    "slide": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^sli_[A-Za-z0-9_-]+$",
+          "description": "Saved stable identity of this Outline page with the sli_ prefix. Preserve it when editing or moving the page, and pass it as slide_id when referencing the page in tools, runtime frames or events."
+        },
+        "title": {"type": "string", "minLength": 1, "maxLength": 160}
+      }
+    },
+    "section": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "slides"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^sec_[A-Za-z0-9_-]+$"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 160},
+        "slides": {"type": "array", "maxItems": 200, "items": {"$ref": "#/$defs/slide"}}
+      }
+    },
+    "chapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "slides", "sections"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^sec_[A-Za-z0-9_-]+$"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 160},
+        "slides": {"type": "array", "maxItems": 200, "items": {"$ref": "#/$defs/slide"}},
+        "sections": {"type": "array", "maxItems": 64, "items": {"$ref": "#/$defs/section"}}
+      },
+      "not": {
+        "properties": {
+          "slides": {"minItems": 1},
+          "sections": {"minItems": 1}
+        }
+      },
+      "errorMessage": {"not": "章不能同时包含直属幻灯片和节"}
+    }
+  }
+}

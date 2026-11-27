@@ -83,6 +83,14 @@
         SELECT EXISTS (SELECT 1 FROM projects WHERE theme = #{assetId})
     </select>
 
+    <select id="listSessionIdsForThemeContentChange" resultType="string">
+        SELECT s.id
+        FROM assets a
+        JOIN projects p ON p.theme = a.id
+        JOIN sessions s ON s.project_id = p.id
+        WHERE a.id = #{themeId} AND a.content != #{content}
+    </select>
+
     <delete id="deleteAsset">
         DELETE FROM assets WHERE id = #{assetId}
     </delete>
