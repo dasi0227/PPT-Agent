@@ -6,15 +6,9 @@ import com.dasi.ppt.agent.domain.setting.model.enumeration.ModelProvider;
 import com.dasi.ppt.agent.interfaces.controller.NotBlankIfPresent;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 
-@Builder
 @Getter
-@AllArgsConstructor
-@NoArgsConstructor
 public final class UpdateModelDto {
     @NotBlank(message = "更新模型需指定 id")
     private String id;

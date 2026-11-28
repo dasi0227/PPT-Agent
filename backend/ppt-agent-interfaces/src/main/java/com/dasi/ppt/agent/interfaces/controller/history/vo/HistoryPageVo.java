@@ -8,17 +8,13 @@ import com.dasi.ppt.agent.domain.agent.model.enumeration.InstructionStatus;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.RunStatus;
 import com.dasi.ppt.agent.domain.project.model.enumeration.ChangeStatus;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 
 import java.util.List;
 
 @Builder
 @Getter
-@AllArgsConstructor
-@NoArgsConstructor
 public final class HistoryPageVo {
     private String revision;
     private String nextBefore;
@@ -26,8 +22,6 @@ public final class HistoryPageVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class HistoryItemVo {
         private String seq;
         private long createdAt;
@@ -38,8 +32,6 @@ public final class HistoryPageVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class RunHistoryVo {
         private String id;
         private RunStatus status;
@@ -54,8 +46,6 @@ public final class HistoryPageVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class ActionHistoryVo {
         private String id;
         private String operationId;
@@ -69,8 +59,6 @@ public final class HistoryPageVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class HistoryInstructionVo {
         private String id;
         private String text;
@@ -82,8 +70,6 @@ public final class HistoryPageVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class HistoryReplyVo {
         private String id;
         private String text;
@@ -92,8 +78,6 @@ public final class HistoryPageVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class PublicReferenceVo {
         private InstructionReferenceType type;
         private String assetId;
@@ -106,8 +90,6 @@ public final class HistoryPageVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class ActionSummaryResultVo {
         private String title;
         private Long beforeTokens;
@@ -123,8 +105,6 @@ public final class HistoryPageVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class ChangeSummaryVo {
         private RunChangesVo.ChangeTargetVo target;
         private ChangeStatus status;

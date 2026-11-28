@@ -2,17 +2,13 @@ package com.dasi.ppt.agent.interfaces.controller.asset.vo;
 
 import com.dasi.ppt.agent.domain.asset.model.entity.Asset;
 import com.dasi.ppt.agent.domain.asset.model.enumeration.AssetType;
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 
 import java.util.List;
 
 @Builder
 @Getter
-@AllArgsConstructor
-@NoArgsConstructor
 public final class AssetInfoVo {
     private String id;
     private AssetType type;

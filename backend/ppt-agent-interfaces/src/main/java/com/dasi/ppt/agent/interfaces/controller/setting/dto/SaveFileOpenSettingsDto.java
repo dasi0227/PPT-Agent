@@ -3,17 +3,11 @@ package com.dasi.ppt.agent.interfaces.controller.setting.dto;
 import com.dasi.ppt.agent.domain.setting.model.entity.FileOpenSettings;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 
 import java.util.List;
 
-@Builder
 @Getter
-@AllArgsConstructor
-@NoArgsConstructor
 public final class SaveFileOpenSettingsDto {
     @NotBlank(message = "default_open 不能为空白")
     private String defaultOpen;

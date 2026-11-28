@@ -1,14 +1,6 @@
 package com.dasi.ppt.agent.domain.agent.service.tool;
 
-import com.dasi.ppt.agent.domain.agent.model.entity.ToolCall;
-import com.dasi.ppt.agent.domain.agent.model.enumeration.ToolName;
-import com.dasi.ppt.agent.domain.agent.service.run.RunState;
-import org.springframework.ai.tool.definition.ToolDefinition;
+public interface Tool<R extends ToolRequest> {
 
-public interface Tool {
-
-    ToolDefinition getDefinition(ToolName name);
-
-    ToolResult execute(ToolCall call, RunState runState);
-
+    ToolResult execute(R request);
 }

@@ -5,18 +5,14 @@ import com.dasi.ppt.agent.domain.project.model.entity.Deck;
 import com.dasi.ppt.agent.domain.project.model.entity.Meta;
 import com.dasi.ppt.agent.domain.project.model.entity.Outline;
 import com.dasi.ppt.agent.domain.project.model.entity.Spec;
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Builder
 @Getter
-@AllArgsConstructor
-@NoArgsConstructor
 public final class DeckInfoVo {
     private Meta meta;
     private Constraint constraint;
@@ -54,8 +50,6 @@ public final class DeckInfoVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class SlideContentVo {
         private Spec spec;
         private String html;
@@ -63,8 +57,6 @@ public final class DeckInfoVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class DeckHashesVo {
         private String meta;
         private String constraint;
@@ -74,8 +66,6 @@ public final class DeckInfoVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class SlideHashesVo {
         private String spec;
         private String html;

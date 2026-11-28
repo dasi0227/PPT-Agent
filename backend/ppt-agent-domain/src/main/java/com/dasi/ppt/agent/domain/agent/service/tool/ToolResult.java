@@ -9,8 +9,7 @@ import lombok.experimental.SuperBuilder;
 public abstract class ToolResult {
 
     private final ToolResultStatus status;
-    private final String text;
     private final String code;
+    private final String reason;
     private final String correction;
-
 }

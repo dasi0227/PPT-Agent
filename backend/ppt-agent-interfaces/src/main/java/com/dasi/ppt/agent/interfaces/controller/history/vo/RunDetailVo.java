@@ -6,17 +6,13 @@ import com.dasi.ppt.agent.domain.agent.model.enumeration.RunMode;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.RunStatus;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.ToolResultStatus;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.RunActivity;
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 
 import java.util.List;
 
 @Builder
 @Getter
-@AllArgsConstructor
-@NoArgsConstructor
 public final class RunDetailVo {
     private RunStatus status;
     private RunMode mode;
@@ -36,8 +32,6 @@ public final class RunDetailVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class RunMessageVo {
         private String id;
         private String seq;
@@ -53,8 +47,6 @@ public final class RunDetailVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class RunUsageVo {
         private long inputTokens;
         private long outputTokens;
@@ -64,8 +56,6 @@ public final class RunDetailVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class PendingInteractionVo {
         private String toolCallId;
         private InteractionType type;
@@ -74,8 +64,6 @@ public final class RunDetailVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class ExecutionFailureVo {
         private String code;
         private String message;

@@ -6,7 +6,7 @@ import lombok.Getter;
 
 @Builder
 @Getter
-public final class RenameResult implements ActionResult {
+public final class RenameResult extends ActionResult {
 
     private final String title;
 }

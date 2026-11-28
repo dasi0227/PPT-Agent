@@ -8,7 +8,7 @@ import java.util.List;
 
 @Builder
 @Getter
-public final class SuggestResult implements ActionResult {
+public final class SuggestResult extends ActionResult {
 
     private final List<String> requests;
 }

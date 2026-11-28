@@ -2,17 +2,13 @@ package com.dasi.ppt.agent.interfaces.controller.history.vo;
 
 import com.dasi.ppt.agent.domain.agent.model.enumeration.ActionStatus;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.ActionType;
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 
 import java.util.List;
 
 @Builder
 @Getter
-@AllArgsConstructor
-@NoArgsConstructor
 public final class ActionDetailVo {
     private String revision;
     private String operationId;
@@ -28,8 +24,6 @@ public final class ActionDetailVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class ActionInputVo {
         private String text;
         private String baseId;
@@ -38,8 +32,6 @@ public final class ActionDetailVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class ActionResultVo {
         private String title;
         private String content;

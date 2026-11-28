@@ -3,17 +3,11 @@ package com.dasi.ppt.agent.interfaces.controller.file.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 
 import static com.dasi.ppt.agent.domain.shared.service.PathService.PROJECT_FILE_NAME_REGEX;
 
-@Builder
 @Getter
-@AllArgsConstructor
-@NoArgsConstructor
 public final class OpenProjectFileDto {
     @NotBlank(message = "需指定项目 ID")
     private String projectId;

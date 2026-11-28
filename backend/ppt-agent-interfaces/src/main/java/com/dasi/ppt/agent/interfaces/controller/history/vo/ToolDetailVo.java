@@ -9,30 +9,24 @@ import com.dasi.ppt.agent.domain.asset.model.enumeration.AssetType;
 import com.dasi.ppt.agent.domain.project.model.enumeration.DeckFileType;
 import com.dasi.ppt.agent.domain.project.model.enumeration.ChangeStatus;
 import com.dasi.ppt.agent.interfaces.controller.interaction.vo.InteractionFormVo;
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 import tools.jackson.databind.JsonNode;
 
 import java.util.List;
 
 @Builder
 @Getter
-@AllArgsConstructor
-@NoArgsConstructor
 public final class ToolDetailVo {
     private JsonNode arguments;
     private ToolResultVo result;
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class ToolResultVo {
         private ToolResultStatus status;
         private JsonNode content;
-        private String text;
+        private String reason;
         private List<ToolChangedTargetVo> targets;
         private ToolImageVo image;
         private List<LoadedResourceVo> resources;
@@ -43,8 +37,6 @@ public final class ToolDetailVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class ToolChangedTargetVo {
         private DeckFileType part;
         private String path;
@@ -55,8 +47,6 @@ public final class ToolDetailVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class ToolImageVo {
         private String source;
         private String url;
@@ -65,8 +55,6 @@ public final class ToolDetailVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class LoadedResourceVo {
         private AssetType type;
         private String id;
@@ -75,8 +63,6 @@ public final class ToolDetailVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class ToolCommandVo {
         private String text;
         private Integer exitCode;
@@ -86,8 +72,6 @@ public final class ToolDetailVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class ToolInteractionVo {
         private InteractionType type;
         private InteractionFormVo.InteractionRequestVo request;
@@ -97,8 +81,6 @@ public final class ToolDetailVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class PreviewAssessmentVo {
         private String slideId;
         private PreviewStatus status;
@@ -109,8 +91,6 @@ public final class ToolDetailVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class PreviewScoresVo {
         private double contentCoverage;
         private double expressionClarity;
@@ -119,8 +99,6 @@ public final class ToolDetailVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class PreviewJudgesVo {
         private PreviewMismatch mismatch;
         private PreviewIssue issue;

@@ -3,25 +3,19 @@ package com.dasi.ppt.agent.interfaces.controller.checkpoint.vo;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.InstructionReferenceType;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.RunMode;
 import com.dasi.ppt.agent.interfaces.controller.execution.dto.AppendRunDto;
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 
 import java.util.List;
 
 @Builder
 @Getter
-@AllArgsConstructor
-@NoArgsConstructor
 public final class RollbackVo {
     private String revision;
     private RollbackInputVo input;
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class RollbackInputVo {
         private String text;
         private List<FullReferenceVo> references;
@@ -32,8 +26,6 @@ public final class RollbackVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class InitialScopeVo {
         private String currentSlideId;
         private List<String> slideIds;
@@ -43,8 +35,6 @@ public final class RollbackVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class FullReferenceVo {
         private InstructionReferenceType type;
         private String assetId;

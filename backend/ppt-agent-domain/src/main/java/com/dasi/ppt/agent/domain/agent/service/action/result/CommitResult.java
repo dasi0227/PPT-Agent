@@ -10,7 +10,7 @@ import java.util.List;
 @Builder
 @Getter
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public final class CommitResult implements ActionResult {
+public final class CommitResult extends ActionResult {
 
     private final boolean empty;
     private final String title;

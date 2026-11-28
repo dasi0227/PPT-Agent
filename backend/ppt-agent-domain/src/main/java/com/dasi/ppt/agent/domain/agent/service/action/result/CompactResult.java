@@ -9,7 +9,7 @@ import java.util.List;
 
 @Builder
 @Getter
-public final class CompactResult implements ActionResult {
+public final class CompactResult extends ActionResult {
 
     private final String title;
     private final String content;

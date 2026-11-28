@@ -6,15 +6,9 @@ import com.dasi.ppt.agent.domain.setting.model.enumeration.ModelProvider;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 
-@Builder
 @Getter
-@AllArgsConstructor
-@NoArgsConstructor
 public final class CreateModelDto {
     @NotBlank(message = "模型配置名不能为空白")
     @Size(max = 80, message = "模型配置名最多 80 个字符")

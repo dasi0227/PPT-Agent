@@ -820,7 +820,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <div class="diagram-scroll" data-scroll-id="tool-flow" tabindex="0" role="region" aria-label="工具执行、审批与提交图">
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 2240" width="1240" height="2240" role="group" aria-labelledby="tool-title tool-description">
 <title id="tool-title">工具分发与修改提交</title>
-<desc id="tool-description">ToolExecutor 记录并校验调用，按工具名从注入的 Map 取得 Tool 实现并分派。读取直接返回，修改先生成候选，必要时审批。写入前在项目锁内复核当前授权、获批候选和文件基准，再协调文件和数据库提交。可处理失败返回 ToolResult，已识别业务异常在工具边界转换。无法继续的异常传至 RunService，取消独立处理。</desc>
+<desc id="tool-description">ToolExecutor 记录并校验调用，按工具名从注入的 Map 取得 Tool 实现并分派。读取直接返回，命令在用户批准后执行并返回执行结果及审批信息。文稿编辑工具准备候选，必要时审批，写入前在项目锁内复核当前授权、获批候选和文件基准，再协调文件和数据库提交。可处理失败返回 ToolResult，已识别业务异常在工具边界转换。无法继续的异常传至 RunService，取消独立处理。</desc>
 <defs>
 <marker id="tool-arrow-normal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
 <path class="arrow-normal" d="M1 1 L9 5 L1 9 Z"/>
@@ -850,7 +850,6 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <polyline class="edge normal" points="467,712 467,772" marker-end="url(#tool-arrow-normal)"/>
 <polyline class="edge normal" points="773,712 773,772" marker-end="url(#tool-arrow-normal)"/>
 <polyline class="edge normal" points="1079,712 1079,772" marker-end="url(#tool-arrow-normal)"/>
-<polyline class="edge wait" points="636,866 618,866 618,744 467,744 467,772" marker-end="url(#tool-arrow-wait)"/>
 <polyline class="edge normal" points="467,892 467,962" marker-end="url(#tool-arrow-normal)"/>
 <polyline class="edge wait" points="565,1000 636,1000" marker-end="url(#tool-arrow-wait)"/>
 <polyline class="edge normal" points="467,1038 467,1140" marker-end="url(#tool-arrow-normal)"/>
@@ -1005,8 +1004,8 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <g id="tool-workers" class="node plain" transform="translate(636 772)">
 <rect width="274" height="158" rx="10"/>
 <text class="node-tag" x="16" y="25">gateway</text>
-<a class="class-link" href="#class-IBashGateway" aria-label="查看 IBashGateway 职责">
-<text class="node-name" x="16" y="50">IBashGateway</text>
+<a class="class-link" href="#class-IShellGateway" aria-label="查看 IShellGateway 职责">
+<text class="node-name" x="16" y="50">IShellGateway</text>
 </a>
 <a class="class-link" href="#class-IRenderGateway" aria-label="查看 IRenderGateway 职责">
 <text class="node-name" x="16" y="73">IRenderGateway</text>
@@ -1017,7 +1016,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <a class="class-link" href="#class-IJevGateway" aria-label="查看 IJevGateway 职责">
 <text class="node-name" x="16" y="119">IJevGateway</text>
 </a>
-<text class="node-caption" x="16" y="145">外部任务返回结果或候选</text>
+<text class="node-caption" x="16" y="145">返回各自的执行结果</text>
 </g>
 <g id="tool-controls" class="node plain" transform="translate(942 772)">
 <rect width="274" height="120" rx="10"/>
@@ -1099,14 +1098,14 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <text class="edge-label dependency" x="407" y="76" text-anchor="middle">先保存</text>
 <text class="edge-label normal" x="837" y="220" text-anchor="middle">不需执行</text>
 <text class="edge-label normal" x="655" y="320" text-anchor="middle">通过</text>
-<text class="edge-label wait" x="606" y="738" text-anchor="end">命令产生文件候选</text>
+<text class="edge-label normal" x="788" y="746">命令获批后执行</text>
 <text class="edge-label wait" x="599" y="984" text-anchor="middle">是</text>
 <text class="edge-label normal" x="493" y="1101" text-anchor="middle">否</text>
 <text class="edge-label loop" x="657" y="1103" text-anchor="middle">批准后继续</text>
 <text class="edge-label wait" x="984" y="1288" text-anchor="middle">拒绝 / 已关闭</text>
 <text class="edge-label normal" x="535" y="1289" text-anchor="middle">仍然有效</text>
 <text class="edge-label normal" x="89" y="1509" text-anchor="middle">读取结果</text>
-<text class="edge-label normal" x="1093" y="1423" text-anchor="middle">非写入结果 / 控制结果</text>
+<text class="edge-label normal" x="1093" y="1423" text-anchor="middle">外部工具 / 控制结果</text>
 <text class="edge-label loop" x="1087" y="1447" text-anchor="middle">提前返回也记录工具结果</text>
 <text class="edge-label normal" x="837" y="1511" text-anchor="middle">执行结果</text>
 <text class="edge-label loop" x="841" y="1656" text-anchor="middle">结果可读后再通知</text>
@@ -2123,7 +2122,7 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 </th>
 <td>具体工具的产物和执行反馈，或分派前的校验失败</td>
 <td>供 ToolExecutor 保存并转换为 observation 的完整结果</td>
-<td>通过 <code>getStatus()</code> 提供执行状态，按需携带反馈文本、工具专属或共享错误码及修正提示。具体工具在 <code>tool/result/</code> 定义产物。修改提交后记录实际差异，取消与未知故障由 RunService 处理。</td>
+<td>通过 <code>getStatus()</code> 提供执行状态。用户拒绝命令时返回状态为 <code>blocked</code> 的 <code>RunCommandResult</code>。已识别的工具错误返回 <code>ToolFailureResult</code>，记录错误码、原因和修正提示。具体工具在 <code>tool/result/</code> 定义产物。文稿编辑工具在提交后记录实际差异，取消与未知故障由 RunService 处理。</td>
 </tr>
 <tr id="class-ToolExecutor">
 <th scope="row">
@@ -2346,8 +2345,8 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <code>RunCommandTool</code>
 </th>
 <td>模型提出的命令、工作目录与已授权能力</td>
-<td>进程输出、候选文件变更及最终执行结果</td>
-<td>实现 run_command；调用命令 worker，在沙箱准备结果。需审批时先展示命令与候选变更；批准仅作用于该候选，主项目写入走统一提交边界。</td>
+<td>退出码、标准输出、标准错误和本次审批记录</td>
+<td>实现 <code>run_command</code>。通过 InteractionService 展示完整命令并取得答复，获批后调用 IShellGateway 在项目目录执行一次。拒绝时返回受阻状态和审批记录。</td>
 </tr>
 <tr id="class-RenderSlideTool">
 <th scope="row">
@@ -2561,14 +2560,14 @@ a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--ui-accent)
 <td>Intent、Prune、Rename 或 Preview 判定结果</td>
 <td>由 <code>infrastructure/gateway/JevGateway</code> 实现。网关将拼装器提供的材料和问题发送到同一 HTTP 接口并解析结果。Intent、Prune、Rename 由对应 Hook 发起，发送 JSON。RenderSlideTool 按需发起 Preview，使用 multipart/form-data 上传截图。JEV 调用在主模型 Hook 生命周期之外执行。</td>
 </tr>
-<tr id="class-IBashGateway">
+<tr id="class-IShellGateway">
 <th scope="row">
-<code>IBashGateway</code>
+<code>IShellGateway</code>
 <span class="type">接口</span>
 </th>
-<td>允许的 Bash 命令、沙箱参数与取消信号</td>
-<td>退出结果、输出及沙箱文件候选</td>
-<td>由 <code>infrastructure/gateway/BashGateway</code> 实现。对接 command-worker；执行与超时、取消、输出限制属于基础设施，是否允许应用结果由领域决定。</td>
+<td>工作目录、命令与取消信号</td>
+<td>退出码、标准输出和标准错误</td>
+<td>由 <code>infrastructure/gateway/ShellGateway</code> 实现。启动本机 Shell 进程，处理超时、取消及输出限制。</td>
 </tr>
 <tr id="class-IRenderGateway">
 <th scope="row">

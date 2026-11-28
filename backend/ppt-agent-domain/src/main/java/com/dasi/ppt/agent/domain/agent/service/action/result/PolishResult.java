@@ -6,7 +6,7 @@ import lombok.Getter;
 
 @Builder
 @Getter
-public final class PolishResult implements ActionResult {
+public final class PolishResult extends ActionResult {
 
     private final String title;
     private final String content;

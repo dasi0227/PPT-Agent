@@ -7,18 +7,14 @@ import com.dasi.ppt.agent.domain.project.model.enumeration.DecorationType;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonSetter;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.util.List;
 
-@Builder
 @Getter
 @Setter
-@AllArgsConstructor
 @NoArgsConstructor(onConstructor_ = @JsonCreator)
 public class AppendRunDto {
 
@@ -36,24 +32,13 @@ public class AppendRunDto {
     @Setter(lombok.AccessLevel.NONE)
     private boolean scopeProvided;
 
-    public static class AppendRunDtoBuilder {
-        public AppendRunDtoBuilder scope(RunScopeDto scope) {
-            this.scope = scope;
-            this.scopeProvided = true;
-            return this;
-        }
-    }
-
     @JsonSetter("scope")
     public void setScope(RunScopeDto scope) {
         this.scopeProvided = true;
         this.scope = scope;
     }
 
-    @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class RunScopeDto {
         private String currentSlideId;
         private List<String> slideIds;
@@ -61,10 +46,7 @@ public class AppendRunDto {
         private List<String> sectionIds;
     }
 
-    @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class InstructionReferenceDto {
         private InstructionReferenceType type;
         private String assetId;
@@ -79,10 +61,7 @@ public class AppendRunDto {
         private DomRegionDto region;
     }
 
-    @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class DomRegionDto {
         private String type;
         private CanvasRectDto rect;
@@ -90,10 +69,7 @@ public class AppendRunDto {
         private List<DomDecorationDto> decorations;
     }
 
-    @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class DomTargetDto {
         private String targetId;
         private String tag;
@@ -101,10 +77,7 @@ public class AppendRunDto {
         private CanvasRectDto rect;
     }
 
-    @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class DomDecorationDto {
         private DecorationType type;
         private DecorationPosition placement;
@@ -112,10 +85,7 @@ public class AppendRunDto {
         private CanvasRectDto rect;
     }
 
-    @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class DomFingerprintDto {
         private String tag;
         private int siblingIndex;
@@ -124,10 +94,7 @@ public class AppendRunDto {
         private List<DomAncestorDto> ancestors;
     }
 
-    @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class DomAncestorDto {
         private String tag;
         private String stableId;
@@ -135,10 +102,7 @@ public class AppendRunDto {
         private int siblingIndex;
     }
 
-    @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class CanvasRectDto {
         private double x;
         private double y;

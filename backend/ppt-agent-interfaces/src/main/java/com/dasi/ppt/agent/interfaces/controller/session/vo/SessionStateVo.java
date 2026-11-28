@@ -2,17 +2,13 @@ package com.dasi.ppt.agent.interfaces.controller.session.vo;
 
 import com.dasi.ppt.agent.domain.agent.model.enumeration.PlanStepStatus;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 
 import java.util.List;
 
 @Builder
 @Getter
-@AllArgsConstructor
-@NoArgsConstructor
 public final class SessionStateVo {
     private String revision;
     private PlanVo plan;
@@ -24,8 +20,6 @@ public final class SessionStateVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class PlanVo {
         private String runId;
         private List<PlanStepVo> steps;
@@ -33,8 +27,6 @@ public final class SessionStateVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class PlanStepVo {
         private String title;
         private PlanStepStatus status;
@@ -42,8 +34,6 @@ public final class SessionStateVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class ContextWindowVo {
         private long current;
         private long total;
@@ -54,8 +44,6 @@ public final class SessionStateVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class ContextDetailsVo {
         private List<TokenBreakdownItemVo> systemPrompt;
         private List<TokenBreakdownItemVo> runtime;
@@ -66,8 +54,6 @@ public final class SessionStateVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class TokenBreakdownItemVo {
         private String name;
         private long tokens;

@@ -6,24 +6,18 @@ import com.dasi.ppt.agent.domain.project.model.enumeration.DiffRowType;
 import com.dasi.ppt.agent.domain.project.model.enumeration.DiffType;
 import com.dasi.ppt.agent.domain.project.model.enumeration.OutlineNodeType;
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 
 import java.util.List;
 
 @Builder
 @Getter
-@AllArgsConstructor
-@NoArgsConstructor
 public final class RunChangesVo {
     private List<RunChangeDetailVo> items;
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class ChangeTargetVo {
         private DeckFileType part;
         private String slideId;
@@ -32,8 +26,6 @@ public final class RunChangesVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class RunChangeDetailVo {
         private ChangeTargetVo target;
         private ChangeStatus status;
@@ -43,8 +35,6 @@ public final class RunChangesVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class ChangeDiffVo {
         private DiffType type;
         private List<FieldDiffVo> fields;
@@ -55,8 +45,6 @@ public final class RunChangesVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class FieldDiffVo {
         private String field;
         private String label;
@@ -65,8 +53,6 @@ public final class RunChangesVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class FieldDiffRowVo {
         private DiffRowType type;
         private String value;
@@ -74,16 +60,12 @@ public final class RunChangesVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class OutlineDiffGroupVo {
         private List<OutlineDiffRowVo> rows;
     }
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class OutlineDiffRowVo {
         private DiffRowType type;
         private OutlineNodeType node;
@@ -94,8 +76,6 @@ public final class RunChangesVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class TextDiffHunkVo {
         private int oldStart;
         private int oldCount;
@@ -106,8 +86,6 @@ public final class RunChangesVo {
 
     @Builder
     @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
     public static final class TextDiffRowVo {
         private DiffRowType type;
         private String text;

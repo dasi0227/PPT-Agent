@@ -6,7 +6,7 @@ import lombok.Getter;
 
 @Builder
 @Getter
-public final class HandoffResult implements ActionResult {
+public final class HandoffResult extends ActionResult {
 
     private final String title;
     private final String content;
