@@ -2,10 +2,10 @@ package com.dasi.ppt.agent.domain.agent.service.tool.builtin;
 
 import com.dasi.ppt.agent.domain.shared.gateway.ILlmGateway;
 import com.dasi.ppt.agent.domain.agent.model.entity.ToolCall;
-import com.dasi.ppt.agent.domain.agent.model.entity.ToolResult;
 import com.dasi.ppt.agent.domain.agent.service.context.assembler.ReviewPromptAssembler;
 import com.dasi.ppt.agent.domain.agent.service.run.RunState;
 import com.dasi.ppt.agent.domain.agent.service.tool.Tool;
+import com.dasi.ppt.agent.domain.agent.service.tool.result.ReviewPptResult;
 import com.dasi.ppt.agent.domain.project.model.entity.Deck;
 import com.dasi.ppt.agent.domain.project.service.DeckService;
 import lombok.AllArgsConstructor;
@@ -24,7 +24,7 @@ public class ReviewPptTool implements Tool {
     private final DeckService deckService;
 
     @Override
-    public ToolResult execute(ToolCall call, RunState runState) {
+    public ReviewPptResult execute(ToolCall call, RunState runState) {
         throw new UnsupportedOperationException();
     }
 

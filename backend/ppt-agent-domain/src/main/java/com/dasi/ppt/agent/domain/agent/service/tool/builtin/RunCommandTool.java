@@ -7,11 +7,12 @@ import com.dasi.ppt.agent.domain.agent.model.enumeration.RunMode;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.RunStatus;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.ToolName;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.ToolResultStatus;
-import com.dasi.ppt.agent.domain.agent.model.entity.ToolResult;
 import com.dasi.ppt.agent.domain.agent.repository.ISessionRepository;
 import com.dasi.ppt.agent.domain.agent.service.interaction.InteractionService;
+import com.dasi.ppt.agent.domain.agent.service.interaction.InteractionService.PermissionAnswer;
 import com.dasi.ppt.agent.domain.agent.service.run.RunState;
 import com.dasi.ppt.agent.domain.agent.service.tool.Tool;
+import com.dasi.ppt.agent.domain.agent.service.tool.result.RunCommandResult;
 import com.dasi.ppt.agent.domain.shared.constant.SystemConstant;
 import com.dasi.ppt.agent.domain.shared.exception.ShellExecutionException;
 import com.dasi.ppt.agent.domain.shared.gateway.IShellGateway;
@@ -69,10 +70,10 @@ public class RunCommandTool implements Tool {
     }
 
     @Override
-    public ToolResult execute(ToolCall call, RunState runState) {
+    public RunCommandResult execute(ToolCall call, RunState runState) {
         Run run = runState.getRun();
         if (run.getMode() != RunMode.CREATE) {
-            return ToolResult.builder()
+            return RunCommandResult.builder()
                     .status(ToolResultStatus.BLOCKED)
                     .text("当前模式只读，无法执行本机命令")
                     .build();
@@ -84,7 +85,7 @@ public class RunCommandTool implements Tool {
             command = null;
         }
         if (command == null || command.isBlank() || command.indexOf(0) >= 0) {
-            return ToolResult.builder()
+            return RunCommandResult.builder()
                     .status(ToolResultStatus.FAILED)
                     .code("INVALID_ARGUMENT")
                     .text("command 必须是非空且不含 NUL 的字符串")
@@ -92,23 +93,24 @@ public class RunCommandTool implements Tool {
         }
         BooleanSupplier cancelled = () -> Thread.currentThread().isInterrupted()
                 || run.getStatus() == RunStatus.CANCELLING || run.getStatus() == RunStatus.CANCELLED;
-        InteractionService.PermissionAnswer answer = interactionService.awaitCommandPermission(
+        PermissionAnswer answer = interactionService.awaitCommandPermission(
                 run, call.getToolCallId(), command, cancelled);
-        ObjectNode interaction = objectMapper.createObjectNode();
-        interaction.put("type", "permission");
-        interaction.putObject("request").putObject("permission").put("command", command);
-        ObjectNode decision = interaction.putObject("answer").put("decision", answer.decision().getValue());
-        if (answer.feedback() != null) decision.put("feedback", answer.feedback());
-        ToolResult.ToolResultBuilder result = ToolResult.builder()
-                .interaction(interaction);
+        ObjectNode request = objectMapper.createObjectNode();
+        request.putObject("permission").put("command", command);
+        RunCommandResult.RunCommandResultBuilder<?, ?> result = RunCommandResult.builder()
+                .request(request)
+                .decision(answer.decision())
+                .feedback(answer.feedback());
         if (answer.decision() == PermissionDecision.DENY) {
-            return result.status(ToolResultStatus.BLOCKED)
+            return result
+                    .status(ToolResultStatus.BLOCKED)
                     .text("用户拒绝执行命令")
                     .build();
         }
         String projectId = sessionRepository.findProjectId(run.getSessionId());
         if (projectId == null) {
-            return result.status(ToolResultStatus.FAILED)
+            return result
+                    .status(ToolResultStatus.FAILED)
                     .code("SESSION_NOT_FOUND")
                     .text("会话不存在")
                     .build();
@@ -116,12 +118,16 @@ public class RunCommandTool implements Tool {
         try {
             IShellGateway.CommandResult output = shellGateway.execute(pathService.projectDirectory(projectId), command, cancelled);
             boolean success = output.getExitCode() == 0;
-            return result.status(success ? ToolResultStatus.COMPLETED : ToolResultStatus.FAILED)
+            return result
+                    .status(success ? ToolResultStatus.COMPLETED : ToolResultStatus.FAILED)
                     .code(success ? null : "COMMAND_EXIT_NONZERO")
-                    .content(objectMapper.valueToTree(output))
+                    .exitCode(output.getExitCode())
+                    .stdout(output.getStdout())
+                    .stderr(output.getStderr())
                     .build();
         } catch (ShellExecutionException ex) {
-            return result.status(ToolResultStatus.FAILED)
+            return result
+                    .status(ToolResultStatus.FAILED)
                     .code(ex.getCode())
                     .text(ex.getMessage())
                     .build();

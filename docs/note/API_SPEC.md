@@ -176,10 +176,11 @@
 - 整份清单未知为 `null`，确认无变化为 `[]`，单个目标无法展示时为 `type=unavailable` 并附 `reason`。
 - 工具详情使用 `tool_call` 消息的 `id` 查询。同次调用与结果按 `run_id + tool_call_id` 配对。
 - `arguments` 无公开参数时为 `{}`，`result=null` 表示尚无已记录结果。
+- 工具结果按具体结果类型返回公开字段，字段值为 `null` 时保留该键。审批答复包含 `decision` 和 `feedback`，无反馈时返回 `feedback=null`，无人工答复时返回 `answer=null`。
 - 文件修改成功后，结果中的 `targets` 给出实际差异。打开根目录文稿时，将目标文件名作为 `file_name` 提交。
 - 工具详情的 `interaction.request` 保留当时的表单内容，省略 `type` 和 `version`。
-- 资料审批保留原 `request.proposal`，`answer` 仅含决定及可选的拒绝反馈。
-- 资料编辑工具成功时，`result.content` 返回实际保存的完整定稿。受阻或失败时省略 `content`。
+- 资料审批保留原 `request.proposal`，拒绝时可通过 `feedback` 说明原因。
+- 资料编辑工具成功时，`result.content` 返回实际保存的完整定稿。受阻或失败时返回 `content=null`。
 - `edit_meta`、`edit_constraint` 的定稿为对象，`edit_outline` 的定稿为含正式节点 ID 的 JSON 源码字符串。
 - 预览评分完成时返回接口表定义的全部评分与判定项。评分缺失、越界或判定值无效时，`result.preview.status=unavailable` 并附 `reason`。
 - SSE 按会话订阅，事件名在 `event`，`data` 为 UTF-8 JSON。

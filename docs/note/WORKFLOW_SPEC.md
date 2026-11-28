@@ -30,7 +30,7 @@
 ## 2. 主循环与生命周期 Hook
 
 1. **取输入。** `RunGuard` 检查取消、轮次与活动时间预算、连续失败和重复无进展等停止条件。人工等待时间从活动时间中扣除。`InputService` 按 `seq` 处理已受理输入，对每条调用 `beforeInputProcessed`，应用判定并保存处理状态。
-2. **准备请求。** `ContextService` 准备会话与项目材料，`ToolRegistry.getToolNames(...)` 给出当前模式、输入判定及授权允许的工具名。主循环调用 `beforeModelCall`，再用 `ToolRegistry.getToolDefinitions(names)` 取得最终子集的工具定义并组装请求，保留 Assistant 与工具结果的配对和顺序。达到 `threshold_max` 时通过 `ActionService` 发起自动压缩，压缩成功后重新准备请求。
+2. **准备请求。** `ContextService` 准备会话与项目材料，`ToolExecutor.getToolNames(...)` 给出当前模式、输入判定及授权允许的工具名。主循环调用 `beforeModelCall`，再用 `ToolExecutor.getToolDefinitions(names)` 取得最终子集的工具定义并组装请求，保留 Assistant 与工具结果的配对和顺序。达到 `threshold_max` 时通过 `ActionService` 发起自动压缩，压缩成功后重新准备请求。
 3. **确认发送边界。** 发送前，`HarnessLoop` 与 `InputService` 检查准备、裁剪或压缩期间到达的新输入。有新输入则回到第 1 步，处理新增指令并重建请求。检查之后才受理的输入留到下一轮。
 4. **调用模型。** `HarnessLoop` 将组装好的 `LlmRequest` 交给 `ILlmGateway`，从 `LlmResponse` 读取正文、推理内容、有序工具调用及各次实际请求可取得的用量。基础设施实现 `LlmGateway` 使用 `OpenAiResponsesChatModel` 对接 `responses`，使用 `AnthropicChatModel` 对接 `anthropic`，并关闭 Spring AI 的自动工具执行。请求允许有限重试，切换备用模型时按目标协议重建请求。返回工具调用时交给 `ToolExecutor`，将配对结果带入下一轮。
 5. **尝试完成。** 得到候选回复后，主循环原子封闭追加入口并检查剩余输入。有已受理输入时恢复入口并继续处理。队列已清空时才准备 `BeforeRunCompletedEvent`。完成条件未满足就反馈具体缺项、恢复受理并继续。满足时保持入口关闭，将收尾交给 `RunService`。[主循环图](WORKFLOW.html#main-loop) · [模型与目录](STRUCTURE.html#dependencies-heading)
@@ -59,7 +59,7 @@
 | 入口 | 同步结果 | 由谁应用、失败如何处理 |
 |---|---|---|
 | `beforeInputProcessed(BeforeInputProcessedEvent)` | `IntentHook` → `BeforeInputProcessedResult` | `InputService` 落实判定。输入开始处理时另按规则投递 `AutoRenameHook`。命名条件独立判断，拒绝判定本身不统一短路命名。 |
-| `beforeModelCall(BeforeModelCallEvent)` | `ToolPruneHook` → `BeforeModelCallResult` | 仅覆盖 Harness 主模型请求。初始结果为已允许的工具，空集直接沿用。裁剪不可用时保留进入该 Hook 前的集合。执行时仍由 `ToolGuard` 校验。 |
+| `beforeModelCall(BeforeModelCallEvent)` | `ToolPruneHook` → `BeforeModelCallResult` | 仅覆盖 Harness 主模型请求。初始结果为已允许的工具，空集直接沿用。裁剪不可用时保留进入该 Hook 前的集合。`ToolExecutor` 在执行前核对本轮工具可见性与当前授权。 |
 | `beforeRunCompleted(BeforeRunCompletedEvent)` | `CompletionHook` → `BeforeRunCompletedResult` | 初始为尚未确认完成。检查任务所需的计划、授权、产物及明确要求的截图等。Plan 任务须经计划审批。纯闲聊可直接完成。检查异常不能按通过处理。输入开关、继续循环及终态提交由主流程决定。 |
 | `afterRunCompleted(RunCompletedEvent)` | 返回 `void` | 仅在成功完成事务提交后投递 `AutoSuggestHook`。事件带触发 Run 的最后输入 ID、固定开关与路由。`RunService` 交付材料后释放 `RunState`。 |
 
@@ -69,9 +69,9 @@
 
 ## 3. 工具执行、人工等待与提交
 
-16 个 `Tool` 组件以公开工具名注册为 Spring Bean。`ToolRegistry` 通过构造器接收 `Map<String, Tool>`，用 `name.getValue()` 查找实例。获取定义时，注册表将同一个 `ToolName` 传给工具的 `getDefinition(name)`。
+16 个 `Tool` 组件以公开工具名注册为 Spring Bean。`ToolExecutor` 通过构造器接收 `Map<String, Tool>`，内部以 `name.getValue()` 查找实例。生成定义时，执行器按 `ToolName` 枚举顺序遍历最终名单，将对应的名称传给各工具的 `getDefinition(name)`。
 
-主循环将 `LlmResponse` 中的 `ToolCall` 按模型给出的顺序交给 `ToolExecutor`。执行器先把调用 ID、原始工具名和参数写入 `tool_call` 消息，再解析 `ToolName`。未知名称走工具校验失败流程。已识别的调用经 `ToolGuard` 核对参数、可见工具、模式、调用身份与授权后，通过 `ToolRegistry.getToolByName(name)` 查找实现并调用其 `execute(call, state)`。独立只读调用可并行，配对和返回顺序沿用模型原调用。重复的 `(run_id, tool_call_id)` 沿用已有调用记录和已确认结果。缺少结果记录时，不能据此重新执行可能已产生副作用的工具。[工具执行图](WORKFLOW.html#tool-flow) · [工具详情字段](API.html#history)
+主循环将 `LlmResponse` 中的 `ToolCall` 按模型给出的顺序交给 `ToolExecutor`。执行器先把调用 ID、原始工具名和参数写入 `tool_call` 消息，再解析 `ToolName`。未知名称走工具校验失败流程。对于已识别的调用，执行器核对参数、本轮工具可见性、运行模式、调用身份与目标授权。校验通过后，执行器按名查找工具并调用其 `execute(call, state)`。独立只读调用可并行，配对和返回顺序沿用模型原调用。重复的 `(run_id, tool_call_id)` 沿用已有调用记录和已确认结果。缺少结果记录时，不能据此重新执行可能已产生副作用的工具。[工具执行图](WORKFLOW.html#tool-flow) · [工具详情字段](API.html#history)
 
 ### 人工答复如何生效
 
@@ -97,7 +97,7 @@ Create 中的 `update_plan` 直接替换生效计划的步骤。非空数组使�
 
 **准备候选。** `DeckService` 为每个待修改的文稿文件准备一份 `DeckEditCandidate`。`run_command` 的候选来自 `IBashGateway` 返回的沙箱修改。需要审批时，`InteractionService` 在等待期间保留候选。资料审批若提交完整 `draft`，以该定稿替换候选内容，沿用原读取基准。Chat、Ask、Plan 中只读。Create 执行阶段仅能提交授权范围内的项目资料（`.meta.json`、`.constraint.json`、`.outline.json`）和页面规格／源码（`{slide_id}.json`、`{slide_id}.html`）。辅助文件留在沙箱，`.git/`、`.runtime/` 受保护。
 
-1. **持锁复核。** 拿到项目写锁后，复查取消状态、当前授权、获批候选及文件基准。基准冲突时保留当前文件，按工具失败处理。人工保存在同一提交边界校验项目占用和 `base_hash`。项目有非终态 Run、正在 Git 提交或历史切换时返回 `PROJECT_BUSY`。导出采集快照时只短暂持锁，锁释放后即可保存。
+1. **持锁复核。** Agent 写入时，`ToolExecutor` 在项目写锁内复核取消状态、当前授权和获批候选，由 `DeckService` 在同一锁内核对文件基准。基准冲突时保留当前文件，按工具失败处理。人工保存在同一提交边界校验项目占用和 `base_hash`。项目有非终态 Run、正在 Git 提交或历史切换时返回 `PROJECT_BUSY`。导出采集快照时只短暂持锁，锁释放后即可保存。
 2. **保存旧内容。** 在独立 SQLite 事务中写入本批实际变化的每个文件的旧字节或缺失状态。确认事务提交后才开始修改文件。人工保存内容相同且无孤立页需清理时直接返回原哈希。
 3. **写入文件。** 在项目锁内逐个原子替换或删除文稿文件，确认文件和目录项落盘。
 4. **提交业务结果。** 同一 SQLite 事务删除本项目的 `file_undo` 记录，并完成人工保存的项目时间更新、Agent 的工具结果与实际差异及关联会话更新，或历史切换的会话恢复与版本更新。Agent 和历史操作即使没有文件变化也要提交各自的业务结果。[事务约束](DATABASE_SPEC.md#file_undo)
@@ -105,7 +105,9 @@ Create 中的 `update_plan` 直接替换生效计划的步骤。非空数组使�
 
 文件写入失败或业务事务结果不确定时，重读 `file_undo`。有记录则逐文件恢复旧状态，整批恢复成功后删除记录。若查询确认记录已随业务提交删除，则保留磁盘新版。查询或恢复失败时暂停该项目的后续写入。[启动恢复](#启动恢复)
 
-资料编辑成功后，模型收到的 `content` 和工具详情的 `result.content` 均取实际定稿。基本信息与约束返回对象，大纲返回含正式节点 ID 的 JSON 源码字符串。历史保留原 `request.proposal` 和审批决定，受阻或失败时省略 `content`。[工具结果契约](API_SPEC.md#消息)
+工具结果按具体类型保存交互字段。审批工具将决定和反馈分别写入 `decision` 和 `feedback`，无答复时两者均为 `null`。资料审批保留原 `request.proposal`。历史详情保留值为 `null` 的公开字段，已展示表单但无人工答复时返回 `interaction.answer=null`，有决定但无反馈时返回 `interaction.answer.feedback=null`。
+
+资料编辑成功后，模型收到的 `content` 和工具详情的 `result.content` 均取实际定稿。基本信息与约束返回对象，大纲返回含正式节点 ID 的 JSON 源码字符串。资料编辑受阻或失败时，两处均返回 `content=null`。[工具结果契约](API_SPEC.md#消息)
 
 ### 错误由哪一层处理
 

@@ -13,7 +13,7 @@ import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
-public class ActionService {
+public class ActionExecutor {
 
     private final IActionRepository actionRepository;
     private final ISessionRepository sessionRepository;

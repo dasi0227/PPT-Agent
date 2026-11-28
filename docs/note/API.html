@@ -1156,18 +1156,18 @@
               <td>
                 <ul class="fields">
                   <li><code>arguments</code>：对象，必返；可向用户展示的调用参数，无参数为 {}</li>
-                  <li><code>result</code>：对象或 null，必返；对应的已保存工具结果，尚无结果记录为 null</li>
+                  <li><code>result</code>：必返，值为已保存的工具结果对象，尚无记录时为 null。各工具按其结果类型返回公开字段，字段值为 null 时保留该键</li>
                   <li><code>result.status</code>：字符串，result 非 null 时必返；completed / blocked / failed</li>
-                  <li><code>result.content</code>：三种资料编辑工具成功保存的完整定稿。edit_meta、edit_constraint 为对象，edit_outline 为含正式节点 ID 的大纲 JSON 字符串</li>
-                  <li><code>result.text</code>：字符串，可选；工具输出、检查结论或失败原因</li>
-                  <li><code>result.targets</code>：数组，可选。每项含 part、path、diff，可选 slide_id。发生变更的目标必返 status（added / modified / deleted）。diff 复用「读取变更差异」每项的 type 与对应差异字段</li>
-                  <li><code>result.image</code>：对象，可选；含 source（render / attachment）、url 与可选 slide_id，定位调用当时的图片</li>
-                  <li><code>result.resources</code>：数组，可选；已加载资产的 {type, id, name} 数组</li>
-                  <li><code>result.command</code>：对象，可选；含 text；已知时含 exit_code、duration_ms、stdout_preview、stderr_preview</li>
-                  <li><code>result.interaction</code>：对象，可选；含 type、request、answer。type 与人工模块一致，request 为当时展示的表单内容</li>
-                  <li><code>result.interaction.answer</code>：对象或 null，有 interaction 时必返。提问为 {answers}，审批为 {decision, feedback?}，无人工答复为 null</li>
+                  <li><code>result.content</code>：三种资料编辑工具成功保存的完整定稿。edit_meta、edit_constraint 为对象，edit_outline 为含正式节点 ID 的大纲 JSON 字符串。受阻或失败时为 null</li>
+                  <li><code>result.text</code>：字符串或 null，表示工具输出、检查结论或失败原因</li>
+                  <li><code>result.targets</code>：数组或 null。每项含 part、path、diff，可选 slide_id。发生变更的目标必返 status（added / modified / deleted）。diff 复用「读取变更差异」每项的 type 与对应差异字段</li>
+                  <li><code>result.image</code>：对象或 null。图片对象含 source（render / attachment）、url 与可选 slide_id，定位调用当时的图片</li>
+                  <li><code>result.resources</code>：已加载资产的 {type, id, name} 数组或 null</li>
+                  <li><code>result.command</code>：对象或 null。命令对象含 text、exit_code、duration_ms、stdout_preview、stderr_preview，未知值为 null</li>
+                  <li><code>result.interaction</code>：对象或 null。交互对象含 type、request、answer。type 与人工模块一致，request 为当时展示的表单内容</li>
+                  <li><code>result.interaction.answer</code>：无人工答复时为 null。提问答复为 {answers}，审批答复为 {decision, feedback}，无反馈时 feedback 为 null</li>
                   <li><code>result.interaction.applied_scope</code>：仅 scope，处理完成时返回最终允许的幻灯片 ID 数组；null 表示全部，[] 表示未授权幻灯片</li>
-                  <li><code>result.preview</code>：对象，可选；含 slide_id、status（completed / unavailable / stale），完成时含 scores、judges，无法取得时含 reason</li>
+                  <li><code>result.preview</code>：对象或 null。评分对象含 slide_id、status（completed / unavailable / stale），完成时含 scores、judges，无法取得时含 reason</li>
                   <li><code>result.preview.scores</code>：<code>content_coverage、expression_clarity、requirement_adherence</code> 均为 0 至 3 的有限数值，允许小数</li>
                   <li><code>result.preview.judges.mismatch</code>：meta_mismatch / content_mismatch / spec_mismatch / visual_mismatch / none</li>
                   <li><code>result.preview.judges.issue</code>：expression_issue / layout_issue / visual_issue / none</li>
