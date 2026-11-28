@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.domain.agent.model.entity;
 
-import com.dasi.ppt.agent.domain.agent.model.enumeration.ActionType;
+import com.dasi.ppt.agent.domain.agent.service.action.ActionType;
 import com.dasi.ppt.agent.domain.setting.model.entity.ModelConfigSettings;
 import lombok.Builder;
 import lombok.Getter;

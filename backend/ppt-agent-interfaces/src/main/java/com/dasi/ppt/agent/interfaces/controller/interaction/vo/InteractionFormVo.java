@@ -1,5 +1,6 @@
 package com.dasi.ppt.agent.interfaces.controller.interaction.vo;
 
+import com.dasi.ppt.agent.domain.agent.model.enumeration.Decision;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.InteractionType;
 import com.dasi.ppt.agent.domain.project.model.enumeration.DeckFileType;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -67,7 +68,7 @@ public final class InteractionFormVo {
     @Getter
     public static final class InteractionAnswerVo {
         private List<QuestionAnswerVo> answers;
-        private String decision;
+        private Decision decision;
         private String feedback;
     }
 

@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.interfaces.controller.interaction.dto;
 
-import com.dasi.ppt.agent.domain.agent.model.enumeration.PermissionDecision;
+import com.dasi.ppt.agent.domain.agent.model.enumeration.Decision;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
@@ -14,6 +14,6 @@ public final class AnswerPermissionDto {
     @NotBlank
     private String version;
     @NotNull
-    private PermissionDecision decision;
+    private Decision decision;
     private String feedback;
 }

@@ -1,7 +1,7 @@
 package com.dasi.ppt.agent.interfaces.controller.history.vo;
 
 import com.dasi.ppt.agent.domain.agent.model.enumeration.ActionStatus;
-import com.dasi.ppt.agent.domain.agent.model.enumeration.ActionType;
+import com.dasi.ppt.agent.domain.agent.service.action.ActionType;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.InstructionDecision;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.InstructionReferenceType;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.InstructionStatus;

@@ -8,24 +8,20 @@ import lombok.Getter;
 
 @Getter
 @AllArgsConstructor
-public enum ActionType {
-    RENAME("rename"),
-    POLISH("polish"),
-    HANDOFF("handoff"),
-    COMPACT("compact"),
-    COMMIT("commit"),
-    SUGGEST("suggest");
+public enum Decision {
+    APPROVE("approve"),
+    REFUSE("refuse");
 
     @JsonValue
     private final String value;
 
     @JsonCreator
-    public static ActionType fromValue(String value) {
-        for (ActionType candidate : values()) {
+    public static Decision fromValue(String value) {
+        for (Decision candidate : values()) {
             if (candidate.value.equals(value)) {
                 return candidate;
             }
         }
-        throw new InvalidEnumValueException(ActionType.class, value);
+        throw new InvalidEnumValueException(Decision.class, value);
     }
 }

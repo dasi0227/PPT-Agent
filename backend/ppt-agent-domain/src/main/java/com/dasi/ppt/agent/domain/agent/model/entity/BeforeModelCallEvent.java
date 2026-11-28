@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.domain.agent.model.entity;
 
-import com.dasi.ppt.agent.domain.agent.model.enumeration.ToolName;
+import com.dasi.ppt.agent.domain.agent.model.enumeration.ToolType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -16,5 +16,5 @@ import java.util.Set;
 public final class BeforeModelCallEvent {
     private List<Message> history;
     private Message instruction;
-    private Set<ToolName> allowedTools;
+    private Set<ToolType> allowedTools;
 }

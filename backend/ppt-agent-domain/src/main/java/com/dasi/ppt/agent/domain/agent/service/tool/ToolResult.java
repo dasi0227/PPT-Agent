@@ -1,5 +1,6 @@
 package com.dasi.ppt.agent.domain.agent.service.tool;
 
+import com.dasi.ppt.agent.domain.agent.model.enumeration.Decision;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.ToolResultStatus;
 import lombok.Getter;
 import lombok.experimental.SuperBuilder;
@@ -12,4 +13,6 @@ public abstract class ToolResult {
     private final String code;
     private final String reason;
     private final String correction;
+    private final Decision decision;
+    private final String feedback;
 }

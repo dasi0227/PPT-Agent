@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.interfaces.controller.execution.dto;
 
-import com.dasi.ppt.agent.domain.agent.model.enumeration.ActionType;
+import com.dasi.ppt.agent.domain.agent.service.action.ActionType;
 import lombok.Getter;
 
 @Getter

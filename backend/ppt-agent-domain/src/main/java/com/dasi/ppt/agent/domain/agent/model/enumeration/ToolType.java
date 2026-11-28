@@ -8,7 +8,7 @@ import lombok.Getter;
 
 @Getter
 @AllArgsConstructor
-public enum ToolName {
+public enum ToolType {
     READ_RESOURCE("read_resource"),
     READ_IMAGE("read_image"),
     LOAD_SKILL("load_skill"),
@@ -30,12 +30,12 @@ public enum ToolName {
     private final String value;
 
     @JsonCreator
-    public static ToolName fromValue(String value) {
-        for (ToolName candidate : values()) {
+    public static ToolType fromValue(String value) {
+        for (ToolType candidate : values()) {
             if (candidate.value.equals(value)) {
                 return candidate;
             }
         }
-        throw new InvalidEnumValueException(ToolName.class, value);
+        throw new InvalidEnumValueException(ToolType.class, value);
     }
 }

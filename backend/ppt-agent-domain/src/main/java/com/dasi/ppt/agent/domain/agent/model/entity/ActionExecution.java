@@ -1,7 +1,7 @@
 package com.dasi.ppt.agent.domain.agent.model.entity;
 
 import com.dasi.ppt.agent.domain.agent.model.enumeration.ActionStatus;
-import com.dasi.ppt.agent.domain.agent.model.enumeration.ActionType;
+import com.dasi.ppt.agent.domain.agent.service.action.ActionType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

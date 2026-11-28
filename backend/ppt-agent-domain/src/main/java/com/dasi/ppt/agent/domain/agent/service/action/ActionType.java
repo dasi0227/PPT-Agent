@@ -1,4 +1,4 @@
-package com.dasi.ppt.agent.domain.agent.model.enumeration;
+package com.dasi.ppt.agent.domain.agent.service.action;
 
 import com.dasi.ppt.agent.domain.shared.exception.InvalidEnumValueException;
 import com.fasterxml.jackson.annotation.JsonCreator;
@@ -8,20 +8,24 @@ import lombok.Getter;
 
 @Getter
 @AllArgsConstructor
-public enum ResourceDecision {
-    APPROVE("approve"),
-    REJECT("reject");
+public enum ActionType {
+    RENAME("rename"),
+    POLISH("polish"),
+    HANDOFF("handoff"),
+    COMPACT("compact"),
+    COMMIT("commit"),
+    SUGGEST("suggest");
 
     @JsonValue
     private final String value;
 
     @JsonCreator
-    public static ResourceDecision fromValue(String value) {
-        for (ResourceDecision candidate : values()) {
+    public static ActionType fromValue(String value) {
+        for (ActionType candidate : values()) {
             if (candidate.value.equals(value)) {
                 return candidate;
             }
         }
-        throw new InvalidEnumValueException(ResourceDecision.class, value);
+        throw new InvalidEnumValueException(ActionType.class, value);
     }
 }

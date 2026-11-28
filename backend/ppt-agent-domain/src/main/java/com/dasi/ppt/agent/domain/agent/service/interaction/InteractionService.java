@@ -3,7 +3,7 @@ package com.dasi.ppt.agent.domain.agent.service.interaction;
 import com.dasi.ppt.agent.domain.agent.model.entity.PendingInteraction;
 import com.dasi.ppt.agent.domain.agent.model.entity.Run;
 import com.dasi.ppt.agent.domain.agent.model.enumeration.InteractionType;
-import com.dasi.ppt.agent.domain.agent.model.enumeration.PermissionDecision;
+import com.dasi.ppt.agent.domain.agent.model.enumeration.Decision;
 import com.dasi.ppt.agent.domain.shared.exception.ErrorCode;
 import com.dasi.ppt.agent.domain.shared.sse.EventPublisher;
 import com.dasi.ppt.agent.domain.shared.sse.SseEvent;
@@ -74,14 +74,14 @@ public class InteractionService {
         return pending(new CallKey(runId, toolCallId)).form();
     }
 
-    public void answerPermission(String runId, String toolCallId, String version, PermissionDecision decision, String feedback) {
+    public void answerPermission(String runId, String toolCallId, String version, Decision decision, String feedback) {
         CallKey key = new CallKey(runId, toolCallId);
         PendingPermission pending = pending(key);
         if (!pending.form().getVersion().equals(version)) throw conflict(ErrorCode.STALE_INTERACTION);
         if (!permissions.remove(key, pending)) throw conflict(ErrorCode.INTERACTION_CLOSED);
         pending.answer().complete(PermissionAnswer.builder()
                 .decision(decision)
-                .feedback(decision == PermissionDecision.DENY ? feedback : null)
+                .feedback(decision == Decision.REFUSE ? feedback : null)
                 .build());
     }
 
@@ -92,7 +92,7 @@ public class InteractionService {
     }
 
     @Builder
-    public record PermissionAnswer(PermissionDecision decision, String feedback) {}
+    public record PermissionAnswer(Decision decision, String feedback) {}
 
     private record CallKey(String runId, String toolCallId) {}
     private record PendingPermission(PendingInteraction form, CompletableFuture<PermissionAnswer> answer) {}
