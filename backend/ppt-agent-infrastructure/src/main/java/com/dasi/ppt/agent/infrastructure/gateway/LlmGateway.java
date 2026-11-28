@@ -1,6 +1,6 @@
 package com.dasi.ppt.agent.infrastructure.gateway;
 
-import com.dasi.ppt.agent.domain.agent.model.entity.ToolCall;
+import com.dasi.ppt.agent.domain.agent.service.tool.ToolCall;
 import com.dasi.ppt.agent.domain.setting.model.entity.ModelConfigSettings;
 import com.dasi.ppt.agent.domain.shared.exception.LlmCallCancelledException;
 import com.dasi.ppt.agent.domain.shared.exception.LlmCallException;

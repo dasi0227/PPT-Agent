@@ -11,4 +11,7 @@ public class ToolExecutor {
 
     private final Map<String, Tool<?>> agentTools;
 
+    public ToolResult execute(ToolCall toolCall, ToolContext context) {
+        throw new UnsupportedOperationException();
+    }
 }

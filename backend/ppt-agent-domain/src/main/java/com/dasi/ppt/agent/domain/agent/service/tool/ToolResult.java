@@ -1,18 +1,17 @@
 package com.dasi.ppt.agent.domain.agent.service.tool;
 
-import com.dasi.ppt.agent.domain.agent.model.enumeration.Decision;
-import com.dasi.ppt.agent.domain.agent.model.enumeration.ToolResultStatus;
+import lombok.Builder;
 import lombok.Getter;
-import lombok.experimental.SuperBuilder;
+import org.springframework.ai.chat.messages.part.MessagePart;
+
+import java.util.List;
 
 @Getter
-@SuperBuilder
-public abstract class ToolResult {
+@Builder
+public final class ToolResult {
 
-    private final ToolResultStatus status;
-    private final String code;
-    private final String reason;
-    private final String correction;
-    private final Decision decision;
-    private final String feedback;
+    private final String toolCallId;
+    private final String name;
+    private final List<MessagePart> messages;
+    private final boolean error;
 }
